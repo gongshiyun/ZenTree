@@ -913,3 +913,5 @@
 
 /* Remove old fixed height constraint */
  }
+/* Repo dropdown footer */
+.repo-dropdown-footer { padding: 6px; border-top: 1px solid var(--border-color); }

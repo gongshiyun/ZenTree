@@ -57,20 +57,29 @@ export default function TopBar() {
 
   return (
     <div className="top-bar" style={{ WebkitAppRegion: "drag" as any }}>
-      <span className="window-title">ZenTree</span>
+      <span className="window-title" onClick={() => setShowSettings(true)} style={{cursor:"pointer"}}>ZenTree</span>
       <div className="repo-selector" ref={selectorRef} style={{ WebkitAppRegion: "no-drag" as any }}>
         <div className="repo-selector-trigger" onClick={() => setShowDropdown(!showDropdown)}>
           <span className="repo-name">{currentRepoName || (repos.length === 0 ? t("topbar.noRepos") : t("topbar.selectRepo"))}</span>
           <span className="dropdown-arrow">{showDropdown ? "\u25B2" : "\u25BC"}</span>
         </div>
-        {showDropdown && (<div className="repo-dropdown"><div className="repo-search-box"><input type="text" placeholder={t("topbar.searchRepos")} value={searchText} onChange={(e) => setSearchText(e.target.value)} autoFocus onClick={(e) => e.stopPropagation()} /></div><div className="repo-dropdown-list">{filteredRepos.map((r) => (<div key={r.path} className={`repo-dropdown-item${r.path === currentRepo ? " active" : ""}`} onClick={() => handleRepoChange(r.path)}><span className="repo-item-name">{r.name}</span><span className="repo-item-path">{r.path}</span></div>))}{filteredRepos.length === 0 && <div className="repo-dropdown-empty">{searchText ? t("topbar.noMatch") : t("topbar.noAdded")}</div>}</div></div>)}
+        {showDropdown && (
+          <div className="repo-dropdown">
+            <div className="repo-search-box"><input type="text" placeholder={t("topbar.searchRepos")} value={searchText} onChange={(e) => setSearchText(e.target.value)} autoFocus onClick={(e) => e.stopPropagation()} /></div>
+            <div className="repo-dropdown-list">
+              {filteredRepos.map((r) => (<div key={r.path} className={`repo-dropdown-item${r.path === currentRepo ? " active" : ""}`} onClick={() => handleRepoChange(r.path)}><span className="repo-item-name">{r.name}</span><span className="repo-item-path">{r.path}</span></div>))}
+              {filteredRepos.length === 0 && <div className="repo-dropdown-empty">{searchText ? t("topbar.noMatch") : t("topbar.noAdded")}</div>}
+            </div>
+            <div className="repo-dropdown-footer"><button className="toolbar-btn add-repo" onClick={handleAddRepo} style={{width:"100%",justifyContent:"center"}}>{t("topbar.add")}</button></div>
+          </div>
+        )}
       </div>
       {currentRepo && (<div className="toolbar-group" style={{ WebkitAppRegion: "no-drag" as any }}><button className="toolbar-btn" onClick={handleFetch} disabled={loading} title={t("topbar.fetchTip")}>{t("topbar.fetch")}</button><button className="toolbar-btn" onClick={handlePull} disabled={loading} title={t("topbar.pullTip")}>{t("topbar.pull")}</button><button className="toolbar-btn" onClick={handlePush} disabled={loading} title={t("topbar.pushTip")}>{t("topbar.push")}</button><button className="toolbar-btn" onClick={handleRefresh} disabled={loading} title={t("topbar.refreshTip")}>{t("topbar.refresh")}</button><span className="toolbar-separator" /><button className="toolbar-btn" onClick={handleGitBash} disabled={loading} title={t("topbar.bashTip")}>{t("topbar.bash")}</button></div>)}
       <div className="top-bar-spacer" />
       <div className="top-bar-right" style={{ WebkitAppRegion: "no-drag" as any }}>
         <button className="toolbar-btn add-repo" onClick={handleAddRepo} title={t("topbar.addRepo")}>{t("topbar.add")}</button>
         <button className="toolbar-btn icon-only" onClick={() => setThemePreset(isDark ? "catppuccin-latte" : "catppuccin-mocha")} title={t("topbar.toggleTheme")}>{isDark ? "\u2600" : "\u263E"}</button>
-        <button className="toolbar-btn" onClick={() => useRepoStore.getState().setLanguage(language === "zh" ? "en" : "zh")} title={t("topbar.settings")} style={{fontSize:11,fontWeight:600,padding:"0 8px"}}>{language === "zh" ? "EN" : "\u4E2D"}</button>
+        <button className="toolbar-btn" onClick={() => useRepoStore.getState().setLanguage(language === "zh" ? "en" : "zh")} title={t("topbar.settings")} style={{fontSize:11,fontWeight:600,padding:"0 8px"}}>{language === "zh" ? "\u4E2D" : "EN"}</button>
         <button className="toolbar-btn icon-only" onClick={() => setShowSettings(true)} title={t("topbar.settings")}>&#9881;</button>
         <span className="window-controls-sep" />
         <button className="window-control-btn" onClick={() => window.gitAPI?.minimizeWindow()} title={t("topbar.minimize")}><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg></button>
