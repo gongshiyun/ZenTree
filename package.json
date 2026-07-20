@@ -8,29 +8,36 @@
     "dev:main": "tsc -p tsconfig.main.json && wait-on http://localhost:5173 && electron . --dev",
     "dev:renderer": "vite",
     "build": "tsc -p tsconfig.main.json && vite build",
-    "pack": "npm run build && electron-builder --win --x64",
-    "pack:portable": "npm run build && electron-builder --win portable --x64",
-    "dist": "npm run build && electron-builder --win --x64 --ia32"
+    "pack": "npm run build && electron-builder --win --x64 --config.electronDist=node_modules/electron/dist --config.electronVersion=36.3.1",
+    "pack:linux": "npm run build && electron-builder --linux --x64 --config.electronDist=node_modules/electron/dist --config.electronVersion=36.3.1",
+    "pack:all": "npm run build && electron-builder --win --linux --x64 --config.electronDist=node_modules/electron/dist --config.electronVersion=36.3.1",
+    "preview": "vite preview"
   },
   "build": {
     "appId": "com.zentree.app",
     "productName": "ZenTree",
     "copyright": "Copyright 2026",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
-    ],
-    "extraResources": [],
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "dist-electron/**/*"],
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
       ]
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] },
+        { "target": "zip", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "category": "Development"
     },
     "nsis": {
       "oneClick": false,
