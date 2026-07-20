@@ -904,7 +904,7 @@
 .diff-panel-resize:hover { background: var(--accent); }
 
 /* Commit bar textarea vertical resize */
-.commit-bar textarea { resize: vertical; min-height: 40px; max-height: 200px; }
+.commit-bar textarea { resize: vertical; min-height: 54px; max-height: 300px; overflow: auto; }
 
 /* Remove old fixed height constraint */
-.commit-bar textarea { min-height: 54px; }
+ }
