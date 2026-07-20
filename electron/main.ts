@@ -1,0 +1,326 @@
+﻿import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import * as path from "path";
+import * as childProcess from "child_process";
+import * as os from "os";
+import simpleGit, { SimpleGit } from "simple-git";
+import * as fs from "fs";
+
+let mainWindow: BrowserWindow | null = null;
+
+// --- Settings storage ---
+const settingsPath = path.join(app.getPath("userData"), "zentree-settings.json");
+
+function loadSettings(): Record<string, any> {
+  try {
+    if (fs.existsSync(settingsPath)) {
+      return JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveSettings(settings: Record<string, any>): void {
+  try {
+    const dir = path.dirname(settingsPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+  } catch { /* ignore */ }
+}
+
+function createWindow() {
+  const settings = loadSettings();
+
+  mainWindow = new BrowserWindow({
+    width: settings.windowWidth || 1400,
+    height: settings.windowHeight || 900,
+    minWidth: 900,
+    minHeight: 600,
+    title: "ZenTree",
+    backgroundColor: "#1a1b26",
+    frame: false,
+    titleBarStyle: "hidden",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  mainWindow.on("resize", () => {
+    if (mainWindow) {
+      const bounds = mainWindow.getBounds();
+      settings.windowWidth = bounds.width;
+      settings.windowHeight = bounds.height;
+      saveSettings(settings);
+    }
+  });
+
+  if (process.env.NODE_ENV === "development" || process.argv.includes("--dev")) {
+    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+  }
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+}
+
+app.whenReady().then(createWindow);
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
+
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+// --- Window Control IPC ---
+ipcMain.handle("window:minimize", () => mainWindow?.minimize());
+ipcMain.handle("window:maximize", () => {
+  if (mainWindow?.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow?.maximize();
+  }
+});
+ipcMain.handle("window:close", () => mainWindow?.close());
+ipcMain.handle("window:is-maximized", () => mainWindow?.isMaximized() ?? false);
+
+// --- Settings IPC ---
+ipcMain.handle("settings:get", () => loadSettings());
+
+ipcMain.handle("settings:set", (_event, key: string, value: any) => {
+  const settings = loadSettings();
+  settings[key] = value;
+  saveSettings(settings);
+  return { success: true };
+});
+
+ipcMain.handle("settings:get-all", () => loadSettings());
+
+// --- Git IPC Handlers ---
+
+function getGit(repoPath: string): SimpleGit {
+  const settings = loadSettings();
+  const gitPath = settings.gitPath || "git";
+  return simpleGit({ baseDir: repoPath, binary: gitPath });
+}
+
+function validateRepo(repoPath: string): string | null {
+  if (!repoPath || !fs.existsSync(repoPath)) return "Path does not exist";
+  const gitDir = path.join(repoPath, ".git");
+  if (!fs.existsSync(gitDir)) return "Not a valid Git repository (no .git directory)";
+  return null;
+}
+
+function safeHandler<T>(fn: (...args: any[]) => Promise<T>) {
+  return async (_event: any, ...args: any[]) => {
+    try {
+      const result = await fn(...args);
+      return { success: true, data: result };
+    } catch (err: any) {
+      return { success: false, error: err.message || String(err) };
+    }
+  };
+}
+
+// Check if path is a valid Git repo
+ipcMain.handle("git:is-repo", safeHandler(async (repoPath: string) => {
+  const err = validateRepo(repoPath);
+  if (err) return false;
+  return await getGit(repoPath).checkIsRepo();
+}));
+
+// Get all branches
+ipcMain.handle("git:branches", safeHandler(async (repoPath: string) => {
+  const git = getGit(repoPath);
+  const result = await git.branch(["-a"]);
+  return { all: result.all, current: result.current, branches: result.branches };
+}));
+
+// Get full commit log for graph
+ipcMain.handle("git:log", safeHandler(async (repoPath: string, maxCount?: number) => {
+  const git = getGit(repoPath);
+  const opts: Record<string, any> = {
+    format: { hash: "%H", parents: "%P", author: "%an", email: "%ae", date: "%at", subject: "%s" },
+    splitter: "|||ZENTREE|||", multiLine: false,
+  };
+  if (maxCount) opts.maxCount = maxCount;
+  const log = await git.log(opts as any);
+  return log.all.map((entry: any) => ({
+    hash: entry.hash, shortHash: entry.hash.substring(0, 7),
+    parents: entry.parents ? entry.parents.split(" ") : [],
+    author: entry.author, email: entry.email,
+    timestamp: parseInt(entry.date, 10), subject: entry.subject,
+  }));
+}));
+
+// Get status
+ipcMain.handle("git:status", safeHandler(async (repoPath: string) => {
+  const git = getGit(repoPath);
+  const status = await git.status();
+  return {
+    staged: status.staged, modified: status.modified, created: status.created,
+    deleted: status.deleted, renamed: status.renamed, not_added: status.not_added,
+    conflicted: status.conflicted, files: status.files, current: status.current,
+  };
+}));
+
+// Show files changed in a commit
+ipcMain.handle("git:show", safeHandler(async (repoPath: string, hash: string) => {
+  const git = getGit(repoPath);
+  const result = await git.show([hash, "--name-only", "--format=%H|%an|%ae|%at|%s"]);
+  const lines = result.split("\n").filter(Boolean);
+  const headerParts = lines[0].split("|");
+  return { hash: headerParts[0], author: headerParts[1], email: headerParts[2],
+    timestamp: parseInt(headerParts[3], 10), subject: headerParts[4], files: lines.slice(1) };
+}));
+
+// Show full commit detail
+ipcMain.handle("git:show-detail", safeHandler(async (repoPath: string, hash: string) => {
+  return await getGit(repoPath).show([hash, "--stat", "--format=fuller"]);
+}));
+
+// Get last commit message
+ipcMain.handle("git:last-message", safeHandler(async (repoPath: string) => {
+  return (await getGit(repoPath).raw(["log", "-1", "--format=%B"])).trim();
+}));
+
+// Get diff for a file (unstaged or staged)
+ipcMain.handle("git:diff-file", safeHandler(async (repoPath: string, filePath: string, staged: boolean) => {
+  const git = getGit(repoPath);
+  const args = staged ? ["diff", "--cached", "--", filePath] : ["diff", "--", filePath];
+  return await git.raw(args);
+}));
+
+// Stage a hunk: apply patch to index
+ipcMain.handle("git:stage-hunk", safeHandler(async (repoPath: string, patchContent: string) => {
+  const git = getGit(repoPath);
+  const tmpFile = path.join(os.tmpdir(), `zentree-stage-${Date.now()}.patch`);
+  fs.writeFileSync(tmpFile, patchContent, "utf8");
+  try {
+    await git.raw(["apply", "--cached", tmpFile]);
+    return true;
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+  }
+}));
+
+// Unstage a hunk: reverse apply to index
+ipcMain.handle("git:unstage-hunk", safeHandler(async (repoPath: string, patchContent: string) => {
+  const git = getGit(repoPath);
+  const tmpFile = path.join(os.tmpdir(), `zentree-unstage-${Date.now()}.patch`);
+  fs.writeFileSync(tmpFile, patchContent, "utf8");
+  try {
+    await git.raw(["apply", "--cached", "--reverse", tmpFile]);
+    return true;
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+  }
+}));
+
+// Revert a hunk in working dir
+ipcMain.handle("git:revert-hunk", safeHandler(async (repoPath: string, patchContent: string) => {
+  const git = getGit(repoPath);
+  const tmpFile = path.join(os.tmpdir(), `zentree-revert-${Date.now()}.patch`);
+  fs.writeFileSync(tmpFile, patchContent, "utf8");
+  try {
+    await git.raw(["apply", "--reverse", tmpFile]);
+    return true;
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+  }
+}));
+
+// Get git config values
+ipcMain.handle("git:get-config", safeHandler(async (repoPath: string) => {
+  const git = getGit(repoPath);
+  const name = (await git.raw(["config", "user.name"])).trim();
+  const email = (await git.raw(["config", "user.email"])).trim();
+  return { userName: name, userEmail: email };
+}));
+
+// Set git config values
+ipcMain.handle("git:set-config", safeHandler(async (repoPath: string, key: string, value: string) => {
+  await getGit(repoPath).raw(["config", key, value]);
+  return true;
+}));
+
+// Stage file
+ipcMain.handle("git:stage", safeHandler(async (repoPath: string, files: string[]) => {
+  return await getGit(repoPath).add(files);
+}));
+
+// Unstage file
+ipcMain.handle("git:unstage", safeHandler(async (repoPath: string, files: string[]) => {
+  return await getGit(repoPath).reset(["HEAD", ...files]);
+}));
+
+// Discard changes
+ipcMain.handle("git:discard", safeHandler(async (repoPath: string, files: string[]) => {
+  return await getGit(repoPath).checkout(files);
+}));
+
+// Commit
+ipcMain.handle("git:commit", safeHandler(async (repoPath: string, message: string, amend: boolean) => {
+  const git = getGit(repoPath);
+  if (amend) {
+    return message
+      ? await git.raw(["commit", "--amend", "-m", message])
+      : await git.raw(["commit", "--amend", "--no-edit"]);
+  }
+  return await git.commit(message);
+}));
+
+// Checkout branch
+ipcMain.handle("git:checkout", safeHandler(async (repoPath: string, branch: string) => {
+  return await getGit(repoPath).checkout(branch);
+}));
+
+// Fetch
+ipcMain.handle("git:fetch", safeHandler(async (repoPath: string) => {
+  return await getGit(repoPath).fetch();
+}));
+
+// Pull
+ipcMain.handle("git:pull", safeHandler(async (repoPath: string) => {
+  return await getGit(repoPath).pull();
+}));
+
+// Push
+ipcMain.handle("git:push", safeHandler(async (repoPath: string) => {
+  return await getGit(repoPath).push();
+}));
+
+// Open Git Bash
+ipcMain.handle("shell:open-git-bash", safeHandler(async (repoPath: string) => {
+  const gitBashPaths = [
+    "C:\\Program Files\\Git\\git-bash.exe",
+    "C:\\Program Files (x86)\\Git\\git-bash.exe",
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "Git", "git-bash.exe"),
+    path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "git-bash.exe"),
+  ];
+  let bashPath = "";
+  for (const p of gitBashPaths) { if (fs.existsSync(p)) { bashPath = p; break; } }
+  if (!bashPath) {
+    try {
+      const gitDir = childProcess.execSync("git --exec-path", { encoding: "utf8" }).trim();
+      const candidate = path.join(gitDir, "..", "..", "git-bash.exe");
+      if (fs.existsSync(path.normalize(candidate))) bashPath = path.normalize(candidate);
+    } catch { /* ignore */ }
+  }
+  if (!bashPath) throw new Error("Git Bash not found. Please install Git for Windows.");
+  childProcess.execFile(bashPath, [], { cwd: repoPath });
+  return "Git Bash opened";
+}));
+
+// Open directory dialog
+ipcMain.handle("dialog:open-directory", async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, { properties: ["openDirectory"] });
+  return result.canceled ? null : result.filePaths[0];
+});

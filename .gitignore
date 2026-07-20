@@ -1,0 +1,9 @@
+﻿node_modules/
+dist/
+dist-electron/
+release/
+*.7z
+*.blockmap
+*.yaml
+.DS_Store
+Thumbs.db
