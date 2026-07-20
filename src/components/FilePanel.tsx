@@ -1,24 +1,15 @@
-import { useState, useCallback, useMemo } from "react";
+﻿import { useState, useCallback, useMemo } from "react";
 import { useRepoStore } from "../stores/repoStore";
+import { useT } from "../i18n";
 
 type FileTab = "unstaged" | "staged";
-
 interface FileEntry { path: string; status: string; }
 
-function getFileStatusLabel(status: string): string {
-  if (status === "not_added" || status === "??") return "untracked";
-  if (status === "modified" || status === "M") return "modified";
-  if (status === "created" || status === "A") return "added";
-  if (status === "deleted" || status === "D") return "deleted";
-  if (status === "renamed") return "renamed";
-  return "modified";
-}
-
-function getFileStatusIcon(status: string): string {
-  switch (status) { case "untracked": return "?"; case "modified": return "M"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; default: return "M"; }
-}
+function statLabel(s: string) { if (s==="not_added"||s==="??") return "untracked"; if (s==="modified"||s==="M") return "modified"; if (s==="created"||s==="A") return "added"; if (s==="deleted"||s==="D") return "deleted"; if (s==="renamed") return "renamed"; return "modified"; }
+function statIcon(s: string) { switch(s){case"untracked":return"?";case"modified":return"M";case"added":return"A";case"deleted":return"D";case"renamed":return"R";default:return"M";} }
 
 export default function FilePanel() {
+  const t = useT();
   const [activeTab, setActiveTab] = useState<FileTab>("unstaged");
   const status = useRepoStore((s) => s.status);
   const currentRepo = useRepoStore((s) => s.currentRepo);
@@ -49,88 +40,43 @@ export default function FilePanel() {
   }, [status]);
 
   const handleStage = useCallback(async (file: string) => {
-    if (!currentRepo) return;
-    setLoading(true, `Staging ${file}...`);
-    try { const r = await window.gitAPI.stage(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || "Failed"); }
+    if (!currentRepo) return; setLoading(true, t("status.staging").replace("{0}", file));
+    try { const r = await window.gitAPI.stage(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || t("error.stageFailed")); }
     catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, refreshAll]);
 
   const handleUnstage = useCallback(async (file: string) => {
-    if (!currentRepo) return;
-    setLoading(true, `Unstaging ${file}...`);
-    try { const r = await window.gitAPI.unstage(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || "Failed"); }
+    if (!currentRepo) return; setLoading(true, t("status.unstaging").replace("{0}", file));
+    try { const r = await window.gitAPI.unstage(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || t("error.unstageFailed")); }
     catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, refreshAll]);
 
   const handleDiscard = useCallback(async (file: string) => {
-    if (!currentRepo) return;
-    if (!window.confirm(`Discard all changes to "${file}"?`)) return;
-    setLoading(true, `Discarding ${file}...`);
-    try { const r = await window.gitAPI.discard(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || "Failed"); }
+    if (!currentRepo) return; if (!window.confirm(t("diff.confirmDiscard").replace("{0}", file))) return;
+    setLoading(true, t("status.discarding").replace("{0}", file));
+    try { const r = await window.gitAPI.discard(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || t("error.discardFailed")); }
     catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, refreshAll]);
 
-  // Commit detail
   if (selectedCommit && commitDetail) {
-    return (
-      <div className="file-panel">
-        <div className="file-panel-header">
-          <div className="file-tab active">Files in {selectedCommit.substring(0, 7)}</div>
-        </div>
-        <div className="file-list">
-          {commitDetail.files.map((f) => {
-            const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit;
-            return (
-              <div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, commitHash: selectedCommit })}>
-                <span className="file-name">{f}</span>
-              </div>
-            );
-          })}
-          {commitDetail.files.length === 0 && <div className="empty-state">No files changed</div>}
-        </div>
-      </div>
-    );
+    return (<div className="file-panel"><div className="file-panel-header"><div className="file-tab active">{t("files.filesIn")} {selectedCommit.substring(0, 7)}</div></div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, commitHash: selectedCommit })}><span className="file-name">{f}</span></div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
   }
 
   const currentFiles = activeTab === "unstaged" ? unstagedFiles : stagedFiles;
 
-  return (
-    <div className="file-panel">
-      <div className="file-panel-header">
-        <div className={`file-tab${activeTab === "unstaged" ? " active" : ""}`} onClick={() => setActiveTab("unstaged")}>
-          Unstaged <span className="count">{unstagedFiles.length}</span>
-        </div>
-        <div className={`file-tab${activeTab === "staged" ? " active" : ""}`} onClick={() => setActiveTab("staged")}>
-          Staged <span className="count">{stagedFiles.length}</span>
-        </div>
+  return (<div className="file-panel"><div className="file-panel-header">
+    <div className={`file-tab${activeTab==="unstaged"?" active":""}`} onClick={()=>setActiveTab("unstaged")}>{t("files.unstaged")} <span className="count">{unstagedFiles.length}</span></div>
+    <div className={`file-tab${activeTab==="staged"?" active":""}`} onClick={()=>setActiveTab("staged")}>{t("files.staged")} <span className="count">{stagedFiles.length}</span></div>
+  </div><div className="file-list">
+    {currentFiles.map((file) => { const sl = statLabel(file.status); const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab==="staged"); return (
+      <div key={file.path} className={`file-item${isSel?" selected":""}`} onClick={()=>setSelectedDiffFile({path:file.path,isStaged:activeTab==="staged"})}>
+        <span className={`file-status ${sl}`}>{statIcon(sl)}</span><span className="file-name" title={file.path}>{file.path}</span>
+        <span className="file-actions" onClick={(e)=>e.stopPropagation()}>
+          {activeTab==="unstaged" ? <button className="file-action-btn" onClick={()=>handleStage(file.path)}>{t("files.stage")}</button> : <button className="file-action-btn" onClick={()=>handleUnstage(file.path)}>{t("files.unstage")}</button>}
+          <button className="file-action-btn danger" onClick={()=>handleDiscard(file.path)}>{t("files.discard")}</button>
+        </span>
       </div>
-      <div className="file-list">
-        {currentFiles.map((file) => {
-          const sl = getFileStatusLabel(file.status);
-          const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged");
-          return (
-            <div
-              key={file.path}
-              className={`file-item${isSel ? " selected" : ""}`}
-              onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged" })}
-            >
-              <span className={`file-status ${sl}`}>{getFileStatusIcon(sl)}</span>
-              <span className="file-name" title={file.path}>{file.path}</span>
-              <span className="file-actions" onClick={(e) => e.stopPropagation()}>
-                {activeTab === "unstaged" ? (
-                  <button className="file-action-btn" onClick={() => handleStage(file.path)}>Stage</button>
-                ) : (
-                  <button className="file-action-btn" onClick={() => handleUnstage(file.path)}>Unstage</button>
-                )}
-                <button className="file-action-btn danger" onClick={() => handleDiscard(file.path)}>Discard</button>
-              </span>
-            </div>
-          );
-        })}
-        {currentFiles.length === 0 && (
-          <div className="empty-state">{activeTab === "unstaged" ? "No unstaged changes" : "No staged changes"}</div>
-        )}
-      </div>
-    </div>
-  );
+    );})}
+    {currentFiles.length===0 && <div className="empty-state">{activeTab==="unstaged"?t("files.noUnstaged"):t("files.noStaged")}</div>}
+  </div></div>);
 }
