@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 dist/
 dist-electron/
 release/
@@ -7,3 +7,6 @@ release/
 *.yaml
 .DS_Store
 Thumbs.db
+
+release2/
+release_old/
