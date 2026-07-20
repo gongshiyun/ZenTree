@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRepoStore } from "../stores/repoStore";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 import type { DiffHunk } from "../types";
 
 function parseDiff(diffText: string): DiffHunk[] {
@@ -37,7 +37,7 @@ export default function DiffViewer({ filePath, isStaged, onClose, commitHash, re
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
   const refreshAll = useRepoStore((s) => s.refreshAll);
-
+  const t = useT();
   const [diffText, setDiffText] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [fetching, setFetching] = useState(true);

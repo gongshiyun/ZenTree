@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import en from "./en";
 import zh from "./zh";
 
@@ -44,14 +44,4 @@ export function useLocale(): [Locale, (l: Locale) => void] {
   return [_currentLocale, setLocale];
 }
 
-// Preload language from settings on module load
-(async () => {
-  try {
-    if (window.gitAPI) {
-      const settings = await window.gitAPI.getSettings();
-      if (settings && settings.language && (settings.language === "en" || settings.language === "zh")) {
-        setGlobalLocale(settings.language as Locale);
-      }
-    }
-  } catch { /* ignore */ }
-})();
+

@@ -1,4 +1,4 @@
-﻿import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useRepoStore } from "../stores/repoStore";
 
 export default function TopBar() {
@@ -52,6 +52,8 @@ export default function TopBar() {
 
   const currentRepoName = repos.find((r) => r.path === currentRepo)?.name || "";
 
+  const language = useRepoStore((s) => s.language);
+
   return (
     <div className="top-bar" style={{ WebkitAppRegion: "drag" as any }}>
       <span className="window-title">ZenTree</span>
@@ -67,7 +69,7 @@ export default function TopBar() {
       <div className="top-bar-right" style={{ WebkitAppRegion: "no-drag" as any }}>
         <button className="toolbar-btn add-repo" onClick={handleAddRepo} title="Add repository">+ Add</button>
         <button className="toolbar-btn icon-only" onClick={() => setThemePreset(isDark ? "catppuccin-latte" : "catppuccin-mocha")} title="Toggle theme">{isDark ? "\u2600" : "\u263E"}</button>
-        <button className="toolbar-btn" onClick={() => { const l = useRepoStore.getState().language; useRepoStore.getState().setLanguage(l === "zh" ? "en" : "zh"); }} title="Switch language" style={{fontSize:11,fontWeight:600,padding:"0 8px"}}>{useRepoStore.getState().language === "zh" ? "EN" : "\u4E2D"}</button>
+        <button className="toolbar-btn" onClick={() => { useRepoStore.getState().setLanguage(language === "zh" ? "en" : "zh"); }} title="Switch language" style={{fontSize:11,fontWeight:600,padding:"0 8px"}}>{useRepoStore.getState().language === "zh" ? "EN" : "\u4E2D"}</button>
         <button className="toolbar-btn icon-only" onClick={() => setShowSettings(true)} title="Settings">&#9881;</button>
         <span className="window-controls-sep" />
         <button className="window-control-btn" onClick={() => window.gitAPI?.minimizeWindow()} title="Minimize"><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg></button>

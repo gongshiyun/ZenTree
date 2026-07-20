@@ -1,6 +1,6 @@
-﻿import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRepoStore } from "../stores/repoStore";
-import { t } from "../i18n";
+import { useT } from "../i18n";
 
 export default function CommitBar() {
   const [message, setMessage] = useState("");
@@ -10,6 +10,8 @@ export default function CommitBar() {
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
   const refreshAll = useRepoStore((s) => s.refreshAll);
+
+  const t = useT();
 
   const userMessageRef = useRef("");
   const [lastCommitMsg, setLastCommitMsg] = useState("");

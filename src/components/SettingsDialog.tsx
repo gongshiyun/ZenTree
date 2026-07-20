@@ -1,6 +1,6 @@
-﻿import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRepoStore, THEME_PRESETS } from "../stores/repoStore";
-import { t, getGlobalLocale } from "../i18n";
+import { useT, getGlobalLocale } from "../i18n";
 
 export default function SettingsDialog() {
   const showSettings = useRepoStore((s) => s.showSettings);
@@ -10,7 +10,7 @@ export default function SettingsDialog() {
   const setThemePreset = useRepoStore((s) => s.setThemePreset);
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
-
+  const t = useT();
   const [gitPath, setGitPath] = useState("git");
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
