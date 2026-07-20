@@ -1,4 +1,4 @@
-﻿import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useRepoStore } from "../stores/repoStore";
 import { useT } from "../i18n";
 
@@ -57,7 +57,7 @@ export default function TopBar() {
 
   return (
     <div className="top-bar" style={{ WebkitAppRegion: "drag" as any }}>
-      <span className="window-title" onClick={() => setShowSettings(true)} style={{cursor:"pointer"}}>ZenTree</span>
+      <span className="window-title" onClick={() => setShowSettings(true)} style={{ WebkitAppRegion: "no-drag" as any, cursor: "pointer" }}>ZenTree</span>
       <div className="repo-selector" ref={selectorRef} style={{ WebkitAppRegion: "no-drag" as any }}>
         <div className="repo-selector-trigger" onClick={() => setShowDropdown(!showDropdown)}>
           <span className="repo-name">{currentRepoName || (repos.length === 0 ? t("topbar.noRepos") : t("topbar.selectRepo"))}</span>
