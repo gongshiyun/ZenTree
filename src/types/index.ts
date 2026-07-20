@@ -17,6 +17,7 @@ export interface GitAPI {
   openDirectory: () => Promise<string | null>;
   openGitBash: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   diffFile: (repoPath: string, filePath: string, staged: boolean) => Promise<{ success: boolean; data?: string; error?: string }>;
+  commitFileDiff: (repoPath: string, hash: string, filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   stageHunk: (repoPath: string, patchContent: string) => Promise<{ success: boolean; error?: string }>;
   unstageHunk: (repoPath: string, patchContent: string) => Promise<{ success: boolean; error?: string }>;
   revertHunk: (repoPath: string, patchContent: string) => Promise<{ success: boolean; error?: string }>;

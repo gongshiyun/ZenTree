@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRepoStore } from "../stores/repoStore";
 
 type FileTab = "unstaged" | "staged";
@@ -78,7 +78,14 @@ export default function FilePanel() {
           <div className="file-tab active">Files in {selectedCommit.substring(0, 7)}</div>
         </div>
         <div className="file-list">
-          {commitDetail.files.map((f) => <div key={f} className="file-item"><span className="file-name">{f}</span></div>)}
+          {commitDetail.files.map((f) => {
+            const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit;
+            return (
+              <div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, commitHash: selectedCommit })}>
+                <span className="file-name">{f}</span>
+              </div>
+            );
+          })}
           {commitDetail.files.length === 0 && <div className="empty-state">No files changed</div>}
         </div>
       </div>

@@ -20,6 +20,7 @@ const api = {
   openGitBash: (repoPath: string) => ipcRenderer.invoke("shell:open-git-bash", repoPath),
   // Diff & hunk operations
   diffFile: (repoPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke("git:diff-file", repoPath, filePath, staged),
+  commitFileDiff: (repoPath: string, hash: string, filePath: string) => ipcRenderer.invoke("git:commit-file-diff", repoPath, hash, filePath),
   stageHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:stage-hunk", repoPath, patchContent),
   unstageHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:unstage-hunk", repoPath, patchContent),
   revertHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:revert-hunk", repoPath, patchContent),

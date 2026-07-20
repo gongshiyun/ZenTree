@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRepoStore } from "../stores/repoStore";
 import { t } from "../i18n";
 import type { DiffHunk } from "../types";
@@ -30,9 +30,9 @@ function buildHunkPatch(fp: string, h: DiffHunk): string {
   return ls.join("\n")+"\n";
 }
 
-interface Props { filePath: string; isStaged: boolean; onClose: () => void; }
+interface Props { filePath: string; isStaged: boolean; onClose: () => void; commitHash?: string; readOnly?: boolean; }
 
-export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
+export default function DiffViewer({ filePath, isStaged, onClose, commitHash, readOnly }: Props) {
   const currentRepo = useRepoStore((s) => s.currentRepo);
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
@@ -48,7 +48,7 @@ export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
     if (!currentRepo) return;
     setFetching(true); setFetchError("");
     (async () => {
-      const r = await window.gitAPI.diffFile(currentRepo, filePath, isStaged);
+      const r = commitHash ? await window.gitAPI.commitFileDiff(currentRepo, commitHash, filePath) : await window.gitAPI.diffFile(currentRepo, filePath, isStaged);
       if (r.success && r.data !== undefined) setDiffText(r.data);
       else setFetchError(r.error || t("diff.fetchFailed"));
       setFetching(false);
@@ -88,9 +88,9 @@ export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
             <div className="diff-hunk-header">
               <span className="diff-hunk-label">{h.header}</span>
               <div className="diff-hunk-actions">
-                {!isStaged && <button className="diff-hunk-btn stage" onClick={()=>handleHunkAction(h,"stage")} title={t("diff.stageHunk")}>{t("diff.stageBtn")}</button>}
-                {isStaged && <button className="diff-hunk-btn unstage" onClick={()=>handleHunkAction(h,"unstage")} title={t("diff.unstageHunk")}>{t("diff.unstageBtn")}</button>}
-                {!isStaged && <button className="diff-hunk-btn revert" onClick={()=>handleHunkAction(h,"revert")} title={t("diff.revertHunk")}>{t("diff.revertBtn")}</button>}
+                {!readOnly && !isStaged && (<button className="diff-hunk-btn stage" onClick={()=>handleHunkAction(h,"stage")} title={t("diff.stageHunk")}>{t("diff.stageBtn")}</button>)}
+                {!readOnly && isStaged && (<button className="diff-hunk-btn unstage" onClick={()=>handleHunkAction(h,"unstage")} title={t("diff.unstageHunk")}>{t("diff.unstageBtn")}</button>)}
+                {!readOnly && !isStaged && (<button className="diff-hunk-btn revert" onClick={()=>handleHunkAction(h,"revert")} title={t("diff.revertHunk")}>{t("diff.revertBtn")}</button>)}
               </div>
             </div>
             <div className="diff-hunk-lines">

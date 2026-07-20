@@ -176,7 +176,7 @@ interface AppState {
   logEntries: CommitLogEntry[]; graphData: GraphData;
   logSkip: number; hasMoreCommits: boolean; loadingMore: boolean;
   selectedCommit: string | null; commitDetail: CommitDetail | null;
-  selectedDiffFile: { path: string; isStaged: boolean } | null;
+    selectedDiffFile: { path: string; isStaged: boolean; commitHash?: string } | null;
   status: GitStatusData | null;
   themePreset: string; isDark: boolean; language: string;
   loading: boolean; loadingMessage: string; error: string | null;
@@ -193,7 +193,7 @@ interface AppState {
   loadMoreCommits: () => Promise<void>;
   selectCommit: (hash: string | null) => void;
   setCommitDetail: (detail: CommitDetail | null) => void;
-  setSelectedDiffFile: (file: { path: string; isStaged: boolean } | null) => void;
+    setSelectedDiffFile: (file: { path: string; isStaged: boolean; commitHash?: string } | null) => void;
   checkoutRemote: (remoteBranch: string) => Promise<void>;
   setStatus: (status: GitStatusData | null) => void;
   setThemePreset: (presetName: string) => void;
