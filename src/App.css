@@ -563,7 +563,6 @@
 .commit-bar textarea {
   flex: 1;
   min-height: 54px;
-  max-height: 80px;
   padding: 8px 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
@@ -571,7 +570,6 @@
   color: var(--text-primary);
   font-size: 12px;
   font-family: var(--font-sans);
-  resize: none;
   outline: none;
   line-height: 1.4;
 }
