@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { RepoInfo, CommitLogEntry, GraphData, GraphNode, GraphEdge, GitStatusData, CommitDetail, ThemePreset } from "../types";
+import { setGlobalLocale } from "../i18n";
 
 // Branch colors
 const BRANCH_COLORS = [
@@ -288,7 +289,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
     }
   },
   setShowSettings: (show) => set({ showSettings: show }),
-  setLanguage: (lang) => { set({ language: lang }); window.gitAPI?.setSetting('language', lang); },
+  setLanguage: (lang) => { set({ language: lang }); setGlobalLocale(lang as "en" | "zh"); window.gitAPI?.setSetting('language', lang); },
   setLoading: (loading, message = "") => set({ loading, loadingMessage: message }),
   setError: (error) => set({ error }),
 

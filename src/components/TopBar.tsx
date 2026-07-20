@@ -1,4 +1,4 @@
-﻿import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useRepoStore } from "../stores/repoStore";
 
 export default function TopBar() {
@@ -137,6 +137,7 @@ export default function TopBar() {
         <button className="toolbar-btn add-repo" onClick={handleAddRepo} title="Add repository">+ Add</button>
         <button className="toolbar-btn icon-only" onClick={() => setThemePreset(isDark ? "catppuccin-latte" : "catppuccin-mocha")}
           title="Toggle theme">{isDark ? "\u2600" : "\u263E"}</button>
+        <button className="toolbar-btn icon-only" onClick={() => { const l = useRepoStore.getState().language; useRepoStore.getState().setLanguage(l === "zh" ? "en" : "zh"); }} title="Switch language">🌐</button>
         <button className="toolbar-btn icon-only" onClick={() => setShowSettings(true)} title="Settings">&#9881;</button>
         <span className="window-controls-sep" />
         <button className="window-control-btn" onClick={handleMinimize} title="Minimize">
