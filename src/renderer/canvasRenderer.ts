@@ -212,7 +212,17 @@ export class GraphRenderer {
       ctx.font = `12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
       ctx.textBaseline = "middle";
       const textX = data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
-      const subj = node.subject; ctx.fillText(subj.length > 60 ? subj.substring(0, 60) + '...' : subj, textX, node.y);
+      const subj = node.subject;
+      const displayText = subj.length > 50 ? subj.substring(0, 50) + "..." : subj;
+      const fullText = displayText + "  " + node.author;
+      ctx.fillStyle = isDark ? "#abb2bf" : "#555";
+      ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.fillText(displayText, textX, node.y);
+      const subjW = ctx.measureText(displayText).width;
+      ctx.fillStyle = isDark ? "#6c7086" : "#9399b2";
+      ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(node.author, textX + subjW + 8, node.y);
     }
   }
 

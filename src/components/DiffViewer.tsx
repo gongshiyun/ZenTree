@@ -1,47 +1,33 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRepoStore } from "../stores/repoStore";
-import type { DiffHunk, DiffLine } from "../types";
+import { t } from "../i18n";
+import type { DiffHunk } from "../types";
 
 function parseDiff(diffText: string): DiffHunk[] {
   const hunks: DiffHunk[] = [];
   const lines = diffText.split("\n");
-  let currentHunk: DiffHunk | null = null;
-  let oldLine = 0;
-  let newLine = 0;
-
+  let cur: DiffHunk | null = null;
+  let ol = 0, nl = 0;
   for (const line of lines) {
-    const hunkMatch = line.match(/^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@(.*)/);
-    if (hunkMatch) {
-      if (currentHunk) hunks.push(currentHunk);
-      const oldStart = parseInt(hunkMatch[1], 10);
-      const oldCount = parseInt(hunkMatch[2] || "1", 10);
-      const newStart = parseInt(hunkMatch[3], 10);
-      const newCount = parseInt(hunkMatch[4] || "1", 10);
-      currentHunk = { header: hunkMatch[0], oldStart, oldCount, newStart, newCount, lines: [] };
-      oldLine = oldStart;
-      newLine = newStart;
-    } else if (currentHunk) {
-      if (line.startsWith("-")) {
-        currentHunk.lines.push({ type: "deletion", content: line.substring(1), oldLineNum: oldLine++ });
-      } else if (line.startsWith("+")) {
-        currentHunk.lines.push({ type: "addition", content: line.substring(1), newLineNum: newLine++ });
-      } else if (line.startsWith(" ") || line === "") {
-        currentHunk.lines.push({ type: "context", content: line.startsWith(" ") ? line.substring(1) : line, oldLineNum: oldLine++, newLineNum: newLine++ });
-      }
+    const m = line.match(/^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@(.*)/);
+    if (m) {
+      if (cur) hunks.push(cur);
+      cur = { header: m[0], oldStart: +m[1], oldCount: +(m[2]||1), newStart: +m[3], newCount: +(m[4]||1), lines: [] };
+      ol = cur.oldStart; nl = cur.newStart;
+    } else if (cur) {
+      if (line.startsWith("-")) cur.lines.push({ type: "deletion", content: line.substring(1), oldLineNum: ol++ });
+      else if (line.startsWith("+")) cur.lines.push({ type: "addition", content: line.substring(1), newLineNum: nl++ });
+      else if (line.startsWith(" ")||line==="") cur.lines.push({ type: "context", content: line.startsWith(" ")?line.substring(1):line, oldLineNum: ol++, newLineNum: nl++ });
     }
   }
-  if (currentHunk) hunks.push(currentHunk);
+  if (cur) hunks.push(cur);
   return hunks;
 }
 
-function buildHunkPatch(filePath: string, hunk: DiffHunk): string {
-  const lines = [`diff --git a/${filePath} b/${filePath}`, `--- a/${filePath}`, `+++ b/${filePath}`, hunk.header];
-  for (const line of hunk.lines) {
-    if (line.type === "addition") lines.push(`+${line.content}`);
-    else if (line.type === "deletion") lines.push(`-${line.content}`);
-    else lines.push(` ${line.content}`);
-  }
-  return lines.join("\n") + "\n";
+function buildHunkPatch(fp: string, h: DiffHunk): string {
+  const ls = [`diff --git a/${fp} b/${fp}`, `--- a/${fp}`, `+++ b/${fp}`, h.header];
+  for (const l of h.lines) ls.push(l.type==="addition"?"+"+l.content:l.type==="deletion"?"-"+l.content:" "+l.content);
+  return ls.join("\n")+"\n";
 }
 
 interface Props { filePath: string; isStaged: boolean; onClose: () => void; }
@@ -53,36 +39,33 @@ export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
   const refreshAll = useRepoStore((s) => s.refreshAll);
 
   const [diffText, setDiffText] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const hunks = useMemo(() => parseDiff(diffText), [diffText]);
 
   useEffect(() => {
     if (!currentRepo) return;
-    setFetching(true);
-    setFetchError("");
+    setFetching(true); setFetchError("");
     (async () => {
-      const result = await window.gitAPI.diffFile(currentRepo, filePath, isStaged);
-      if (result.success && result.data !== undefined) {
-        setDiffText(result.data);
-      } else {
-        setFetchError(result.error || "Failed to fetch diff");
-      }
+      const r = await window.gitAPI.diffFile(currentRepo, filePath, isStaged);
+      if (r.success && r.data !== undefined) setDiffText(r.data);
+      else setFetchError(r.error || t("diff.fetchFailed"));
       setFetching(false);
     })();
-  }, [currentRepo, filePath, isStaged]);
+  }, [currentRepo, filePath, isStaged, refreshKey]);
 
-  const handleHunkAction = useCallback(async (hunk: DiffHunk, action: "stage" | "unstage" | "revert") => {
+  const handleHunkAction = useCallback(async (h: DiffHunk, action: "stage"|"unstage"|"revert") => {
     if (!currentRepo) return;
-    const patch = buildHunkPatch(filePath, hunk);
-    setLoading(true, `${action === "stage" ? "Staging" : action === "unstage" ? "Unstaging" : "Reverting"} hunk...`);
+    const patch = buildHunkPatch(filePath, h);
+    setLoading(true, action==="stage"?t("diff.stagingHunk"):action==="unstage"?t("diff.unstagingHunk"):t("diff.revertingHunk"));
     try {
-      let result;
-      if (action === "stage") result = await window.gitAPI.stageHunk(currentRepo, patch);
-      else if (action === "unstage") result = await window.gitAPI.unstageHunk(currentRepo, patch);
-      else result = await window.gitAPI.revertHunk(currentRepo, patch);
-      if (result.success) await refreshAll();
-      else setError(result.error || "Operation failed");
+      let r;
+      if (action==="stage") r = await window.gitAPI.stageHunk(currentRepo, patch);
+      else if (action==="unstage") r = await window.gitAPI.unstageHunk(currentRepo, patch);
+      else r = await window.gitAPI.revertHunk(currentRepo, patch);
+      if (r.success) { await refreshAll(); setRefreshKey(k=>k+1); }
+      else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false, ""); }
   }, [currentRepo, filePath, setLoading, setError, refreshAll]);
@@ -92,39 +75,31 @@ export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
   return (
     <div className="diff-viewer">
       <div className="diff-header">
-        <button className="diff-back-btn" onClick={onClose}>&larr; Back</button>
+        <button className="diff-back-btn" onClick={onClose}>{t("diff.back")}</button>
         <span className="diff-file-name">{fileName}</span>
-        <span className="diff-badge">{isStaged ? "Staged" : "Unstaged"}</span>
+        <span className="diff-badge">{isStaged ? t("diff.staged") : t("diff.unstaged")}</span>
       </div>
       <div className="diff-content">
-        {fetching && <div className="diff-empty"><span className="spinner" /> Loading diff...</div>}
-        {fetchError && <div className="diff-empty" style={{ color: "var(--danger)" }}>{fetchError}</div>}
-        {!fetching && !fetchError && hunks.length === 0 && diffText === "" && (
-          <div className="diff-empty">No changes (binary file or identical)</div>
-        )}
-        {!fetching && !fetchError && hunks.map((hunk, hi) => (
+        {fetching && <div className="diff-empty"><span className="spinner" /> {t("diff.loading")}</div>}
+        {fetchError && <div className="diff-empty" style={{color:"var(--danger)"}}>{fetchError}</div>}
+        {!fetching && !fetchError && hunks.length===0 && diffText==="" && <div className="diff-empty">{t("diff.noChanges")}</div>}
+        {!fetching && !fetchError && hunks.map((h, hi) => (
           <div key={hi} className="diff-hunk">
             <div className="diff-hunk-header">
-              <span className="diff-hunk-label">{hunk.header}</span>
+              <span className="diff-hunk-label">{h.header}</span>
               <div className="diff-hunk-actions">
-                {!isStaged && (
-                  <button className="diff-hunk-btn stage" onClick={() => handleHunkAction(hunk, "stage")} title="Stage this hunk">Stage</button>
-                )}
-                {isStaged && (
-                  <button className="diff-hunk-btn unstage" onClick={() => handleHunkAction(hunk, "unstage")} title="Unstage this hunk">Unstage</button>
-                )}
-                {!isStaged && (
-                  <button className="diff-hunk-btn revert" onClick={() => handleHunkAction(hunk, "revert")} title="Revert this hunk">Revert</button>
-                )}
+                {!isStaged && <button className="diff-hunk-btn stage" onClick={()=>handleHunkAction(h,"stage")} title={t("diff.stageHunk")}>{t("diff.stageBtn")}</button>}
+                {isStaged && <button className="diff-hunk-btn unstage" onClick={()=>handleHunkAction(h,"unstage")} title={t("diff.unstageHunk")}>{t("diff.unstageBtn")}</button>}
+                {!isStaged && <button className="diff-hunk-btn revert" onClick={()=>handleHunkAction(h,"revert")} title={t("diff.revertHunk")}>{t("diff.revertBtn")}</button>}
               </div>
             </div>
             <div className="diff-hunk-lines">
-              {hunk.lines.map((line, li) => (
-                <div key={li} className={`diff-line ${line.type}`}>
-                  <span className="diff-line-num old">{line.type !== "addition" ? line.oldLineNum : ""}</span>
-                  <span className="diff-line-num new">{line.type !== "deletion" ? line.newLineNum : ""}</span>
-                  <span className="diff-line-prefix">{line.type === "addition" ? "+" : line.type === "deletion" ? "-" : " "}</span>
-                  <span className="diff-line-content">{line.content}</span>
+              {h.lines.map((l, li) => (
+                <div key={li} className={`diff-line ${l.type}`}>
+                  <span className="diff-line-num old">{l.type!=="addition"?l.oldLineNum:""}</span>
+                  <span className="diff-line-num new">{l.type!=="deletion"?l.newLineNum:""}</span>
+                  <span className="diff-line-prefix">{l.type==="addition"?"+":l.type==="deletion"?"-":" "}</span>
+                  <span className="diff-line-content">{l.content}</span>
                 </div>
               ))}
             </div>

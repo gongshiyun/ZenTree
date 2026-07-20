@@ -178,7 +178,7 @@ interface AppState {
   selectedCommit: string | null; commitDetail: CommitDetail | null;
   selectedDiffFile: { path: string; isStaged: boolean } | null;
   status: GitStatusData | null;
-  themePreset: string; isDark: boolean;
+  themePreset: string; isDark: boolean; language: string;
   loading: boolean; loadingMessage: string; error: string | null;
   showSettings: boolean;
 
@@ -217,7 +217,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
   logEntries: [], graphData: { nodes: [], edges: [], maxLane: 0 },
   logSkip: 0, hasMoreCommits: true, loadingMore: false,
   selectedCommit: null, commitDetail: null, selectedDiffFile: null, status: null,
-  themePreset: "catppuccin-mocha", isDark: true,
+  themePreset: "catppuccin-mocha", isDark: true, language: "en",
   loading: false, loadingMessage: "", error: null,
   showSettings: false,
 
@@ -288,6 +288,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
     }
   },
   setShowSettings: (show) => set({ showSettings: show }),
+  setLanguage: (lang) => { set({ language: lang }); window.gitAPI?.setSetting('language', lang); },
   setLoading: (loading, message = "") => set({ loading, loadingMessage: message }),
   setError: (error) => set({ error }),
 

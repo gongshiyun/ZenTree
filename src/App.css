@@ -897,3 +897,14 @@
 .diff-line.deletion .diff-line-prefix { color: #f85149; background: rgba(248,81,73,0.2); }
 .diff-line.context { color: var(--text-secondary); }
 .diff-line-content { flex: 1; white-space: pre-wrap; word-break: break-all; }
+/* Diff panel resize handle */
+.diff-panel-resize {
+  width: 4px; cursor: col-resize; background: transparent; flex-shrink: 0; transition: background 0.15s;
+}
+.diff-panel-resize:hover { background: var(--accent); }
+
+/* Commit bar textarea vertical resize */
+.commit-bar textarea { resize: vertical; min-height: 40px; max-height: 200px; }
+
+/* Remove old fixed height constraint */
+.commit-bar textarea { min-height: 54px; }

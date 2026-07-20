@@ -1,4 +1,5 @@
-﻿import { useState, useCallback, useEffect, useRef } from "react";
+import { t } from "../i18n";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRepoStore } from "../stores/repoStore";
 
 export default function CommitBar() {
@@ -47,7 +48,7 @@ export default function CommitBar() {
 
   const handleCommit = useCallback(async () => {
     if (!currentRepo) return;
-    setLoading(true, amend ? "Amending commit..." : "Committing...");
+    setLoading(true, amend ? t("commit.amending") : t("commit.committing"));
     try {
       const result = await window.gitAPI.commit(currentRepo, message.trim(), amend);
       if (result.success) {
@@ -85,8 +86,8 @@ export default function CommitBar() {
       <textarea
         placeholder={
           canCommit
-            ? "Commit message... (Ctrl+Enter to commit)"
-            : "No staged changes — stage files first"
+            ? t("commit.placeholder")
+            : t("commit.noStaged")
         }
         value={message}
         onChange={handleMessageChange}
@@ -105,7 +106,7 @@ export default function CommitBar() {
           className="commit-btn"
           disabled={!canCommit}
           onClick={handleCommit}
-          title={amend ? "Amend last commit" : stagedCount === 0 ? "No staged changes" : `Commit ${stagedCount} staged file(s)`}
+          title={amend ? t("commit.amendTip") : stagedCount === 0 ? t("commit.noStaged") : `Commit ${stagedCount}+ t("commit.commitTip")`}
         >
           Commit
         </button>
