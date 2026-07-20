@@ -281,6 +281,13 @@ ipcMain.handle("git:checkout", safeHandler(async (repoPath: string, branch: stri
   return await getGit(repoPath).checkout(branch);
 }));
 
+// Checkout remote branch (create local tracking branch)
+ipcMain.handle("git:checkout-remote", safeHandler(async (repoPath: string, remoteBranch: string) => {
+  const git = getGit(repoPath);
+  const localName = remoteBranch.replace(/^remotes\/[^/]+\//, "");
+  return await git.raw(["checkout", "--track", remoteBranch]);
+}));
+
 // Fetch
 ipcMain.handle("git:fetch", safeHandler(async (repoPath: string) => {
   return await getGit(repoPath).fetch();

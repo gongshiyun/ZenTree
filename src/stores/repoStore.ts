@@ -172,10 +172,11 @@ function buildGraphData(logEntries: CommitLogEntry[]): GraphData {
 
 interface AppState {
   repos: RepoInfo[]; currentRepo: string | null; repoError: string | null;
-  branches: string[]; currentBranch: string;
+  branches: string[]; remoteBranches: string[]; currentBranch: string;
   logEntries: CommitLogEntry[]; graphData: GraphData;
   logSkip: number; hasMoreCommits: boolean; loadingMore: boolean;
   selectedCommit: string | null; commitDetail: CommitDetail | null;
+  selectedDiffFile: { path: string; isStaged: boolean } | null;
   status: GitStatusData | null;
   themePreset: string; isDark: boolean;
   loading: boolean; loadingMessage: string; error: string | null;
@@ -192,6 +193,8 @@ interface AppState {
   loadMoreCommits: () => Promise<void>;
   selectCommit: (hash: string | null) => void;
   setCommitDetail: (detail: CommitDetail | null) => void;
+  setSelectedDiffFile: (file: { path: string; isStaged: boolean } | null) => void;
+  checkoutRemote: (remoteBranch: string) => Promise<void>;
   setStatus: (status: GitStatusData | null) => void;
   setThemePreset: (presetName: string) => void;
   setShowSettings: (show: boolean) => void;
@@ -210,10 +213,10 @@ function applyTheme(preset: ThemePreset) {
 
 export const useRepoStore = create<AppState>((set, get) => ({
   repos: [], currentRepo: null, repoError: null,
-  branches: [], currentBranch: "",
+  branches: [], remoteBranches: [], currentBranch: "",
   logEntries: [], graphData: { nodes: [], edges: [], maxLane: 0 },
   logSkip: 0, hasMoreCommits: true, loadingMore: false,
-  selectedCommit: null, commitDetail: null, status: null,
+  selectedCommit: null, commitDetail: null, selectedDiffFile: null, status: null,
   themePreset: "catppuccin-mocha", isDark: true,
   loading: false, loadingMessage: "", error: null,
   showSettings: false,
@@ -260,7 +263,21 @@ export const useRepoStore = create<AppState>((set, get) => ({
   },
   setGraphData: (data) => set({ graphData: data }),
   selectCommit: (hash) => set({ selectedCommit: hash, commitDetail: null }),
+  setSelectedDiffFile: (file) => set({ selectedDiffFile: file }),
   setCommitDetail: (detail) => set({ commitDetail: detail }),
+  checkoutRemote: async (remoteBranch: string) => {
+    const state = get();
+    if (!state.currentRepo) return;
+    const api = window.gitAPI;
+    if (!api) return;
+    set({ loading: true, loadingMessage: `Checking out ${remoteBranch}...` });
+    try {
+      const result = await api.checkoutRemote(state.currentRepo, remoteBranch);
+      if (result.success) await state.refreshAll();
+      else set({ error: result.error || "Checkout failed" });
+    } catch (err: any) { set({ error: err.message }); }
+    finally { set({ loading: false, loadingMessage: "" }); }
+  },
   setStatus: (status) => set({ status }),
   setThemePreset: (presetName) => {
     const preset = THEME_PRESETS.find((p) => p.name === presetName);
@@ -285,7 +302,8 @@ export const useRepoStore = create<AppState>((set, get) => ({
       const branchResult = await api.branches(repo);
       if (branchResult.success && branchResult.data) {
         const localBranches = branchResult.data.all.filter((b: string) => !b.startsWith("remotes/"));
-        set({ branches: localBranches, currentBranch: branchResult.data.current });
+        const remoteBranches = branchResult.data.all.filter((b: string) => b.startsWith("remotes/"));
+        set({ branches: localBranches, remoteBranches, currentBranch: branchResult.data.current });
       }
       const logResult = await api.log(repo, 0, 200);
       if (logResult.success && logResult.data) {

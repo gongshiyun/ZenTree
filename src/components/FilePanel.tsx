@@ -1,13 +1,9 @@
 ﻿import { useState, useCallback, useMemo } from "react";
 import { useRepoStore } from "../stores/repoStore";
-import DiffViewer from "./DiffViewer";
 
 type FileTab = "unstaged" | "staged";
 
-interface FileEntry {
-  path: string;
-  status: string;
-}
+interface FileEntry { path: string; status: string; }
 
 function getFileStatusLabel(status: string): string {
   if (status === "not_added" || status === "??") return "untracked";
@@ -19,20 +15,11 @@ function getFileStatusLabel(status: string): string {
 }
 
 function getFileStatusIcon(status: string): string {
-  switch (status) {
-    case "untracked": return "?";
-    case "modified": return "M";
-    case "added": return "A";
-    case "deleted": return "D";
-    case "renamed": return "R";
-    default: return "M";
-  }
+  switch (status) { case "untracked": return "?"; case "modified": return "M"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; default: return "M"; }
 }
 
 export default function FilePanel() {
   const [activeTab, setActiveTab] = useState<FileTab>("unstaged");
-  const [selectedFile, setSelectedFile] = useState<{ path: string; isStaged: boolean } | null>(null);
-
   const status = useRepoStore((s) => s.status);
   const currentRepo = useRepoStore((s) => s.currentRepo);
   const setLoading = useRepoStore((s) => s.setLoading);
@@ -40,76 +27,50 @@ export default function FilePanel() {
   const refreshAll = useRepoStore((s) => s.refreshAll);
   const commitDetail = useRepoStore((s) => s.commitDetail);
   const selectedCommit = useRepoStore((s) => s.selectedCommit);
+  const selectedDiffFile = useRepoStore((s) => s.selectedDiffFile);
+  const setSelectedDiffFile = useRepoStore((s) => s.setSelectedDiffFile);
 
   const unstagedFiles = useMemo((): FileEntry[] => {
     if (!status) return [];
-    const entries: FileEntry[] = [];
-    for (const f of status.not_added || []) entries.push({ path: f, status: "untracked" });
-    for (const f of status.modified || []) entries.push({ path: f, status: "modified" });
-    for (const f of status.deleted || []) entries.push({ path: f, status: "deleted" });
-    for (const r of status.renamed || []) entries.push({ path: `${r.from} \u2192 ${r.to}`, status: "renamed" });
-    return entries;
+    const e: FileEntry[] = [];
+    for (const f of status.not_added || []) e.push({ path: f, status: "untracked" });
+    for (const f of status.modified || []) e.push({ path: f, status: "modified" });
+    for (const f of status.deleted || []) e.push({ path: f, status: "deleted" });
+    for (const r of status.renamed || []) e.push({ path: `${r.from} \u2192 ${r.to}`, status: "renamed" });
+    return e;
   }, [status]);
 
   const stagedFiles = useMemo((): FileEntry[] => {
     if (!status) return [];
-    const entries: FileEntry[] = [];
-    for (const f of status.staged || []) {
-      if (!status.deleted.includes(f)) entries.push({ path: f, status: "modified" });
-    }
-    for (const f of status.created || []) entries.push({ path: f, status: "added" });
-    return entries;
+    const e: FileEntry[] = [];
+    for (const f of status.staged || []) { if (!status.deleted.includes(f)) e.push({ path: f, status: "modified" }); }
+    for (const f of status.created || []) e.push({ path: f, status: "added" });
+    return e;
   }, [status]);
 
   const handleStage = useCallback(async (file: string) => {
     if (!currentRepo) return;
     setLoading(true, `Staging ${file}...`);
-    try {
-      const result = await window.gitAPI.stage(currentRepo, [file]);
-      if (result.success) await refreshAll();
-      else setError(result.error || "Failed to stage file");
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false, ""); }
+    try { const r = await window.gitAPI.stage(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || "Failed"); }
+    catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, refreshAll]);
 
   const handleUnstage = useCallback(async (file: string) => {
     if (!currentRepo) return;
     setLoading(true, `Unstaging ${file}...`);
-    try {
-      const result = await window.gitAPI.unstage(currentRepo, [file]);
-      if (result.success) await refreshAll();
-      else setError(result.error || "Failed to unstage file");
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false, ""); }
+    try { const r = await window.gitAPI.unstage(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || "Failed"); }
+    catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, refreshAll]);
 
   const handleDiscard = useCallback(async (file: string) => {
     if (!currentRepo) return;
-    const confirmed = window.confirm(`Discard all changes to "${file}"? This cannot be undone.`);
-    if (!confirmed) return;
+    if (!window.confirm(`Discard all changes to "${file}"?`)) return;
     setLoading(true, `Discarding ${file}...`);
-    try {
-      const result = await window.gitAPI.discard(currentRepo, [file]);
-      if (result.success) await refreshAll();
-      else setError(result.error || "Failed to discard changes");
-    } catch (err: any) { setError(err.message); }
-    finally { setLoading(false, ""); }
+    try { const r = await window.gitAPI.discard(currentRepo, [file]); if (r.success) await refreshAll(); else setError(r.error || "Failed"); }
+    catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, refreshAll]);
 
-  // Show diff viewer for selected file
-  if (selectedFile) {
-    return (
-      <div className="file-panel">
-        <DiffViewer
-          filePath={selectedFile.path}
-          isStaged={selectedFile.isStaged}
-          onClose={() => { setSelectedFile(null); refreshAll(); }}
-        />
-      </div>
-    );
-  }
-
-  // Show commit detail if a commit is selected
+  // Commit detail
   if (selectedCommit && commitDetail) {
     return (
       <div className="file-panel">
@@ -117,9 +78,7 @@ export default function FilePanel() {
           <div className="file-tab active">Files in {selectedCommit.substring(0, 7)}</div>
         </div>
         <div className="file-list">
-          {commitDetail.files.map((file) => (
-            <div key={file} className="file-item"><span className="file-name">{file}</span></div>
-          ))}
+          {commitDetail.files.map((f) => <div key={f} className="file-item"><span className="file-name">{f}</span></div>)}
           {commitDetail.files.length === 0 && <div className="empty-state">No files changed</div>}
         </div>
       </div>
@@ -140,10 +99,15 @@ export default function FilePanel() {
       </div>
       <div className="file-list">
         {currentFiles.map((file) => {
-          const statusLabel = getFileStatusLabel(file.status);
+          const sl = getFileStatusLabel(file.status);
+          const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged");
           return (
-            <div key={file.path} className="file-item" onClick={() => setSelectedFile({ path: file.path, isStaged: activeTab === "staged" })}>
-              <span className={`file-status ${statusLabel}`}>{getFileStatusIcon(statusLabel)}</span>
+            <div
+              key={file.path}
+              className={`file-item${isSel ? " selected" : ""}`}
+              onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged" })}
+            >
+              <span className={`file-status ${sl}`}>{getFileStatusIcon(sl)}</span>
               <span className="file-name" title={file.path}>{file.path}</span>
               <span className="file-actions" onClick={(e) => e.stopPropagation()}>
                 {activeTab === "unstaged" ? (
@@ -157,9 +121,7 @@ export default function FilePanel() {
           );
         })}
         {currentFiles.length === 0 && (
-          <div className="empty-state">
-            {activeTab === "unstaged" ? "No unstaged changes" : "No staged changes — stage files to commit"}
-          </div>
+          <div className="empty-state">{activeTab === "unstaged" ? "No unstaged changes" : "No staged changes"}</div>
         )}
       </div>
     </div>

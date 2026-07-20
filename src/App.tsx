@@ -7,6 +7,7 @@ import FilePanel from "./components/FilePanel";
 import CommitBar from "./components/CommitBar";
 import StatusBar from "./components/StatusBar";
 import SettingsDialog from "./components/SettingsDialog";
+import DiffPanel from "./components/DiffPanel";
 
 function Welcome() {
   const handleOpen = async () => {
@@ -23,21 +24,12 @@ function Welcome() {
 
   return (
     <div className="welcome" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "link"; }} onDrop={async (e) => {
-      e.preventDefault();
-      const files = e.dataTransfer.files;
+      e.preventDefault(); const files = e.dataTransfer.files;
       if (files.length > 0) {
-        const droppedPath = files[0].path;
-        const api = window.gitAPI;
-        if (!api) return;
-        const result = await api.isRepo(droppedPath);
-        if (result.success && result.data) {
-          const name = droppedPath.split(/[/\\]/).pop() || droppedPath;
-          useRepoStore.getState().addRepo(droppedPath, name);
-          useRepoStore.getState().setCurrentRepo(droppedPath);
-          useRepoStore.getState().refreshAll(droppedPath);
-        } else {
-          useRepoStore.getState().setError(`"${droppedPath}" is not a valid Git repository.`);
-        }
+        const dp = files[0].path; const api = window.gitAPI; if (!api) return;
+        const r = await api.isRepo(dp);
+        if (r.success && r.data) { const nm = dp.split(/[/\\]/).pop() || dp; useRepoStore.getState().addRepo(dp, nm); useRepoStore.getState().setCurrentRepo(dp); useRepoStore.getState().refreshAll(dp); }
+        else { useRepoStore.getState().setError(`"${dp}" is not a valid Git repository.`); }
       }
     }}>
       <h1>ZenTree</h1>
@@ -50,6 +42,7 @@ function Welcome() {
 
 export default function App() {
   const currentRepo = useRepoStore((s) => s.currentRepo);
+  const selectedDiffFile = useRepoStore((s) => s.selectedDiffFile);
   const refreshAll = useRepoStore((s) => s.refreshAll);
   const setError = useRepoStore((s) => s.setError);
 
@@ -70,10 +63,11 @@ export default function App() {
         <>
           <div className="main-content">
             <Sidebar />
-            <div className="center-area">
+            <div className={`center-area${selectedDiffFile ? " has-diff" : ""}`}>
               <CommitGraph />
               <FilePanel />
             </div>
+            <DiffPanel />
           </div>
           <CommitBar />
           <StatusBar />

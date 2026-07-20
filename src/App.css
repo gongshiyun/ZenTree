@@ -313,6 +313,36 @@
   color: var(--text-primary);
 }
 
+.sidebar-subheader {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 12px; margin-top: 4px;
+  font-size: 10px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+  border-top: 1px solid var(--border-color);
+}
+.sidebar-subheader:hover { color: var(--text-primary); }
+.subheader-arrow { font-size: 7px; }
+.branch-item.remote { padding-left: 22px; }
+.branch-icon.remote-icon { color: var(--text-muted); }
+
+.file-item.selected {
+  background: rgba(137,180,250,0.12);
+  border-left: 2px solid var(--accent);
+}
+
+/* Center area horizontal split */
+.center-area.has-diff {
+  max-width: calc(100% - 380px);
+}
+
+/* Diff panel on the right */
+.diff-panel {
+  width: 380px; min-width: 280px; flex-shrink: 0;
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
 .branch-item.current {
   color: var(--accent);
   font-weight: 600;
