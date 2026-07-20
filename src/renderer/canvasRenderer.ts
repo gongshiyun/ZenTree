@@ -1,4 +1,4 @@
-﻿import type { GraphData, GraphNode, GraphEdge } from "../types";
+import type { GraphData, GraphNode, GraphEdge } from "../types";
 
 const NODE_RADIUS = 7;
 const ROW_HEIGHT = 32;
@@ -213,16 +213,28 @@ export class GraphRenderer {
     };
   }
 
+  private estimateTextWidth(text: string, fontSize: number): number {
+    return text.length * fontSize * 0.6;
+  }
+
   private hitTest(sx: number, sy: number): GraphNode | null {
     const world = this.screenToWorld(sx, sy);
     const hitRadius = NODE_RADIUS + 6;
+    const textX = this.data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
+    const halfFont = 7;
 
     // Search from last (closest to cursor visually) to first
     for (let i = this.data.nodes.length - 1; i >= 0; i--) {
       const node = this.data.nodes[i];
+      // Check circle hit
       const dx = node.x - world.x;
       const dy = node.y - world.y;
       if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+        return node;
+      }
+      // Check text label hit
+      const textW = this.estimateTextWidth(node.subject.substring(0, 60), 12);
+      if (world.x >= textX && world.y >= node.y - halfFont && world.y <= node.y + halfFont) {
         return node;
       }
     }

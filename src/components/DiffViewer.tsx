@@ -17,11 +17,7 @@ function parseDiff(diffText: string): DiffHunk[] {
       const oldCount = parseInt(hunkMatch[2] || "1", 10);
       const newStart = parseInt(hunkMatch[3], 10);
       const newCount = parseInt(hunkMatch[4] || "1", 10);
-      currentHunk = {
-        header: hunkMatch[0],
-        oldStart, oldCount, newStart, newCount,
-        lines: [],
-      };
+      currentHunk = { header: hunkMatch[0], oldStart, oldCount, newStart, newCount, lines: [] };
       oldLine = oldStart;
       newLine = newStart;
     } else if (currentHunk) {
@@ -48,11 +44,7 @@ function buildHunkPatch(filePath: string, hunk: DiffHunk): string {
   return lines.join("\n") + "\n";
 }
 
-interface Props {
-  filePath: string;
-  isStaged: boolean;
-  onClose: () => void;
-}
+interface Props { filePath: string; isStaged: boolean; onClose: () => void; }
 
 export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
   const currentRepo = useRepoStore((s) => s.currentRepo);
@@ -61,15 +53,22 @@ export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
   const refreshAll = useRepoStore((s) => s.refreshAll);
 
   const [diffText, setDiffText] = useState("");
+  const [fetching, setFetching] = useState(true);
+  const [fetchError, setFetchError] = useState("");
   const hunks = useMemo(() => parseDiff(diffText), [diffText]);
 
   useEffect(() => {
     if (!currentRepo) return;
+    setFetching(true);
+    setFetchError("");
     (async () => {
       const result = await window.gitAPI.diffFile(currentRepo, filePath, isStaged);
-      if (result.success && result.data) {
+      if (result.success && result.data !== undefined) {
         setDiffText(result.data);
+      } else {
+        setFetchError(result.error || "Failed to fetch diff");
       }
+      setFetching(false);
     })();
   }, [currentRepo, filePath, isStaged]);
 
@@ -82,31 +81,13 @@ export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
       if (action === "stage") result = await window.gitAPI.stageHunk(currentRepo, patch);
       else if (action === "unstage") result = await window.gitAPI.unstageHunk(currentRepo, patch);
       else result = await window.gitAPI.revertHunk(currentRepo, patch);
-      if (result.success) {
-        await refreshAll();
-      } else {
-        setError(result.error || "Operation failed");
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false, "");
-    }
+      if (result.success) await refreshAll();
+      else setError(result.error || "Operation failed");
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
   }, [currentRepo, filePath, setLoading, setError, refreshAll]);
 
   const fileName = filePath.replace(/\\/g, "/");
-
-  if (!diffText) {
-    return (
-      <div className="diff-viewer">
-        <div className="diff-header">
-          <button className="diff-back-btn" onClick={onClose}>&larr; Back to file list</button>
-          <span className="diff-file-name">{fileName}</span>
-        </div>
-        <div className="diff-empty">No changes or binary file</div>
-      </div>
-    );
-  }
 
   return (
     <div className="diff-viewer">
@@ -116,25 +97,24 @@ export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
         <span className="diff-badge">{isStaged ? "Staged" : "Unstaged"}</span>
       </div>
       <div className="diff-content">
-        {hunks.map((hunk, hi) => (
+        {fetching && <div className="diff-empty"><span className="spinner" /> Loading diff...</div>}
+        {fetchError && <div className="diff-empty" style={{ color: "var(--danger)" }}>{fetchError}</div>}
+        {!fetching && !fetchError && hunks.length === 0 && diffText === "" && (
+          <div className="diff-empty">No changes (binary file or identical)</div>
+        )}
+        {!fetching && !fetchError && hunks.map((hunk, hi) => (
           <div key={hi} className="diff-hunk">
             <div className="diff-hunk-header">
               <span className="diff-hunk-label">{hunk.header}</span>
               <div className="diff-hunk-actions">
                 {!isStaged && (
-                  <button className="diff-hunk-btn stage" onClick={() => handleHunkAction(hunk, "stage")} title="Stage this hunk">
-                    Stage
-                  </button>
+                  <button className="diff-hunk-btn stage" onClick={() => handleHunkAction(hunk, "stage")} title="Stage this hunk">Stage</button>
                 )}
                 {isStaged && (
-                  <button className="diff-hunk-btn unstage" onClick={() => handleHunkAction(hunk, "unstage")} title="Unstage this hunk">
-                    Unstage
-                  </button>
+                  <button className="diff-hunk-btn unstage" onClick={() => handleHunkAction(hunk, "unstage")} title="Unstage this hunk">Unstage</button>
                 )}
                 {!isStaged && (
-                  <button className="diff-hunk-btn revert" onClick={() => handleHunkAction(hunk, "revert")} title="Revert this hunk">
-                    Revert
-                  </button>
+                  <button className="diff-hunk-btn revert" onClick={() => handleHunkAction(hunk, "revert")} title="Revert this hunk">Revert</button>
                 )}
               </div>
             </div>
@@ -150,7 +130,6 @@ export default function DiffViewer({ filePath, isStaged, onClose }: Props) {
             </div>
           </div>
         ))}
-        {hunks.length === 0 && <div className="diff-empty">No changes to display</div>}
       </div>
     </div>
   );

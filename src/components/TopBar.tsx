@@ -1,4 +1,4 @@
-﻿import { useCallback, useRef, useState } from "react";
+﻿import { useCallback, useRef, useState, useEffect } from "react";
 import { useRepoStore } from "../stores/repoStore";
 
 export default function TopBar() {
@@ -15,6 +15,20 @@ export default function TopBar() {
   const setError = useRepoStore((s) => s.setError);
   const [searchText, setSearchText] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const selectorRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+        setSearchText("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDropdown]);
 
   const filteredRepos = repos.filter(
     (r) => r.name.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -77,7 +91,7 @@ export default function TopBar() {
     <div className="top-bar" style={{ WebkitAppRegion: "drag" as any }}>
       <span className="window-title">ZenTree</span>
 
-      <div className="repo-selector" style={{ WebkitAppRegion: "no-drag" as any }}>
+      <div className="repo-selector" ref={selectorRef} style={{ WebkitAppRegion: "no-drag" as any }}>
         <div className="repo-selector-trigger" onClick={() => setShowDropdown(!showDropdown)}>
           <span className="repo-name">
             {currentRepoName || (repos.length === 0 ? "No repositories" : "Select repository...")}
