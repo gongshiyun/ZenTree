@@ -253,7 +253,7 @@ ipcMain.handle("git:set-config", safeHandler(async (repoPath: string, key: strin
 
 // Get diff for a file in a specific commit
 ipcMain.handle("git:commit-file-diff", safeHandler(async (repoPath: string, hash: string, filePath: string) => {
-  return await getGit(repoPath).raw(["diff-tree", "-r", "-p", hash, "--", filePath]);
+  return await getGit(repoPath).raw(["show", "--format=", hash, "--", filePath]);
 }));// Stage file
 ipcMain.handle("git:stage", safeHandler(async (repoPath: string, files: string[]) => {
   return await getGit(repoPath).add(files);

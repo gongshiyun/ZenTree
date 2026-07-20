@@ -53,7 +53,7 @@ export default function DiffViewer({ filePath, isStaged, onClose, commitHash, re
       else setFetchError(r.error || t("diff.fetchFailed"));
       setFetching(false);
     })();
-  }, [currentRepo, filePath, isStaged, refreshKey]);
+  }, [currentRepo, filePath, isStaged, refreshKey, commitHash]);
 
   const handleHunkAction = useCallback(async (h: DiffHunk, action: "stage"|"unstage"|"revert") => {
     if (!currentRepo) return;
