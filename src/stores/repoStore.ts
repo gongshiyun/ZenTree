@@ -215,7 +215,7 @@ function applyTheme(preset: ThemePreset) {
 export const useRepoStore = create<AppState>((set, get) => ({
   repos: [], currentRepo: null, repoError: null,
   branches: [], remoteBranches: [], currentBranch: "",
-  logEntries: [], graphData: { nodes: [], edges: [], maxLane: 0 },
+  logEntries: [], graphData: { nodes: [], edges: [], maxLane: 0, branchRefs: {} },
   logSkip: 0, hasMoreCommits: true, loadingMore: false,
   selectedCommit: null, commitDetail: null, selectedDiffFile: null, status: null,
   themePreset: "catppuccin-mocha", isDark: true, language: "en",
@@ -305,7 +305,9 @@ export const useRepoStore = create<AppState>((set, get) => ({
       if (branchResult.success && branchResult.data) {
         const localBranches = branchResult.data.all.filter((b: string) => !b.startsWith("remotes/"));
         const remoteBranches = branchResult.data.all.filter((b: string) => b.startsWith("remotes/"));
-        set({ branches: localBranches, remoteBranches, currentBranch: branchResult.data.current });
+  const branchRefs: Record<string, string[]> = {};
+          if (branchResult.data.branches) { for (const [name, info] of Object.entries(branchResult.data.branches)) { if (info.commit) { if (!branchRefs[info.commit]) branchRefs[info.commit] = []; branchRefs[info.commit].push(name); } } }
+          set({ branches: localBranches, remoteBranches, currentBranch: branchResult.data.current, graphData: { ...get().graphData, branchRefs } });
       }
       const logResult = await api.log(repo, 0, 200);
       if (logResult.success && logResult.data) {

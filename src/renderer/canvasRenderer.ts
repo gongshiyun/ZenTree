@@ -118,6 +118,7 @@ export class GraphRenderer {
 
     // Draw nodes in visible range
     this.drawNodes(cullTop, cullBottom, viewLeft, viewRight, isDark);
+    this.drawBranchLabels(cullTop, cullBottom, isDark);
 
     ctx.restore();
 
@@ -134,6 +135,35 @@ export class GraphRenderer {
       const viewBottomWorld = viewBottom;
       if (viewBottomWorld >= lastWorldY) {
         this.onNearBottom();
+      }
+    }
+  }
+
+
+  private drawBranchLabels(cullTop: number, cullBottom: number, isDark: boolean) {
+    const { ctx, data } = this;
+    const refs = data.branchRefs;
+    if (!refs) return;
+    const textX = data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
+    const currentBranch = ""; // Will be set from outside
+    for (const node of data.nodes) {
+      if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
+      const names = refs[node.hash];
+      if (!names || names.length === 0) continue;
+      ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.textBaseline = "middle";
+      const baseY = node.y - 10;
+      for (let i = 0; i < names.length; i++) {
+        const name = names[i].replace(/^remotes\//, '');
+        const w = ctx.measureText(name).width + 12;
+        const ly = baseY + i * 18;
+        ctx.fillStyle = node.color;
+        ctx.beginPath();
+        const lx = textX + 420;
+        ctx.roundRect(lx, ly - 8, w, 16, 4);
+        ctx.fill();
+        ctx.fillStyle = isDark ? "#1a1b26" : "#fff";
+        ctx.fillText(name, lx + 6, ly);
       }
     }
   }

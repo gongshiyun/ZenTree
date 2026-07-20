@@ -49,7 +49,7 @@ export interface GraphNode {
 
 export interface GraphEdge { fromX: number; fromY: number; toX: number; toY: number; color: string; }
 
-export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; maxLane: number; }
+export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; maxLane: number; branchRefs: Record<string, string[]>; }
 
 export interface GitStatusData {
   staged: string[]; modified: string[]; created: string[]; deleted: string[];
