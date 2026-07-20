@@ -1,4 +1,4 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 import type { RepoInfo, CommitLogEntry, GraphData, GraphNode, GraphEdge, GitStatusData, CommitDetail, ThemePreset } from "../types";
 
 // Branch colors
@@ -149,7 +149,7 @@ function buildGraphData(logEntries: CommitLogEntry[]): GraphData {
   }
   const nodes: GraphNode[] = logEntries.map((entry, i) => ({
     hash: entry.hash, shortHash: entry.shortHash, parents: entry.parents,
-    author: entry.author, email: entry.email, timestamp: entry.timestamp, subject: entry.subject,
+    author: entry.author, email: entry.email, timestamp: entry.timestamp, subject: entry.subject, body: entry.body || '',
     x: nodeLanes[i] * LANE_WIDTH + LANE_WIDTH, y: i * ROW_HEIGHT + ROW_HEIGHT / 2,
     color: hashToColor(entry.hash, BRANCH_COLORS), lane: nodeLanes[i], isSelected: false,
   }));

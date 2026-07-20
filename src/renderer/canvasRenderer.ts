@@ -198,7 +198,7 @@ export class GraphRenderer {
       ctx.font = `12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
       ctx.textBaseline = "middle";
       const textX = data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
-      ctx.fillText(node.subject.substring(0, 60), textX, node.y);
+      const subj = node.subject; ctx.fillText(subj.length > 60 ? subj.substring(0, 60) + '...' : subj, textX, node.y);
     }
   }
 

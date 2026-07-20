@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import * as path from "path";
 import * as childProcess from "child_process";
 import * as os from "os";
@@ -155,7 +155,7 @@ ipcMain.handle("git:log", safeHandler(async (repoPath: string, maxCount?: number
     hash: entry.hash, shortHash: entry.hash.substring(0, 7),
     parents: entry.parents ? entry.parents.split(" ") : [],
     author: entry.author, email: entry.email,
-    timestamp: parseInt(entry.date, 10), subject: entry.subject,
+    timestamp: parseInt(entry.date, 10), subject: entry.subject, body: entry.body || '',
   }));
 }));
 

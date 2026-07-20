@@ -3,13 +3,17 @@ import { useRepoStore } from "../stores/repoStore";
 import { GraphRenderer } from "../renderer/canvasRenderer";
 import type { GraphNode } from "../types";
 
+function formatDate(ts: number): string {
+  return new Date(ts * 1000).toLocaleString();
+}
+
 export default function CommitGraph() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GraphRenderer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const graphData = useRepoStore((s) => s.graphData);
-  const theme = useRepoStore((s) => s.theme);
+  const isDark = useRepoStore((s) => s.isDark);
   const selectedCommit = useRepoStore((s) => s.selectedCommit);
   const selectCommit = useRepoStore((s) => s.selectCommit);
   const currentRepo = useRepoStore((s) => s.currentRepo);
@@ -24,13 +28,11 @@ export default function CommitGraph() {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    if (rendererRef.current) {
-      rendererRef.current.destroy();
-    }
+    if (rendererRef.current) rendererRef.current.destroy();
 
     try {
       const renderer = new GraphRenderer(canvas);
-      renderer.setTheme(theme);
+      renderer.setTheme(isDark ? "dark" : "light");
       renderer.setData(graphData);
       renderer.setSelected(selectedCommit);
 
@@ -56,9 +58,7 @@ export default function CommitGraph() {
 
       rendererRef.current = renderer;
 
-      const observer = new ResizeObserver(() => {
-        renderer.handleResize();
-      });
+      const observer = new ResizeObserver(() => renderer.handleResize());
       observer.observe(container);
       return () => {
         observer.disconnect();
@@ -80,11 +80,11 @@ export default function CommitGraph() {
   // Update theme
   useEffect(() => {
     if (rendererRef.current) {
-      rendererRef.current.setTheme(theme);
+      rendererRef.current.setTheme(isDark ? "dark" : "light");
     }
-  }, [theme]);
+  }, [isDark]);
 
-  // Update selected commit highlight
+  // Update selected commit
   useEffect(() => {
     if (rendererRef.current) {
       rendererRef.current.setSelected(selectedCommit);
@@ -104,26 +104,21 @@ export default function CommitGraph() {
   }, [tooltip]);
 
   return (
-    <div
-      className="graph-container"
-      ref={containerRef}
-      onMouseMove={handleMouseMove}
-    >
+    <div className="graph-container" ref={containerRef} onMouseMove={handleMouseMove}>
       <canvas ref={canvasRef} />
       {tooltip && (
         <div
           className="graph-tooltip"
-          style={{
-            left: tooltip.x,
-            top: tooltip.y,
-            transform: "translateY(-100%)",
-          }}
+          style={{ left: tooltip.x, top: tooltip.y, transform: "translateY(-100%)" }}
         >
           <div className="tt-subject">{tooltip.node.subject}</div>
+          {tooltip.node.body && (
+            <div className="tt-body">{tooltip.node.body}</div>
+          )}
           <div className="tt-hash">{tooltip.node.hash}</div>
           <div className="tt-meta">
-            {tooltip.node.author} &middot;{" "}
-            {new Date(tooltip.node.timestamp * 1000).toLocaleString()}
+            {tooltip.node.author} &lt;{tooltip.node.email}&gt; &middot;{" "}
+            {formatDate(tooltip.node.timestamp)}
           </div>
         </div>
       )}

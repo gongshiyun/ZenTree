@@ -373,6 +373,20 @@
   margin-bottom: 4px;
 }
 
+
+.graph-tooltip .tt-body {
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 4px 0;
+  padding: 4px 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
 .graph-tooltip .tt-meta {
   color: var(--text-muted);
   font-size: 11px;

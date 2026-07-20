@@ -1,4 +1,4 @@
-﻿export interface GitAPI {
+export interface GitAPI {
   isRepo: (repoPath: string) => Promise<{ success: boolean; data?: boolean; error?: string }>;
   branches: (repoPath: string) => Promise<{ success: boolean; data?: { all: string[]; current: string; branches: Record<string, any> }; error?: string }>;
   log: (repoPath: string, maxCount?: number) => Promise<{ success: boolean; data?: CommitLogEntry[]; error?: string }>;
