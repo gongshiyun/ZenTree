@@ -1,6 +1,6 @@
-import { t } from "../i18n";
-import { useState, useCallback, useEffect, useRef } from "react";
+﻿import { useState, useCallback, useEffect, useRef } from "react";
 import { useRepoStore } from "../stores/repoStore";
+import { t } from "../i18n";
 
 export default function CommitBar() {
   const [message, setMessage] = useState("");
@@ -11,36 +11,26 @@ export default function CommitBar() {
   const setError = useRepoStore((s) => s.setError);
   const refreshAll = useRepoStore((s) => s.refreshAll);
 
-  // Track the "real" user message separate from what Amend fills in
   const userMessageRef = useRef("");
   const [lastCommitMsg, setLastCommitMsg] = useState("");
+  const [textareaH, setTextareaH] = useState(72);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isResizingRef = useRef(false);
 
-  const stagedCount = status
-    ? (status.staged?.length || 0) + (status.created?.length || 0)
-    : 0;
-
+  const stagedCount = status ? (status.staged?.length || 0) + (status.created?.length || 0) : 0;
   const canCommit = stagedCount > 0 || amend;
 
-  // When amend is toggled, fetch the last commit message and fill/restore
   useEffect(() => {
     if (!currentRepo) return;
-
     if (amend) {
-      // Save current user text, then fetch last commit message
       userMessageRef.current = message;
       (async () => {
         try {
-          const result = await window.gitAPI.lastMessage(currentRepo);
-          if (result.success && result.data) {
-            setLastCommitMsg(result.data);
-            setMessage(result.data);
-          }
-        } catch {
-          // Silently fail — just don't fill
-        }
+          const r = await window.gitAPI.lastMessage(currentRepo);
+          if (r.success && r.data) { setLastCommitMsg(r.data); setMessage(r.data); }
+        } catch { /* */ }
       })();
     } else {
-      // Restore user's original message
       setMessage(userMessageRef.current);
       setLastCommitMsg("");
     }
@@ -50,65 +40,62 @@ export default function CommitBar() {
     if (!currentRepo) return;
     setLoading(true, amend ? t("commit.amending") : t("commit.committing"));
     try {
-      const result = await window.gitAPI.commit(currentRepo, message.trim(), amend);
-      if (result.success) {
-        setMessage("");
-        setAmend(false);
-        userMessageRef.current = "";
-        setLastCommitMsg("");
-        await refreshAll();
-      } else {
-        setError(result.error || "Commit failed");
-      }
-    } catch (err: any) {
-      setError(err.message || "Commit failed");
-    } finally {
-      setLoading(false, "");
-    }
+      const r = await window.gitAPI.commit(currentRepo, message.trim(), amend);
+      if (r.success) { setMessage(""); setAmend(false); userMessageRef.current = ""; setLastCommitMsg(""); await refreshAll(); }
+      else setError(r.error || t("error.commitFailed"));
+    } catch (err: any) { setError(err.message || t("error.commitFailed")); }
+    finally { setLoading(false, ""); }
   }, [currentRepo, message, amend, setLoading, setError, refreshAll]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      handleCommit();
-    }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleCommit(); }
   }, [handleCommit]);
 
-  const handleMessageChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleMsgChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
-    if (!amend) {
-      userMessageRef.current = e.target.value;
-    }
+    if (!amend) userMessageRef.current = e.target.value;
   }, [amend]);
+
+  // Custom top-edge resize
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    const startY = e.clientY;
+    const startH = textareaH;
+    const mm = (ev: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      setTextareaH(Math.max(54, Math.min(250, startH - (ev.clientY - startY))));
+    };
+    const mu = () => {
+      isResizingRef.current = false;
+      document.removeEventListener("mousemove", mm);
+      document.removeEventListener("mouseup", mu);
+    };
+    document.addEventListener("mousemove", mm);
+    document.addEventListener("mouseup", mu);
+  }, [textareaH]);
 
   return (
     <div className="commit-bar">
-      <textarea
-        placeholder={
-          canCommit
-            ? t("commit.placeholder")
-            : t("commit.noStaged")
-        }
-        value={message}
-        onChange={handleMessageChange}
-        onKeyDown={handleKeyDown}
-      />
+      <div className="commit-textarea-wrap">
+        <textarea
+          ref={textareaRef}
+          style={{ height: textareaH, resize: "none" }}
+          placeholder={canCommit ? t("commit.placeholder") : t("commit.noStaged")}
+          value={message}
+          onChange={handleMsgChange}
+          onKeyDown={handleKeyDown}
+        />
+        <div className="commit-resize-handle" onMouseDown={handleResizeStart} title="Drag to resize" />
+      </div>
       <div className="commit-options">
         <label className="amend-check">
-          <input
-            type="checkbox"
-            checked={amend}
-            onChange={(e) => setAmend(e.target.checked)}
-          />
-          Amend
+          <input type="checkbox" checked={amend} onChange={(e) => setAmend(e.target.checked)} />
+          {t("commit.amend")}
         </label>
-        <button
-          className="commit-btn"
-          disabled={!canCommit}
-          onClick={handleCommit}
-          title={amend ? t("commit.amendTip") : stagedCount === 0 ? t("commit.noStaged") : `Commit ${stagedCount}+ t("commit.commitTip")`}
-        >
-          Commit
+        <button className="commit-btn" disabled={!canCommit} onClick={handleCommit}
+          title={amend ? t("commit.amendTip") : (stagedCount === 0 ? t("commit.noStaged") : stagedCount + t("commit.commitTip"))}>
+          {t("commit.commit")}
         </button>
       </div>
     </div>

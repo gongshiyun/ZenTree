@@ -901,7 +901,17 @@
 }
 .diff-panel-resize:hover { background: var(--accent); }
 
-/* Commit bar textarea vertical resize */
+
+/* Commit bar textarea wrapper */
+.commit-textarea-wrap { flex: 1; position: relative; }
+.commit-textarea-wrap textarea { width: 100%; box-sizing: border-box; }
+
+/* Custom top-edge resize handle */
+.commit-resize-handle {
+  position: absolute; top: 0; left: 0; right: 0; height: 5px; cursor: ns-resize;
+  z-index: 5; border-radius: 2px 2px 0 0; transition: background 0.15s;
+}
+.commit-resize-handle:hover { background: var(--accent); }
 .commit-bar textarea { resize: vertical; min-height: 54px; max-height: 300px; overflow: auto; }
 
 /* Remove old fixed height constraint */
