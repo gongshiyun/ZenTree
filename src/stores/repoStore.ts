@@ -174,6 +174,7 @@ interface AppState {
   repos: RepoInfo[]; currentRepo: string | null; repoError: string | null;
   branches: string[]; currentBranch: string;
   logEntries: CommitLogEntry[]; graphData: GraphData;
+  logSkip: number; hasMoreCommits: boolean; loadingMore: boolean;
   selectedCommit: string | null; commitDetail: CommitDetail | null;
   status: GitStatusData | null;
   themePreset: string; isDark: boolean;
@@ -186,7 +187,9 @@ interface AppState {
   setRepoError: (error: string | null) => void;
   setBranches: (branches: string[], current: string) => void;
   setLogEntries: (entries: CommitLogEntry[]) => void;
+  appendLogEntries: (entries: CommitLogEntry[]) => void;
   setGraphData: (data: GraphData) => void;
+  loadMoreCommits: () => Promise<void>;
   selectCommit: (hash: string | null) => void;
   setCommitDetail: (detail: CommitDetail | null) => void;
   setStatus: (status: GitStatusData | null) => void;
@@ -209,6 +212,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
   repos: [], currentRepo: null, repoError: null,
   branches: [], currentBranch: "",
   logEntries: [], graphData: { nodes: [], edges: [], maxLane: 0 },
+  logSkip: 0, hasMoreCommits: true, loadingMore: false,
   selectedCommit: null, commitDetail: null, status: null,
   themePreset: "catppuccin-mocha", isDark: true,
   loading: false, loadingMessage: "", error: null,
@@ -227,7 +231,33 @@ export const useRepoStore = create<AppState>((set, get) => ({
   setCurrentRepo: (repoPath) => set({ currentRepo: repoPath, selectedCommit: null, commitDetail: null }),
   setRepoError: (error) => set({ repoError: error }),
   setBranches: (branches, current) => set({ branches, currentBranch: current }),
-  setLogEntries: (entries) => set({ logEntries: entries, graphData: buildGraphData(entries) }),
+  setLogEntries: (entries) => set({ logEntries: entries, graphData: buildGraphData(entries), logSkip: entries.length, hasMoreCommits: entries.length >= 200 }),
+  appendLogEntries: (newEntries) => {
+    const state = get();
+    const merged = [...state.logEntries, ...newEntries];
+    const newSkip = merged.length;
+    set({ logEntries: merged, graphData: buildGraphData(merged), logSkip: newSkip, hasMoreCommits: newEntries.length >= 200, loadingMore: false });
+  },
+  loadMoreCommits: async () => {
+    const state = get();
+    if (!state.currentRepo || state.loadingMore || !state.hasMoreCommits) return;
+    set({ loadingMore: true });
+    const api = window.gitAPI;
+    if (!api) { set({ loadingMore: false }); return; }
+    try {
+      const result = await api.log(state.currentRepo, state.logSkip, 200);
+      if (result.success && result.data && result.data.length > 0) {
+        const newEntries = result.data;
+        const merged = [...state.logEntries, ...newEntries];
+        const newSkip = merged.length;
+        set({ logEntries: merged, graphData: buildGraphData(merged), logSkip: newSkip, hasMoreCommits: newEntries.length >= 200, loadingMore: false });
+      } else {
+        set({ hasMoreCommits: false, loadingMore: false });
+      }
+    } catch {
+      set({ loadingMore: false });
+    }
+  },
   setGraphData: (data) => set({ graphData: data }),
   selectCommit: (hash) => set({ selectedCommit: hash, commitDetail: null }),
   setCommitDetail: (detail) => set({ commitDetail: detail }),
@@ -250,16 +280,17 @@ export const useRepoStore = create<AppState>((set, get) => ({
     if (!repo) return;
     const api = window.gitAPI;
     if (!api) return;
-    set({ loading: true, loadingMessage: "Refreshing...", error: null });
+    set({ loading: true, loadingMessage: "Refreshing...", error: null, logSkip: 0, hasMoreCommits: true, loadingMore: false });
     try {
       const branchResult = await api.branches(repo);
       if (branchResult.success && branchResult.data) {
         const localBranches = branchResult.data.all.filter((b: string) => !b.startsWith("remotes/"));
         set({ branches: localBranches, currentBranch: branchResult.data.current });
       }
-      const logResult = await api.log(repo);
+      const logResult = await api.log(repo, 0, 200);
       if (logResult.success && logResult.data) {
-        set({ logEntries: logResult.data, graphData: buildGraphData(logResult.data) });
+        const entries = logResult.data;
+        set({ logEntries: entries, graphData: buildGraphData(entries), logSkip: entries.length, hasMoreCommits: entries.length >= 200 });
       } else if (logResult.error) { set({ error: logResult.error }); }
       const statusResult = await api.status(repo);
       if (statusResult.success && statusResult.data) { set({ status: statusResult.data }); }

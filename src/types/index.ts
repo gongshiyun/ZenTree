@@ -1,7 +1,7 @@
 export interface GitAPI {
   isRepo: (repoPath: string) => Promise<{ success: boolean; data?: boolean; error?: string }>;
   branches: (repoPath: string) => Promise<{ success: boolean; data?: { all: string[]; current: string; branches: Record<string, any> }; error?: string }>;
-  log: (repoPath: string, maxCount?: number) => Promise<{ success: boolean; data?: CommitLogEntry[]; error?: string }>;
+  log: (repoPath: string, skip: number, maxCount: number) => Promise<{ success: boolean; data?: CommitLogEntry[]; error?: string }>;
   status: (repoPath: string) => Promise<{ success: boolean; data?: GitStatusData; error?: string }>;
   show: (repoPath: string, hash: string) => Promise<{ success: boolean; data?: CommitDetail; error?: string }>;
   showDetail: (repoPath: string, hash: string) => Promise<{ success: boolean; data?: string; error?: string }>;

@@ -1,9 +1,9 @@
-﻿import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 const api = {
   isRepo: (repoPath: string) => ipcRenderer.invoke("git:is-repo", repoPath),
   branches: (repoPath: string) => ipcRenderer.invoke("git:branches", repoPath),
-  log: (repoPath: string, maxCount?: number) => ipcRenderer.invoke("git:log", repoPath, maxCount),
+  log: (repoPath: string, skip: number, maxCount: number) => ipcRenderer.invoke("git:log", repoPath, maxCount),
   status: (repoPath: string) => ipcRenderer.invoke("git:status", repoPath),
   show: (repoPath: string, hash: string) => ipcRenderer.invoke("git:show", repoPath, hash),
   showDetail: (repoPath: string, hash: string) => ipcRenderer.invoke("git:show-detail", repoPath, hash),

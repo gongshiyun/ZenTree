@@ -32,6 +32,7 @@ export class GraphRenderer {
   private onHover: ((node: GraphNode | null) => void) | null = null;
   private onClick: ((node: GraphNode) => void) | null = null;
   private onContextMenu: ((node: GraphNode, x: number, y: number) => void) | null = null;
+  private onNearBottom: (() => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -53,10 +54,12 @@ export class GraphRenderer {
     onHover?: (node: GraphNode | null) => void;
     onClick?: (node: GraphNode) => void;
     onContextMenu?: (node: GraphNode, x: number, y: number) => void;
+    onNearBottom?: () => void;
   }) {
     if (callbacks.onHover) this.onHover = callbacks.onHover;
     if (callbacks.onClick) this.onClick = callbacks.onClick;
     if (callbacks.onContextMenu) this.onContextMenu = callbacks.onContextMenu;
+    if (callbacks.onNearBottom) this.onNearBottom = callbacks.onNearBottom;
   }
 
   setData(data: GraphData) {
@@ -121,7 +124,18 @@ export class GraphRenderer {
     // Draw node count info
     ctx.fillStyle = isDark ? "#555" : "#aaa";
     ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    ctx.fillText(`${data.nodes.length} commits`, 12, height - 8);
+    const countText = `${data.nodes.length} commits`;
+    ctx.fillText(countText, 12, height - 8);
+
+    // Detect scroll near bottom to trigger load more
+    if (this.onNearBottom && data.nodes.length > 0) {
+      const lastNode = data.nodes[data.nodes.length - 1];
+      const lastWorldY = lastNode.y + 100;
+      const viewBottomWorld = viewBottom;
+      if (viewBottomWorld >= lastWorldY) {
+        this.onNearBottom();
+      }
+    }
   }
 
   private drawEdges(cullTop: number, cullBottom: number, isDark: boolean) {
