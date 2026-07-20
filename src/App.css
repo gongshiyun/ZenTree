@@ -598,12 +598,9 @@
   white-space: nowrap;
 }
 
-.amend-check input {
-  accent-color: var(--accent);
-}
+.amend-check input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; cursor: pointer; }
 
-.commit-btn {
-  height: 30px;
+.commit-btn { display: inline-flex; align-items: center; justify-content: center; height: 30px;
   padding: 0 18px;
   border: none;
   border-radius: var(--radius);
