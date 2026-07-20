@@ -296,28 +296,64 @@ ipcMain.handle("git:push", safeHandler(async (repoPath: string) => {
   return await getGit(repoPath).push();
 }));
 
-// Open Git Bash
+// Open Git Bash in repo directory (4-tier auto-discovery)
 ipcMain.handle("shell:open-git-bash", safeHandler(async (repoPath: string) => {
-  const gitBashPaths = [
-    "C:\\Program Files\\Git\\git-bash.exe",
-    "C:\\Program Files (x86)\\Git\\git-bash.exe",
-    path.join(process.env.LOCALAPPDATA || "", "Programs", "Git", "git-bash.exe"),
-    path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "git-bash.exe"),
-  ];
+  const settings = loadSettings();
   let bashPath = "";
-  for (const p of gitBashPaths) { if (fs.existsSync(p)) { bashPath = p; break; } }
+
+  // Tier 1: Derive from user-configured git path
+  if (settings.gitPath && settings.gitPath !== "git") {
+    const gitExe = path.resolve(settings.gitPath);
+    const candidates = [
+      gitExe.replace(/\\bin\\git\.exe$/i, "\\git-bash.exe"),
+      gitExe.replace(/\\cmd\\git\.exe$/i, "\\..\\git-bash.exe"),
+      path.join(path.dirname(gitExe), "..", "git-bash.exe"),
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(path.normalize(c))) { bashPath = path.normalize(c); break; }
+    }
+  }
+
+  // Tier 2: Hardcoded paths + env vars
   if (!bashPath) {
+    const hardPaths = [
+      "C:\\Program Files\\Git\\git-bash.exe",
+      "C:\\Program Files (x86)\\Git\\git-bash.exe",
+      path.join(process.env.LOCALAPPDATA || "", "Programs", "Git", "git-bash.exe"),
+      path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "git-bash.exe"),
+      path.join(process.env.ProgramW6432 || "C:\\Program Files", "Git", "git-bash.exe"),
+    ];
+    for (const p of hardPaths) { if (fs.existsSync(p)) { bashPath = p; break; } }
+  }
+
+  // Tier 3: git --exec-path (uses configured git binary)
+  if (!bashPath) {
+    const gitBin = settings.gitPath && settings.gitPath !== "git" ? settings.gitPath : "git";
     try {
-      const gitDir = childProcess.execSync("git --exec-path", { encoding: "utf8" }).trim();
-      const candidate = path.join(gitDir, "..", "..", "git-bash.exe");
-      if (fs.existsSync(path.normalize(candidate))) bashPath = path.normalize(candidate);
+      const gitDir = childProcess.execSync(`"${gitBin}" --exec-path`, { encoding: "utf8" }).trim();
+      for (const rel of ["..\\..\\..\\git-bash.exe", "..\\..\\git-bash.exe", "..\\git-bash.exe"]) {
+        const candidate = path.join(gitDir, rel);
+        if (fs.existsSync(path.normalize(candidate))) { bashPath = path.normalize(candidate); break; }
+      }
     } catch { /* ignore */ }
   }
-  if (!bashPath) throw new Error("Git Bash not found. Please install Git for Windows.");
+
+  // Tier 4: Scan Program Files for Git
+  if (!bashPath) {
+    try {
+      for (const pf of [process.env.ProgramFiles, process.env["ProgramFiles(x86)"]].filter(Boolean) as string[]) {
+        const candidate = path.join(pf, "Git", "git-bash.exe");
+        if (fs.existsSync(candidate)) { bashPath = candidate; break; }
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (!bashPath) {
+    throw new Error("Git Bash not found. Please install Git for Windows, or set Git path in Settings > General.");
+  }
   childProcess.execFile(bashPath, [], { cwd: repoPath });
   return "Git Bash opened";
 }));
-
 // Open directory dialog
 ipcMain.handle("dialog:open-directory", async () => {
   if (!mainWindow) return null;
