@@ -16,6 +16,7 @@ const api = {
   checkoutRemote: (repoPath: string, remoteBranch: string) => ipcRenderer.invoke("git:checkout-remote", repoPath, remoteBranch),
   createBranch: (repoPath: string, branchName: string, checkout: boolean) => ipcRenderer.invoke("git:create-branch", repoPath, branchName, checkout),
   deleteBranch: (repoPath: string, branchName: string, force: boolean) => ipcRenderer.invoke("git:delete-branch", repoPath, branchName, force),
+  merge: (repoPath: string, branchName: string) => ipcRenderer.invoke("git:merge", repoPath, branchName),
   fetch: (repoPath: string) => ipcRenderer.invoke("git:fetch", repoPath),
   pull: (repoPath: string) => ipcRenderer.invoke("git:pull", repoPath),
   push: (repoPath: string) => ipcRenderer.invoke("git:push", repoPath),

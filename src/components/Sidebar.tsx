@@ -51,6 +51,17 @@ export default function Sidebar() {
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, currentBranch, setLoading, setError, refreshAll]);
 
+  const handleMergeBranch = useCallback(async (branch: string) => {
+    if (!currentRepo) return;
+    if (!window.confirm(t("sidebar.confirmMerge").replace("{0}", branch).replace("{1}", currentBranch))) return;
+    setLoading(true, t("sidebar.merging").replace("{0}", branch));
+    try {
+      const r = await window.gitAPI.merge(currentRepo, branch);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, currentBranch, setLoading, setError, refreshAll]);
+
   const handleContextMenu = useCallback((e: React.MouseEvent, branch: string, isRemote: boolean) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, branch, isRemote }); }, []);
 
   const [sidebarWidth, setSidebarWidth] = useState(200);
@@ -101,6 +112,9 @@ export default function Sidebar() {
       {contextMenu.isRemote
         ? <div className="context-menu-item" onClick={() => { checkoutRemote(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkoutRemote").replace("{0}", contextMenu.branch.replace(/^remotes\//, ""))}</div>
         : <div className="context-menu-item" onClick={() => { handleCheckout(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkout")} {contextMenu.branch}</div>}
+      {!contextMenu.isRemote && contextMenu.branch !== currentBranch && (
+        <div className="context-menu-item" onClick={() => { handleMergeBranch(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.mergeInto").replace("{0}", contextMenu.branch)}</div>
+      )}
       {!contextMenu.isRemote && contextMenu.branch !== currentBranch && (
         <div className="context-menu-item danger" onClick={() => { handleDeleteBranch(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.deleteBranch")} {contextMenu.branch}</div>
       )}

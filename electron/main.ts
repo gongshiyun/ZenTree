@@ -327,6 +327,12 @@ ipcMain.handle("git:delete-branch", safeHandler(async (repoPath: string, branchN
   return await git.deleteLocalBranch(branchName, force);
 }));
 
+// Merge branch into current
+ipcMain.handle("git:merge", safeHandler(async (repoPath: string, branchName: string) => {
+  const git = getGit(repoPath);
+  return await git.merge([branchName]);
+}));
+
 // Fetch
 ipcMain.handle("git:fetch", safeHandler(async (repoPath: string) => {
   return await getGit(repoPath).fetch();
