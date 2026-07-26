@@ -1,4 +1,4 @@
-﻿const en: Record<string, string> = {
+const en: Record<string, string> = {
   "app.welcome": "A lightweight Git GUI client. Open a repository to see your commit graph, stage files, and commit changes.",
   "app.openRepo": "+ Open Repository",
   "app.dragHint": "Or drag and drop a Git repository folder here",
@@ -37,6 +37,13 @@
   "sidebar.copyName": "Copy branch name",
   "sidebar.checkoutRemote": "Checkout {0} (create tracking branch)",
   "sidebar.dblClick": " — double-click to checkout",
+  "sidebar.newBranch": "New branch",
+  "sidebar.branchNamePlaceholder": "Branch name...",
+  "sidebar.create": "Create",
+  "sidebar.creatingBranch": "Creating branch {0}...",
+  "sidebar.deletingBranch": "Deleting branch {0}...",
+  "sidebar.deleteBranch": "Delete",
+  "sidebar.confirmDelete": "Delete branch \"{0}\"? This cannot be undone.",
   "graph.commits": " commits",
   "files.unstaged": "Unstaged",
   "files.staged": "Staged",
@@ -92,6 +99,7 @@
   "error.unstageFailed": "Failed to unstage file",
   "error.discardFailed": "Failed to discard changes",
   "error.opFailed": "Operation failed",
+    "error.cannotDeleteCurrent": "Cannot delete the currently checked out branch",
   "status.refreshing": "Refreshing...",
   "status.checkingOut": "Checking out {0}...",
   "status.staging": "Staging {0}...",

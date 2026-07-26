@@ -312,6 +312,21 @@ ipcMain.handle("git:checkout-remote", safeHandler(async (repoPath: string, remot
   return await git.raw(["checkout", "--track", remoteBranch]);
 }));
 
+// Create branch
+ipcMain.handle("git:create-branch", safeHandler(async (repoPath: string, branchName: string, checkout: boolean) => {
+  const git = getGit(repoPath);
+  if (checkout) {
+    return await git.checkoutLocalBranch(branchName);
+  }
+  return await git.branch([branchName]);
+}));
+
+// Delete branch
+ipcMain.handle("git:delete-branch", safeHandler(async (repoPath: string, branchName: string, force: boolean) => {
+  const git = getGit(repoPath);
+  return await git.deleteLocalBranch(branchName, force);
+}));
+
 // Fetch
 ipcMain.handle("git:fetch", safeHandler(async (repoPath: string) => {
   return await getGit(repoPath).fetch();

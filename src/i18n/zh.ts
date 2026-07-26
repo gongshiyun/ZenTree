@@ -1,4 +1,4 @@
-﻿const zh: Record<string, string> = {
+const zh: Record<string, string> = {
   "app.welcome": "轻量级 Git 图形化客户端。打开仓库即可查看提交图谱、暂存文件并提交变更。",
   "app.openRepo": "+ 打开仓库",
   "app.dragHint": "或拖拽 Git 仓库文件夹到此处",
@@ -37,6 +37,13 @@
   "sidebar.copyName": "复制分支名称",
   "sidebar.checkoutRemote": "Checkout {0} (创建跟踪分支)",
   "sidebar.dblClick": " — 双击切换分支",
+  "sidebar.newBranch": "新建分支",
+  "sidebar.branchNamePlaceholder": "分支名称...",
+  "sidebar.create": "创建",
+  "sidebar.creatingBranch": "正在创建分支 {0}...",
+  "sidebar.deletingBranch": "正在删除分支 {0}...",
+  "sidebar.deleteBranch": "删除",
+  "sidebar.confirmDelete": "确定删除分支 \"{0}\"？此操作不可撤销。",
   "graph.commits": " 条提交",
   "files.unstaged": "未暂存",
   "files.staged": "已暂存",
@@ -92,6 +99,7 @@
   "error.unstageFailed": "取消暂存文件失败",
   "error.discardFailed": "丢弃更改失败",
   "error.opFailed": "操作失败",
+    "error.cannotDeleteCurrent": "无法删除当前所在分支",
   "status.refreshing": "正在刷新...",
   "status.checkingOut": "正在切换到 {0}...",
   "status.staging": "正在暂存 {0}...",

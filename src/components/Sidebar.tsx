@@ -15,14 +15,40 @@ export default function Sidebar() {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; branch: string; isRemote: boolean } | null>(null);
   const [showRemotes, setShowRemotes] = useState(true);
+  const [showNewBranch, setShowNewBranch] = useState(false);
+  const [newBranchName, setNewBranchName] = useState("");
+  const newBranchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { const h = () => setContextMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
+  useEffect(() => { if (showNewBranch && newBranchRef.current) newBranchRef.current.focus(); }, [showNewBranch]);
 
   const handleCheckout = useCallback(async (branch: string) => {
     if (!currentRepo || branch === currentBranch) return;
     setLoading(true, t("status.checkingOut").replace("{0}", branch));
     try { const r = await window.gitAPI.checkout(currentRepo, branch); if (r.success) await refreshAll(); else setError(r.error || t("error.checkoutFailed")); }
     catch (err: any) { setError(err.message || t("error.checkoutFailed")); } finally { setLoading(false, ""); }
+  }, [currentRepo, currentBranch, setLoading, setError, refreshAll]);
+
+  const handleCreateBranch = useCallback(async () => {
+    if (!currentRepo || !newBranchName.trim()) return;
+    setLoading(true, t("sidebar.creatingBranch").replace("{0}", newBranchName.trim()));
+    try {
+      const r = await window.gitAPI.createBranch(currentRepo, newBranchName.trim(), true);
+      if (r.success) { setShowNewBranch(false); setNewBranchName(""); await refreshAll(); }
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, newBranchName, setLoading, setError, refreshAll]);
+
+  const handleDeleteBranch = useCallback(async (branch: string) => {
+    if (!currentRepo) return;
+    if (branch === currentBranch) { setError(t("error.cannotDeleteCurrent")); return; }
+    if (!window.confirm(t("sidebar.confirmDelete").replace("{0}", branch))) return;
+    setLoading(true, t("sidebar.deletingBranch").replace("{0}", branch));
+    try {
+      const r = await window.gitAPI.deleteBranch(currentRepo, branch, false);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, currentBranch, setLoading, setError, refreshAll]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, branch: string, isRemote: boolean) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, branch, isRemote }); }, []);
@@ -38,7 +64,19 @@ export default function Sidebar() {
 
   return (<>
     <div className="sidebar" style={{ width: sidebarWidth }}>
-      <div className="sidebar-header">{t("sidebar.branches")}</div>
+      <div className="sidebar-header">
+        <span>{t("sidebar.branches")}</span>
+        <button className="sidebar-add-btn" onClick={() => setShowNewBranch(true)} title={t("sidebar.newBranch")}>+</button>
+      </div>
+      {showNewBranch && (
+        <div className="new-branch-input">
+          <input ref={newBranchRef} type="text" value={newBranchName} placeholder={t("sidebar.branchNamePlaceholder")}
+            onChange={(e) => setNewBranchName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleCreateBranch(); if (e.key === "Escape") { setShowNewBranch(false); setNewBranchName(""); } }}
+          />
+          <button onClick={handleCreateBranch} disabled={!newBranchName.trim()}>{t("sidebar.create")}</button>
+        </div>
+      )}
       <div className="sidebar-list">
         {branches.map((b) => (
           <div key={b} className={`branch-item${b === currentBranch ? " current" : ""}`} onDoubleClick={() => handleCheckout(b)} onContextMenu={(e) => handleContextMenu(e, b, false)} title={b + t("sidebar.dblClick")}>
@@ -63,6 +101,9 @@ export default function Sidebar() {
       {contextMenu.isRemote
         ? <div className="context-menu-item" onClick={() => { checkoutRemote(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkoutRemote").replace("{0}", contextMenu.branch.replace(/^remotes\//, ""))}</div>
         : <div className="context-menu-item" onClick={() => { handleCheckout(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkout")} {contextMenu.branch}</div>}
+      {!contextMenu.isRemote && contextMenu.branch !== currentBranch && (
+        <div className="context-menu-item danger" onClick={() => { handleDeleteBranch(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.deleteBranch")} {contextMenu.branch}</div>
+      )}
       <div className="context-menu-divider" />
       <div className="context-menu-item" onClick={async () => { await navigator.clipboard.writeText(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.copyName")}</div>
     </div>)}
