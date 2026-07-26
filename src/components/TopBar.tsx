@@ -56,9 +56,9 @@ export default function TopBar() {
   const currentRepoName = repos.find((r) => r.path === currentRepo)?.name || "";
 
   return (
-    <div className="top-bar" style={{ WebkitAppRegion: "drag" as any }}>
-      <span className="window-title" onClick={() => setShowSettings(true)} style={{ WebkitAppRegion: "no-drag" as any, cursor: "pointer" }}>ZenTree</span>
-      <div className="repo-selector" ref={selectorRef} style={{ WebkitAppRegion: "no-drag" as any }}>
+    <div className="top-bar" style={{ WebkitAppRegion: "drag" } as any}>
+      <span className="window-title" onClick={() => setShowSettings(true)} style={{ WebkitAppRegion: "no-drag", cursor: "pointer" } as any}>ZenTree</span>
+      <div className="repo-selector" ref={selectorRef} style={{ WebkitAppRegion: "no-drag" } as any}>
         <div className="repo-selector-trigger" onClick={() => setShowDropdown(!showDropdown)}>
           <span className="repo-name">{currentRepoName || (repos.length === 0 ? t("topbar.noRepos") : t("topbar.selectRepo"))}</span>
           <span className="dropdown-arrow">{showDropdown ? "\u25B2" : "\u25BC"}</span>
@@ -74,9 +74,9 @@ export default function TopBar() {
           </div>
         )}
       </div>
-      {currentRepo && (<div className="toolbar-group" style={{ WebkitAppRegion: "no-drag" as any }}><button className="toolbar-btn" onClick={handleFetch} disabled={loading} title={t("topbar.fetchTip")}>{t("topbar.fetch")}</button><button className="toolbar-btn" onClick={handlePull} disabled={loading} title={t("topbar.pullTip")}>{t("topbar.pull")}</button><button className="toolbar-btn" onClick={handlePush} disabled={loading} title={t("topbar.pushTip")}>{t("topbar.push")}</button><button className="toolbar-btn" onClick={handleRefresh} disabled={loading} title={t("topbar.refreshTip")}>{t("topbar.refresh")}</button><span className="toolbar-separator" /><button className="toolbar-btn" onClick={handleGitBash} disabled={loading} title={t("topbar.bashTip")}>{t("topbar.bash")}</button></div>)}
+      {currentRepo && (<div className="toolbar-group" style={{ WebkitAppRegion: "no-drag" } as any}><button className="toolbar-btn" onClick={handleFetch} disabled={loading} title={t("topbar.fetchTip")}>{t("topbar.fetch")}</button><button className="toolbar-btn" onClick={handlePull} disabled={loading} title={t("topbar.pullTip")}>{t("topbar.pull")}</button><button className="toolbar-btn" onClick={handlePush} disabled={loading} title={t("topbar.pushTip")}>{t("topbar.push")}</button><button className="toolbar-btn" onClick={handleRefresh} disabled={loading} title={t("topbar.refreshTip")}>{t("topbar.refresh")}</button><span className="toolbar-separator" /><button className="toolbar-btn" onClick={handleGitBash} disabled={loading} title={t("topbar.bashTip")}>{t("topbar.bash")}</button></div>)}
       <div className="top-bar-spacer" />
-      <div className="top-bar-right" style={{ WebkitAppRegion: "no-drag" as any }}>
+      <div className="top-bar-right" style={{ WebkitAppRegion: "no-drag" } as any}>
         <button className="toolbar-btn add-repo" onClick={handleAddRepo} title={t("topbar.addRepo")}>{t("topbar.add")}</button>
         <button className="toolbar-btn icon-only" onClick={() => setThemePreset(isDark ? "catppuccin-latte" : "catppuccin-mocha")} title={t("topbar.toggleTheme")}>{isDark ? "\u2600" : "\u263E"}</button>
         <button className="toolbar-btn" onClick={() => useRepoStore.getState().setLanguage(language === "zh" ? "en" : "zh")} title={t("topbar.settings")} style={{fontSize:11,fontWeight:600,padding:"0 8px"}}>{language === "zh" ? "\u4E2D" : "EN"}</button>

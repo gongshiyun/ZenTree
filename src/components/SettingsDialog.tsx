@@ -67,7 +67,7 @@ export default function SettingsDialog() {
                 <span className="setting-hint">{t("settings.gitPathHint")}</span>
               </div>
               <div className="setting-row"><label>{t("settings.language")}</label>
-                <select value={language} onChange={(e)=>{const v=e.target.value;setLanguageLocal(v);}} style={{height:30,padding:'0 8px',border:'1px solid var(--border-color)',borderRadius:'var(--radius)',background:'var(--bg-tertiary)',color:'var(--text-primary)',fontSize:12,outline:'none'}}>
+                <select value={language} onChange={(e)=>{const v=e.target.value as "en"|"zh";setLanguageLocal(v);}} style={{height:30,padding:'0 8px',border:'1px solid var(--border-color)',borderRadius:'var(--radius)',background:'var(--bg-tertiary)',color:'var(--text-primary)',fontSize:12,outline:'none'}}>
                   <option value="en">English</option><option value="zh">中文</option>
                 </select>
               </div>

@@ -198,6 +198,7 @@ interface AppState {
   checkoutRemote: (remoteBranch: string) => Promise<void>;
   setStatus: (status: GitStatusData | null) => void;
   setThemePreset: (presetName: string) => void;
+  setLanguage: (lang: "en" | "zh") => void;
   setShowSettings: (show: boolean) => void;
   setLoading: (loading: boolean, message?: string) => void;
   setError: (error: string | null) => void;

@@ -17,7 +17,7 @@ function Welcome() {
   };
   return (
     <div className="welcome" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "link"; }} onDrop={async (e) => {
-      e.preventDefault(); const files = e.dataTransfer.files; if (files.length > 0) { const dp = files[0].path; const api = window.gitAPI; if (!api) return; const r = await api.isRepo(dp); if (r.success && r.data) { const nm = dp.split(/[/\\]/).pop() || dp; useRepoStore.getState().addRepo(dp, nm); useRepoStore.getState().setCurrentRepo(dp); useRepoStore.getState().refreshAll(dp); } else { useRepoStore.getState().setError(`"${dp}" is not a valid Git repository.`); } }
+      e.preventDefault(); const files = e.dataTransfer.files; if (files.length > 0) { const dp = (files[0] as any).path as string; const api = window.gitAPI; if (!api) return; const r = await api.isRepo(dp); if (r.success && r.data) { const nm = dp.split(/[/\\]/).pop() || dp; useRepoStore.getState().addRepo(dp, nm); useRepoStore.getState().setCurrentRepo(dp); useRepoStore.getState().refreshAll(dp); } else { useRepoStore.getState().setError(`"${dp}" is not a valid Git repository.`); } }
     }}>
       <h1>ZenTree</h1>
       <p>A lightweight Git GUI client.</p>

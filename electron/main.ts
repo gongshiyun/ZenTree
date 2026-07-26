@@ -142,21 +142,31 @@ ipcMain.handle("git:branches", safeHandler(async (repoPath: string) => {
   return { all: result.all, current: result.current, branches: result.branches };
 }));
 
-// Get full commit log for graph
-ipcMain.handle("git:log", safeHandler(async (repoPath: string, maxCount?: number) => {
+// Get commit log with pagination (skip + maxCount)
+ipcMain.handle("git:log", safeHandler(async (repoPath: string, skip?: number, maxCount?: number) => {
   const git = getGit(repoPath);
-  const opts: Record<string, any> = {
-    format: { hash: "%H", parents: "%P", author: "%an", email: "%ae", date: "%at", subject: "%s" },
-    splitter: "|||ZENTREE|||", multiLine: false,
-  };
-  if (maxCount) opts.maxCount = maxCount;
-  const log = await git.log(opts as any);
-  return log.all.map((entry: any) => ({
-    hash: entry.hash, shortHash: entry.hash.substring(0, 7),
-    parents: entry.parents ? entry.parents.split(" ") : [],
-    author: entry.author, email: entry.email,
-    timestamp: parseInt(entry.date, 10), subject: entry.subject, body: entry.body || '',
-  }));
+  const SEP = "|||ZENTREE|||";
+  const args = ["log", `--format=%H${SEP}%P${SEP}%an${SEP}%ae${SEP}%at${SEP}%s`];
+  if (skip) args.push(`--skip=${skip}`);
+  if (maxCount) args.push(`--max-count=${maxCount}`);
+  const result = await git.raw(args);
+  return result.split("\n").filter(Boolean).map((line: string) => {
+    const parts: string[] = [];
+    let remaining = line;
+    for (let i = 0; i < 5; i++) {
+      const sepIdx = remaining.indexOf(SEP);
+      parts.push(remaining.substring(0, sepIdx));
+      remaining = remaining.substring(sepIdx + SEP.length);
+    }
+    parts.push(remaining);
+    const [hash, parents, author, email, date, subject] = parts;
+    return {
+      hash, shortHash: hash.substring(0, 7),
+      parents: parents ? parents.split(" ") : [],
+      author, email,
+      timestamp: parseInt(date, 10), subject, body: '',
+    };
+  });
 }));
 
 // Get status

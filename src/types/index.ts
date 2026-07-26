@@ -11,6 +11,7 @@ export interface GitAPI {
   discard: (repoPath: string, files: string[]) => Promise<{ success: boolean; error?: string }>;
   commit: (repoPath: string, message: string, amend: boolean) => Promise<{ success: boolean; error?: string }>;
   checkout: (repoPath: string, branch: string) => Promise<{ success: boolean; error?: string }>;
+  checkoutRemote: (repoPath: string, remoteBranch: string) => Promise<{ success: boolean; error?: string }>;
   fetch: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
   pull: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
   push: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
@@ -39,17 +40,18 @@ export interface CommitLogEntry {
   email: string;
   timestamp: number;
   subject: string;
+  body?: string;
 }
 
 export interface GraphNode {
   hash: string; shortHash: string; parents: string[];
-  author: string; email: string; timestamp: number; subject: string;
+  author: string; email: string; timestamp: number; subject: string; body?: string;
   x: number; y: number; color: string; lane: number; isSelected: boolean;
 }
 
 export interface GraphEdge { fromX: number; fromY: number; toX: number; toY: number; color: string; }
 
-export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; maxLane: number; branchRefs: Record<string, string[]>; }
+export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; maxLane: number; branchRefs?: Record<string, string[]>; }
 
 export interface GitStatusData {
   staged: string[]; modified: string[]; created: string[]; deleted: string[];
