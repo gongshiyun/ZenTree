@@ -283,6 +283,13 @@ export class GraphRenderer {
       ctx.fillStyle = isDark ? "#6c7086" : "#9399b2";
       ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.fillText(node.author, textX + subjW + 8, node.y);
+      // Date column
+      const authorW = ctx.measureText(node.author).width;
+      const d = new Date(node.timestamp * 1000);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      ctx.fillStyle = isDark ? "#555b6e" : "#aaa";
+      ctx.font = "10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillText(dateStr, textX + subjW + authorW + 20, node.y);
     }
   }
 
