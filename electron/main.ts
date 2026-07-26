@@ -333,6 +333,12 @@ ipcMain.handle("git:merge", safeHandler(async (repoPath: string, branchName: str
   return await git.merge([branchName]);
 }));
 
+// Reset to commit (soft/mixed/hard)
+ipcMain.handle("git:reset", safeHandler(async (repoPath: string, commitHash: string, mode: "soft" | "mixed" | "hard") => {
+  const git = getGit(repoPath);
+  return await git.reset([`--${mode}`, commitHash]);
+}));
+
 // Fetch
 ipcMain.handle("git:fetch", safeHandler(async (repoPath: string) => {
   return await getGit(repoPath).fetch();

@@ -15,6 +15,7 @@ export interface GitAPI {
   createBranch: (repoPath: string, branchName: string, checkout: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteBranch: (repoPath: string, branchName: string, force: boolean) => Promise<{ success: boolean; error?: string }>;
   merge: (repoPath: string, branchName: string) => Promise<{ success: boolean; error?: string }>;
+  reset: (repoPath: string, commitHash: string, mode: "soft" | "mixed" | "hard") => Promise<{ success: boolean; error?: string }>;
   fetch: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
   pull: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
   push: (repoPath: string) => Promise<{ success: boolean; error?: string }>;

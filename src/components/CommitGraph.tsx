@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRepoStore } from "../stores/repoStore";
 import { GraphRenderer } from "../renderer/canvasRenderer";
+import { useT } from "../i18n";
 import type { GraphNode } from "../types";
 
 function formatDate(ts: number): string {
@@ -8,6 +9,7 @@ function formatDate(ts: number): string {
 }
 
 export default function CommitGraph() {
+  const t = useT();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GraphRenderer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -18,9 +20,15 @@ export default function CommitGraph() {
   const selectCommit = useRepoStore((s) => s.selectCommit);
   const currentRepo = useRepoStore((s) => s.currentRepo);
   const setCommitDetail = useRepoStore((s) => s.setCommitDetail);
+  const setLoading = useRepoStore((s) => s.setLoading);
+  const setError = useRepoStore((s) => s.setError);
+  const refreshAll = useRepoStore((s) => s.refreshAll);
 
   const [tooltip, setTooltip] = useState<{ node: GraphNode; x: number; y: number } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const mousePosRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => { const h = () => setCtxMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
 
   // Initialize renderer
   useEffect(() => {
@@ -53,6 +61,9 @@ export default function CommitGraph() {
               setCommitDetail(result.data);
             }
           }
+        },
+        onContextMenu: (node, x, y) => {
+          setCtxMenu({ x, y, node });
         },
       });
 
@@ -103,6 +114,20 @@ export default function CommitGraph() {
     }
   }, [tooltip]);
 
+  const handleReset = useCallback(async (mode: "soft" | "mixed" | "hard") => {
+    if (!ctxMenu || !currentRepo) return;
+    const hash = ctxMenu.node.hash;
+    const label = mode === "hard" ? t("graph.confirmResetHard") : t("graph.confirmReset").replace("{0}", mode);
+    if (!window.confirm(label)) { setCtxMenu(null); return; }
+    setCtxMenu(null);
+    setLoading(true, t("graph.resetting").replace("{0}", mode));
+    try {
+      const r = await window.gitAPI.reset(currentRepo, hash, mode);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [ctxMenu, currentRepo, setLoading, setError, refreshAll]);
+
   return (
     <div className="graph-container" ref={containerRef} onMouseMove={handleMouseMove}>
       <canvas ref={canvasRef} />
@@ -120,6 +145,15 @@ export default function CommitGraph() {
             {tooltip.node.author} &lt;{tooltip.node.email}&gt; &middot;{" "}
             {formatDate(tooltip.node.timestamp)}
           </div>
+        </div>
+      )}
+      {ctxMenu && (
+        <div className="context-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
+          <div className="context-menu-item" onClick={() => handleReset("soft")}>{t("graph.resetSoft")}</div>
+          <div className="context-menu-item" onClick={() => handleReset("mixed")}>{t("graph.resetMixed")}</div>
+          <div className="context-menu-item danger" onClick={() => handleReset("hard")}>{t("graph.resetHard")}</div>
+          <div className="context-menu-divider" />
+          <div className="context-menu-item" onClick={async () => { await navigator.clipboard.writeText(ctxMenu.node.hash); setCtxMenu(null); }}>{t("graph.copyHash")}</div>
         </div>
       )}
     </div>
