@@ -172,7 +172,7 @@ export class GraphRenderer {
     const refs = data.branchRefs;
     if (!refs) return;
     const textX = data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
-    const currentBranch = ""; // Will be set from outside
+    const labelX = textX + 420; // position labels after commit text area
     for (const node of data.nodes) {
       if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
       const names = refs[node.hash];
@@ -186,11 +186,10 @@ export class GraphRenderer {
         const ly = baseY + i * 18;
         ctx.fillStyle = node.color;
         ctx.beginPath();
-        const lx = textX + 420;
-        ctx.roundRect(lx, ly - 8, w, 16, 4);
+        ctx.roundRect(labelX, ly - 8, w, 16, 4);
         ctx.fill();
         ctx.fillStyle = isDark ? "#1a1b26" : "#fff";
-        ctx.fillText(name, lx + 6, ly);
+        ctx.fillText(name, labelX + 6, ly);
       }
     }
   }
@@ -209,7 +208,6 @@ export class GraphRenderer {
 
       const fromY = edge.fromY;
       const toY = edge.toY;
-      const midY = (fromY + toY) / 2;
 
       // Draw bezier curve for smooth branch transitions
       if (edge.fromX === edge.toX) {
@@ -274,13 +272,9 @@ export class GraphRenderer {
       ctx.stroke();
 
       // Commit subject text
-      ctx.fillStyle = isDark ? "#abb2bf" : "#555";
-      ctx.font = `12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
-      ctx.textBaseline = "middle";
       const textX = data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
       const subj = node.subject;
       const displayText = subj.length > 50 ? subj.substring(0, 50) + "..." : subj;
-      const fullText = displayText + "  " + node.author;
       ctx.fillStyle = isDark ? "#abb2bf" : "#555";
       ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.textBaseline = "middle";
@@ -301,10 +295,6 @@ export class GraphRenderer {
       x: relativeX / this.camera.scale,
       y: relativeY / this.camera.scale,
     };
-  }
-
-  private estimateTextWidth(text: string, fontSize: number): number {
-    return text.length * fontSize * 0.6;
   }
 
   private hitTest(sx: number, sy: number): GraphNode | null {
