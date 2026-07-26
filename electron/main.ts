@@ -339,6 +339,38 @@ ipcMain.handle("git:reset", safeHandler(async (repoPath: string, commitHash: str
   return await git.reset([`--${mode}`, commitHash]);
 }));
 
+// Stash save
+ipcMain.handle("git:stash-save", safeHandler(async (repoPath: string, message?: string) => {
+  const git = getGit(repoPath);
+  const args = ["stash", "push"];
+  if (message) args.push("-m", message);
+  return await git.raw(args);
+}));
+
+// Stash list
+ipcMain.handle("git:stash-list", safeHandler(async (repoPath: string) => {
+  const git = getGit(repoPath);
+  const result = await git.raw(["stash", "list", "--format=%gd|||%s"]);
+  return result.split("\n").filter(Boolean).map((line: string) => {
+    const [ref, subject] = line.split("|||");
+    return { ref, subject };
+  });
+}));
+
+// Stash pop
+ipcMain.handle("git:stash-pop", safeHandler(async (repoPath: string, ref?: string) => {
+  const git = getGit(repoPath);
+  const args = ["stash", "pop"];
+  if (ref) args.push(ref);
+  return await git.raw(args);
+}));
+
+// Stash drop
+ipcMain.handle("git:stash-drop", safeHandler(async (repoPath: string, ref: string) => {
+  const git = getGit(repoPath);
+  return await git.raw(["stash", "drop", ref]);
+}));
+
 // Fetch
 ipcMain.handle("git:fetch", safeHandler(async (repoPath: string) => {
   return await getGit(repoPath).fetch();

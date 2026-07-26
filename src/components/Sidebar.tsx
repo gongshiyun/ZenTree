@@ -18,9 +18,53 @@ export default function Sidebar() {
   const [showNewBranch, setShowNewBranch] = useState(false);
   const [newBranchName, setNewBranchName] = useState("");
   const newBranchRef = useRef<HTMLInputElement>(null);
+  const [showStash, setShowStash] = useState(false);
+  const [stashList, setStashList] = useState<{ ref: string; subject: string }[]>([]);
 
   useEffect(() => { const h = () => setContextMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
   useEffect(() => { if (showNewBranch && newBranchRef.current) newBranchRef.current.focus(); }, [showNewBranch]);
+
+  const loadStashList = useCallback(async () => {
+    if (!currentRepo) return;
+    try {
+      const r = await window.gitAPI.stashList(currentRepo);
+      if (r.success && r.data) setStashList(r.data);
+      else setStashList([]);
+    } catch { setStashList([]); }
+  }, [currentRepo]);
+
+  useEffect(() => { if (showStash) loadStashList(); }, [showStash, loadStashList]);
+
+  const handleStashSave = useCallback(async () => {
+    if (!currentRepo) return;
+    setLoading(true, t("stash.saving"));
+    try {
+      const r = await window.gitAPI.stashSave(currentRepo);
+      if (r.success) { await refreshAll(); await loadStashList(); }
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, refreshAll, loadStashList]);
+
+  const handleStashPop = useCallback(async (ref: string) => {
+    if (!currentRepo) return;
+    setLoading(true, t("stash.popping"));
+    try {
+      const r = await window.gitAPI.stashPop(currentRepo, ref);
+      if (r.success) { await refreshAll(); await loadStashList(); }
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, refreshAll, loadStashList]);
+
+  const handleStashDrop = useCallback(async (ref: string, subject: string) => {
+    if (!currentRepo) return;
+    if (!window.confirm(t("stash.confirmDrop").replace("{0}", subject))) return;
+    setLoading(true, t("stash.dropping"));
+    try {
+      const r = await window.gitAPI.stashDrop(currentRepo, ref);
+      if (r.success) await loadStashList();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, loadStashList]);
 
   const handleCheckout = useCallback(async (branch: string) => {
     if (!currentRepo || branch === currentBranch) return;
@@ -106,6 +150,25 @@ export default function Sidebar() {
           ))}
         </>)}
       </div>
+      <div className="sidebar-subheader" onClick={() => setShowStash(!showStash)} style={{ marginTop: 4 }}>
+        <span className="subheader-arrow">{showStash ? "\u25BC" : "\u25B6"}</span> {t("stash.title")}
+        <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); handleStashSave(); }} title={t("stash.saveTip")}>+</button>
+      </div>
+      {showStash && (
+        <div className="sidebar-list" style={{ flex: "none", maxHeight: 140 }}>
+          {stashList.map((s) => (
+            <div key={s.ref} className="branch-item stash-item">
+              <span className="branch-icon">{"\u25A3"}</span>
+              <span className="stash-subject" title={s.subject}>{s.subject}</span>
+              <span className="file-actions">
+                <button className="file-action-btn" onClick={() => handleStashPop(s.ref)}>{t("stash.pop")}</button>
+                <button className="file-action-btn danger" onClick={() => handleStashDrop(s.ref, s.subject)}>{t("stash.drop")}</button>
+              </span>
+            </div>
+          ))}
+          {stashList.length === 0 && <div className="empty-state" style={{ padding: 10 }}>{t("stash.empty")}</div>}
+        </div>
+      )}
     </div>
     <div className="resize-handle" onMouseDown={handleResizeStart} />
     {contextMenu && (<div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
