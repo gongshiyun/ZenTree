@@ -949,6 +949,17 @@
 .diff-line.deletion .diff-line-prefix { color: #f85149; background: rgba(248,81,73,0.2); }
 .diff-line.context { color: var(--text-secondary); }
 .diff-line-content { flex: 1; white-space: pre-wrap; word-break: break-all; }
+/* Syntax highlighting tokens */
+.syn-kw { color: #c678dd; font-weight: 500; }
+.syn-str { color: #98c379; }
+.syn-num { color: #d19a66; }
+.syn-cmt { color: #5c6370; font-style: italic; }
+.syn-fn { color: #61afef; }
+[data-theme="light"] .syn-kw { color: #a626a4; }
+[data-theme="light"] .syn-str { color: #50a14f; }
+[data-theme="light"] .syn-num { color: #986801; }
+[data-theme="light"] .syn-cmt { color: #a0a1a7; }
+[data-theme="light"] .syn-fn { color: #4078f2; }
 /* Diff panel resize handle */
 .diff-panel-resize {
   width: 4px; cursor: col-resize; background: transparent; flex-shrink: 0; transition: background 0.15s;

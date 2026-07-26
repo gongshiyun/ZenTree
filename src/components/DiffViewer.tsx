@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRepoStore } from "../stores/repoStore";
 import { useT } from "../i18n";
+import { highlightLine } from "../utils/highlight";
 import type { DiffHunk } from "../types";
 
 function parseDiff(diffText: string): DiffHunk[] {
@@ -99,7 +100,7 @@ export default function DiffViewer({ filePath, isStaged, onClose, commitHash, re
                   <span className="diff-line-num old">{l.type!=="addition"?l.oldLineNum:""}</span>
                   <span className="diff-line-num new">{l.type!=="deletion"?l.newLineNum:""}</span>
                   <span className="diff-line-prefix">{l.type==="addition"?"+":l.type==="deletion"?"-":" "}</span>
-                  <span className="diff-line-content">{l.content}</span>
+                  <span className="diff-line-content">{highlightLine(l.content, filePath).map((tok, ti) => tok.cls ? <span key={ti} className={`syn-${tok.cls}`}>{tok.text}</span> : <span key={ti}>{tok.text}</span>)}</span>
                 </div>
               ))}
             </div>
