@@ -27,6 +27,8 @@ export class GraphRenderer {
   private dragStartY = 0;
   private dragCameraStart: Camera = { offsetX: 0, offsetY: 0, scale: 1 };
   private theme: "dark" | "light" = "dark";
+  private rafId: number | null = null;
+  private renderDirty = false;
 
   // Callbacks
   private onHover: ((node: GraphNode | null) => void) | null = null;
@@ -47,7 +49,7 @@ export class GraphRenderer {
 
   setTheme(theme: "dark" | "light") {
     this.theme = theme;
-    this.render();
+    this.scheduleRender();
   }
 
   setCallbacks(callbacks: {
@@ -69,12 +71,12 @@ export class GraphRenderer {
       this.camera.offsetX = this.width / 2 - firstNode.x;
       this.camera.offsetY = 40;
     }
-    this.render();
+    this.scheduleRender();
   }
 
   setSelected(hash: string | null) {
     this.selectedHash = hash;
-    this.render();
+    this.scheduleRender();
   }
 
   handleResize() {
@@ -84,7 +86,17 @@ export class GraphRenderer {
     this.canvas.width = rect.width * this.dpr;
     this.canvas.height = rect.height * this.dpr;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.render();
+    this.scheduleRender();
+  }
+
+  /** Schedule a render on the next animation frame (coalesces multiple requests). */
+  private scheduleRender() {
+    if (this.rafId !== null) return;
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = null;
+      this.renderDirty = false;
+      this.render();
+    });
   }
 
   render() {
@@ -276,10 +288,23 @@ export class GraphRenderer {
     const hitRadius = NODE_RADIUS + 6;
     const textX = this.data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
     const halfFont = 7;
+    const nodes = this.data.nodes;
+    if (nodes.length === 0) return null;
 
-    // Search from last (closest to cursor visually) to first
-    for (let i = this.data.nodes.length - 1; i >= 0; i--) {
-      const node = this.data.nodes[i];
+    // Binary search for the row nearest to world.y (nodes are sorted by y)
+    let lo = 0, hi = nodes.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (nodes[mid].y < world.y) lo = mid + 1;
+      else hi = mid;
+    }
+
+    // Check a small window around the found index
+    const searchRadius = 3;
+    const start = Math.max(0, lo - searchRadius);
+    const end = Math.min(nodes.length - 1, lo + searchRadius);
+    for (let i = start; i <= end; i++) {
+      const node = nodes[i];
       // Check circle hit
       const dx = node.x - world.x;
       const dy = node.y - world.y;
@@ -287,7 +312,6 @@ export class GraphRenderer {
         return node;
       }
       // Check text label hit
-      const textW = this.estimateTextWidth(node.subject.substring(0, 60), 12);
       if (world.x >= textX && world.y >= node.y - halfFont && world.y <= node.y + halfFont) {
         return node;
       }
@@ -321,7 +345,7 @@ export class GraphRenderer {
     this.camera.offsetX += (worldAfter.x - worldBefore.x) * newScale;
     this.camera.offsetY += (worldAfter.y - worldBefore.y) * newScale;
 
-    this.render();
+    this.scheduleRender();
   };
 
   private handleMouseDown = (e: MouseEvent) => {
@@ -351,7 +375,7 @@ export class GraphRenderer {
         this.camera.offsetY = this.dragCameraStart.offsetY + dy;
         this.hoveredNode = null;
         this.onHover?.(null);
-        this.render();
+        this.scheduleRender();
         return;
       }
     }
@@ -361,7 +385,7 @@ export class GraphRenderer {
       this.hoveredNode = node;
       this.canvas.style.cursor = node ? "pointer" : "grab";
       this.onHover?.(node);
-      this.render();
+      this.scheduleRender();
     }
   };
 
@@ -380,7 +404,7 @@ export class GraphRenderer {
       if (node) {
         this.selectedHash = node.hash;
         this.onClick?.(node);
-        this.render();
+        this.scheduleRender();
       }
     }
   };
@@ -390,7 +414,7 @@ export class GraphRenderer {
     if (this.hoveredNode) {
       this.hoveredNode = null;
       this.onHover?.(null);
-      this.render();
+      this.scheduleRender();
     }
   };
 
@@ -403,6 +427,7 @@ export class GraphRenderer {
   };
 
   destroy() {
+    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.canvas.removeEventListener("wheel", this.handleWheel);
     this.canvas.removeEventListener("mousedown", this.handleMouseDown);
     this.canvas.removeEventListener("mousemove", this.handleMouseMove);
