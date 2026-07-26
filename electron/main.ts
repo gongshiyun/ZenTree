@@ -7,19 +7,24 @@ import * as fs from "fs";
 
 let mainWindow: BrowserWindow | null = null;
 
-// --- Settings storage ---
+// --- Settings storage (in-memory cache + disk persistence) ---
 const settingsPath = path.join(app.getPath("userData"), "zentree-settings.json");
+let settingsCache: Record<string, any> | null = null;
 
 function loadSettings(): Record<string, any> {
+  if (settingsCache) return settingsCache;
   try {
     if (fs.existsSync(settingsPath)) {
-      return JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+      settingsCache = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+      return settingsCache!;
     }
   } catch { /* ignore */ }
-  return {};
+  settingsCache = {};
+  return settingsCache;
 }
 
 function saveSettings(settings: Record<string, any>): void {
+  settingsCache = settings;
   try {
     const dir = path.dirname(settingsPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -47,13 +52,18 @@ function createWindow() {
     },
   });
 
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   mainWindow.on("resize", () => {
-    if (mainWindow) {
-      const bounds = mainWindow.getBounds();
-      settings.windowWidth = bounds.width;
-      settings.windowHeight = bounds.height;
-      saveSettings(settings);
-    }
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (mainWindow) {
+        const s = loadSettings();
+        const bounds = mainWindow.getBounds();
+        s.windowWidth = bounds.width;
+        s.windowHeight = bounds.height;
+        saveSettings(s);
+      }
+    }, 300);
   });
 
   if (process.env.NODE_ENV === "development" || process.argv.includes("--dev")) {
