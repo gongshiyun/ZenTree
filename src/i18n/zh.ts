@@ -55,6 +55,7 @@ const zh: Record<string, string> = {
   "graph.confirmResetHard": "硬重置：所有未提交的更改将永久丢失。确定继续？",
   "graph.resetting": "正在重置 ({0})...",
   "graph.copyHash": "复制提交哈希",
+    "graph.searchPlaceholder": "搜索提交（消息、作者、哈希）...",
   "stash.title": "Stash",
   "stash.save": "贮藏",
   "stash.saveTip": "贮藏所有更改",

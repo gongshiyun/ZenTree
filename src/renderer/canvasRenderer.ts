@@ -29,6 +29,7 @@ export class GraphRenderer {
   private theme: "dark" | "light" = "dark";
   private rafId: number | null = null;
   private renderDirty = false;
+  private highlightHashes: Set<string> = new Set();
 
   // Callbacks
   private onHover: ((node: GraphNode | null) => void) | null = null;
@@ -75,6 +76,20 @@ export class GraphRenderer {
   }
 
   setSelected(hash: string | null) {
+    this.selectedHash = hash;
+    this.scheduleRender();
+  }
+
+  setHighlights(hashes: Set<string>) {
+    this.highlightHashes = hashes;
+    this.scheduleRender();
+  }
+
+  scrollToNode(hash: string) {
+    const node = this.data.nodes.find((n) => n.hash === hash);
+    if (!node) return;
+    this.camera.offsetY = this.height / 2 - node.y * this.camera.scale;
+    this.camera.offsetX = this.width / 2 - node.x * this.camera.scale;
     this.selectedHash = hash;
     this.scheduleRender();
   }
@@ -228,7 +243,16 @@ export class GraphRenderer {
 
       const isSelected = this.selectedHash === node.hash;
       const isHovered = this.hoveredNode?.hash === node.hash;
+      const isHighlighted = this.highlightHashes.has(node.hash);
       const r = isSelected ? NODE_RADIUS + 2 : isHovered ? NODE_RADIUS + 1 : NODE_RADIUS;
+
+      // Search highlight ring
+      if (isHighlighted && !isSelected) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r + 5, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(226, 192, 68, 0.35)";
+        ctx.fill();
+      }
 
       // Glow or selection ring
       if (isSelected || isHovered) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRepoStore } from "../stores/repoStore";
 import { GraphRenderer } from "../renderer/canvasRenderer";
 import { useT } from "../i18n";
@@ -26,9 +26,52 @@ export default function CommitGraph() {
 
   const [tooltip, setTooltip] = useState<{ node: GraphNode; x: number; y: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [matchIndex, setMatchIndex] = useState(0);
   const mousePosRef = useRef({ x: 0, y: 0 });
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { const h = () => setCtxMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
+
+  // Search matches
+  const matches = useMemo(() => {
+    if (!searchText.trim()) return [];
+    const q = searchText.toLowerCase();
+    return graphData.nodes.filter((n) =>
+      n.subject.toLowerCase().includes(q) ||
+      n.author.toLowerCase().includes(q) ||
+      n.hash.toLowerCase().startsWith(q)
+    );
+  }, [searchText, graphData]);
+
+  // Update highlights when matches change
+  useEffect(() => {
+    if (rendererRef.current) {
+      rendererRef.current.setHighlights(new Set(matches.map((n) => n.hash)));
+    }
+  }, [matches]);
+
+  // Navigate to current match
+  useEffect(() => {
+    if (matches.length > 0 && rendererRef.current) {
+      const idx = Math.min(matchIndex, matches.length - 1);
+      rendererRef.current.scrollToNode(matches[idx].hash);
+    }
+  }, [matchIndex, matches]);
+
+  // Ctrl+F to open search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setShowSearch(true);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // Initialize renderer
   useEffect(() => {
@@ -130,6 +173,23 @@ export default function CommitGraph() {
 
   return (
     <div className="graph-container" ref={containerRef} onMouseMove={handleMouseMove}>
+      {showSearch && (
+        <div className="graph-search-bar">
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchText}
+            placeholder={t("graph.searchPlaceholder")}
+            onChange={(e) => { setSearchText(e.target.value); setMatchIndex(0); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { setMatchIndex((i) => (i + 1) % Math.max(1, matches.length)); }
+              if (e.key === "Escape") { setShowSearch(false); setSearchText(""); }
+            }}
+          />
+          <span className="graph-search-count">{searchText ? `${matches.length}` : ""}</span>
+          <button className="graph-search-close" onClick={() => { setShowSearch(false); setSearchText(""); }}>&times;</button>
+        </div>
+      )}
       <canvas ref={canvasRef} />
       {tooltip && (
         <div

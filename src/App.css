@@ -435,6 +435,52 @@
   display: block;
 }
 
+.graph-search-bar {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.graph-search-bar input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 4px 8px;
+  width: 220px;
+  outline: none;
+}
+.graph-search-bar input:focus {
+  border-color: var(--accent);
+}
+.graph-search-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 20px;
+  text-align: center;
+}
+.graph-search-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.graph-search-close:hover {
+  color: var(--text-primary);
+}
+
 .graph-tooltip {
   position: absolute;
   z-index: 100;

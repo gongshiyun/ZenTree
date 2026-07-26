@@ -55,6 +55,7 @@ const en: Record<string, string> = {
   "graph.confirmResetHard": "HARD RESET: All uncommitted changes will be permanently lost. Continue?",
   "graph.resetting": "Resetting ({0})...",
   "graph.copyHash": "Copy commit hash",
+    "graph.searchPlaceholder": "Search commits (message, author, hash)...",
   "stash.title": "Stash",
   "stash.save": "Stash",
   "stash.saveTip": "Stash all changes",
