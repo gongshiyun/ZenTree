@@ -120,25 +120,36 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
 ];
 
-// Lane assignment
+// Lane assignment — O(n) via pre-built child map
 function buildGraphData(logEntries: CommitLogEntry[]): GraphData {
   if (logEntries.length === 0) return { nodes: [], edges: [], maxLane: 0 };
+  const n = logEntries.length;
   const hashToIndex = new Map<string, number>();
-  logEntries.forEach((entry, i) => hashToIndex.set(entry.hash, i));
+  for (let i = 0; i < n; i++) hashToIndex.set(logEntries[i].hash, i);
+
+  // Pre-build parent→children map (O(n) total)
+  const childMap = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    for (const p of logEntries[i].parents) {
+      let arr = childMap.get(p);
+      if (!arr) { arr = []; childMap.set(p, arr); }
+      arr.push(i);
+    }
+  }
+
   const activeColumns: (string | null)[] = [];
-  const nodeLanes: number[] = new Array(logEntries.length).fill(-1);
+  const nodeLanes: number[] = new Array(n).fill(-1);
   const ROW_HEIGHT = 28, LANE_WIDTH = 22;
-  for (let i = 0; i < logEntries.length; i++) {
+  for (let i = 0; i < n; i++) {
     const commit = logEntries[i];
     let lane = -1;
-    const children = logEntries.filter((e) => e.parents.includes(commit.hash));
-    if (children.length === 0) {
+    const childIndices = childMap.get(commit.hash);
+    if (!childIndices || childIndices.length === 0) {
       lane = activeColumns.indexOf(null);
       if (lane === -1) { lane = activeColumns.length; activeColumns.push(null); }
     } else {
-      for (const child of children) {
-        const childIdx = hashToIndex.get(child.hash);
-        if (childIdx !== undefined && nodeLanes[childIdx] !== -1) { lane = nodeLanes[childIdx]; break; }
+      for (const childIdx of childIndices) {
+        if (nodeLanes[childIdx] !== -1) { lane = nodeLanes[childIdx]; break; }
       }
       if (lane === -1) {
         lane = activeColumns.indexOf(null);
@@ -155,7 +166,7 @@ function buildGraphData(logEntries: CommitLogEntry[]): GraphData {
     color: hashToColor(entry.hash, BRANCH_COLORS), lane: nodeLanes[i], isSelected: false,
   }));
   const finalEdges: GraphEdge[] = [];
-  for (let i = 0; i < logEntries.length; i++) {
+  for (let i = 0; i < n; i++) {
     const node = logEntries[i];
     for (const parentHash of node.parents) {
       const parentIdx = hashToIndex.get(parentHash);
