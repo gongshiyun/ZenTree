@@ -226,12 +226,16 @@ export const useRepoStore = create<AppState>((set, get) => ({
   addRepo: (repoPath, name) => {
     const state = get();
     if (!state.repos.find((r) => r.path === repoPath)) {
-      set({ repos: [...state.repos, { path: repoPath, name }] });
+      const repos = [...state.repos, { path: repoPath, name }];
+      set({ repos });
+      window.gitAPI?.setSetting("repos", repos);
     }
   },
   removeRepo: (repoPath) => {
     const state = get();
-    set({ repos: state.repos.filter((r) => r.path !== repoPath), currentRepo: state.currentRepo === repoPath ? null : state.currentRepo });
+    const repos = state.repos.filter((r) => r.path !== repoPath);
+    set({ repos, currentRepo: state.currentRepo === repoPath ? null : state.currentRepo });
+    window.gitAPI?.setSetting("repos", repos);
   },
   setCurrentRepo: (repoPath) => set({ currentRepo: repoPath, selectedCommit: null, commitDetail: null }),
   setRepoError: (error) => set({ repoError: error }),

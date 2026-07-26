@@ -33,10 +33,19 @@ export default function App() {
   const refreshAll = useRepoStore((s) => s.refreshAll);
   const setError = useRepoStore((s) => s.setError);
 
-  // Init language from saved settings
+  // Init language and repos from saved settings
   useEffect(() => {
     (async () => {
-      try { const s = await window.gitAPI.getSettings(); if (s?.language) useRepoStore.getState().setLanguage(s.language); } catch { /* */ }
+      try {
+        const s = await window.gitAPI.getSettings();
+        if (s?.language) useRepoStore.getState().setLanguage(s.language);
+        if (s?.repos && Array.isArray(s.repos)) {
+          const store = useRepoStore.getState();
+          for (const r of s.repos) {
+            if (r.path && r.name) store.addRepo(r.path, r.name);
+          }
+        }
+      } catch { /* */ }
     })();
   }, []);
 
