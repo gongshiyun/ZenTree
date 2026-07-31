@@ -2,6 +2,7 @@ import { app, BrowserWindow } from "electron";
 import { SettingsRepository } from "./settingsRepository";
 import { GitRepository } from "./gitRepository";
 import { createMainWindow } from "./windowManager";
+import { UpdateManager } from "./updateManager";
 import { registerIpcHandlers } from "./ipc";
 
 /**
@@ -10,6 +11,7 @@ import { registerIpcHandlers } from "./ipc";
  */
 const settings = new SettingsRepository(app.getPath("userData"));
 const git = new GitRepository(() => String(settings.get("gitPath") ?? ""));
+const update = new UpdateManager();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -21,8 +23,13 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  registerIpcHandlers({ settings, git, getWindow: () => mainWindow });
+  update.setBroadcast((state) => { mainWindow?.webContents.send("update:event", state); });
+  registerIpcHandlers({ settings, git, update, getWindow: () => mainWindow });
   createWindow();
+  if (app.isPackaged) {
+    // Silent auto-check on startup; the renderer surfaces the result.
+    setTimeout(() => { update.check(); }, 5000);
+  }
 });
 
 app.on("window-all-closed", () => {

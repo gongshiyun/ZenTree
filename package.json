@@ -1,6 +1,6 @@
 {
   "name": "zentree",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A lightweight Git GUI client built with Electron, React, and Canvas",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -83,13 +83,19 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "ZenTree"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "gongshiyun",
+      "repo": "ZenTree"
     }
   },
   "dependencies": {
-    "simple-git": "^3.27.0",
-    "zustand": "^5.0.3",
+    "electron-updater": "^6.8.9",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "simple-git": "^3.27.0",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

@@ -59,8 +59,30 @@ Defined in `package.json` under the `"build"` key:
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "ZenTree"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "gongshiyun",
+    "repo": "ZenTree"
   }
 }
+
+## Publishing & Auto-Update
+
+Releases are published to GitHub (`gongshiyun/ZenTree`) and serve as the
+auto-update feed (`electron-updater`):
+
+```bash
+$env:GH_TOKEN = (gh auth token)   # PowerShell
+npm run pack -- --publish always  # builds + uploads artifacts & latest.yml
+```
+
+`electron-updater` reads `latest.yml` from the GitHub release. The NSIS build
+can self-update; portable builds cannot and show a hint pointing to the
+Releases page. Development builds skip auto-update entirely.
+
+Update flow lives in `electron/updateManager.ts` (check -> download -> install)
+and is surfaced in the UI under **Settings > About > Updates**.
 ```
 
 ## NSIS Installer Features
@@ -100,6 +122,7 @@ The main process compiles to CommonJS because Electron's main process uses Node.
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `electron` | 36.3.1 | Desktop shell |
+| `electron-updater` | ^6.8.9 | Auto-update (check / download / install) |
 | `simple-git` | ^3.27.0 | Git CLI wrapper |
 | `zustand` | ^5.0.3 | State management |
 | `react` | ^18.3.1 | UI framework |

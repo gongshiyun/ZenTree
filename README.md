@@ -20,6 +20,7 @@ A lightweight, modern Git GUI client built with Electron + React + TypeScript. D
 - **Lazy Loading** — Commit log paginated at 200 per batch, infinite scroll
 - **Keyboard Shortcuts** — `F5` refresh, `Ctrl+Enter` commit, `Esc` dismiss errors
 - **Drag & Drop** — Drop a folder onto the welcome screen to add a repository
+- **Auto Update** — Checks GitHub Releases for new versions, downloads and installs them from Settings > About
 
 ## Tech Stack
 

@@ -1031,3 +1031,9 @@
 /* Electron frameless-window drag regions */
 .drag-region { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
+/* Update (About tab) */
+.update-notes { max-height: 140px; overflow-y: auto; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; }
+.update-progress { height: 6px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 3px; overflow: hidden; }
+.update-progress-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.2s ease; }
+.update-error { color: #f38ba8; }
+.settings-btn:disabled { opacity: 0.6; cursor: default; }

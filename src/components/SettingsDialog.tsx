@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRepoStore, THEME_PRESETS } from "../application/repoStore";
 import { useT, getGlobalLocale } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
+import type { UpdateState } from "../types";
 
 export default function SettingsDialog() {
   const showSettings = useRepoStore((s) => s.showSettings);
@@ -15,8 +16,9 @@ export default function SettingsDialog() {
   const [gitPath, setGitPath] = useState("git");
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
-  const [activeTab, setActiveTab] = useState<"general" | "appearance" | "git">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "appearance" | "git" | "about">("general");
   const [language, setLanguageLocal] = useState(getGlobalLocale());
+  const [updateState, setUpdateState] = useState<UpdateState | null>(null);
 
   useEffect(() => {
     if (!showSettings) return;
@@ -35,6 +37,15 @@ export default function SettingsDialog() {
     })();
     return () => { cancelled = true; };
   }, [showSettings, currentRepo]);
+  useEffect(() => {
+    if (!showSettings) return;
+    let cancelled = false;
+    const unsubscribe = gitApi().onUpdateEvent((state) => { if (!cancelled) setUpdateState(state); });
+    gitApi().getUpdateState()
+      .then((res) => { if (!cancelled && res.success) setUpdateState(res.data ?? null); })
+      .catch(() => { /* ignore */ });
+    return () => { cancelled = true; unsubscribe(); };
+  }, [showSettings]);
 
   const handleSave = useCallback(async () => {
     setLoading(true, t("settings.saving"));
@@ -49,6 +60,26 @@ export default function SettingsDialog() {
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false, ""); }
   }, [gitPath, userName, userEmail, language, currentRepo, setShowSettings, setLoading, setError, t]);
+
+  const handleCheckUpdates = useCallback(async () => {
+    try {
+      const res = await gitApi().checkForUpdates();
+      if (res.success && res.data) setUpdateState(res.data);
+      else setError(res.error ?? t("settings.checkFailed"));
+    } catch (err: any) { setError(err.message); }
+  }, [setError, t]);
+
+  const handleDownloadUpdate = useCallback(async () => {
+    try {
+      const res = await gitApi().downloadUpdate();
+      if (res.success && res.data) setUpdateState(res.data);
+      else setError(res.error ?? t("settings.updateError", "download"));
+    } catch (err: any) { setError(err.message); }
+  }, [setError, t]);
+
+  const handleInstallUpdate = useCallback(() => {
+    gitApi().installUpdate();
+  }, []);
 
   if (!showSettings) return null;
 
@@ -65,6 +96,7 @@ export default function SettingsDialog() {
             <button className={`settings-tab${activeTab === "general" ? " active" : ""}`} onClick={() => setActiveTab("general")}>{t("settings.general")}</button>
             <button className={`settings-tab${activeTab === "appearance" ? " active" : ""}`} onClick={() => setActiveTab("appearance")}>{t("settings.appearance")}</button>
             <button className={`settings-tab${activeTab === "git" ? " active" : ""}`} onClick={() => setActiveTab("git")}>{t("settings.gitConfig")}</button>
+            <button className={`settings-tab${activeTab === "about" ? " active" : ""}`} onClick={() => setActiveTab("about")}>{t("settings.about")}</button>
           </div>
           <div className="settings-content">
             {activeTab === "general" && <div className="settings-section">
@@ -99,6 +131,34 @@ export default function SettingsDialog() {
                 <div className="setting-row"><label>{t("settings.userEmail")}</label><input type="text" value={userEmail} onChange={(e) => setUserEmail(e.target.value)} placeholder="your@email.com"/></div>
                 <span className="setting-hint">{t("settings.gitHint")}</span>
               </> : <p className="setting-hint">{t("settings.noRepoHint")}</p>}
+            </div>}
+            {activeTab === "about" && <div className="settings-section">
+              <div className="setting-row"><label>{t("settings.version")}</label>
+                <span className="setting-hint" style={{ margin: 0 }}>{updateState?.currentVersion ? `ZenTree v${updateState.currentVersion}` : "ZenTree"}</span>
+              </div>
+              <div className="setting-row"><label>{t("settings.updates")}</label>
+                <button className="settings-btn secondary" onClick={handleCheckUpdates} disabled={updateState?.phase === "checking" || updateState?.phase === "downloading"}>
+                  {t("settings.checkUpdates")}
+                </button>
+              </div>
+              {updateState?.phase === "checking" && <span className="setting-hint">{t("settings.checking")}</span>}
+              {updateState?.phase === "not-available" && <span className="setting-hint">{t("settings.upToDate", updateState.version ?? updateState.currentVersion)}</span>}
+              {updateState?.phase === "available" && <>
+                <span className="setting-hint">{t("settings.updateAvailable", updateState.version ?? "")}</span>
+                {updateState.releaseNotes ? <div className="update-notes">{updateState.releaseNotes}</div> : null}
+                <button className="settings-btn primary" onClick={handleDownloadUpdate}>{t("settings.download")}</button>
+              </>}
+              {updateState?.phase === "downloading" && <>
+                <div className="update-progress"><div className="update-progress-bar" style={{ width: `${updateState.progress?.percent ?? 0}%` }}/></div>
+                <span className="setting-hint">{t("settings.downloading", String(Math.round(updateState.progress?.percent ?? 0)))}</span>
+              </>}
+              {updateState?.phase === "downloaded" && <>
+                <span className="setting-hint">{t("settings.downloaded")}</span>
+                <button className="settings-btn primary" onClick={handleInstallUpdate}>{t("settings.installNow")}</button>
+              </>}
+              {updateState?.phase === "error" && <span className="setting-hint update-error">{t("settings.updateError", updateState.error ?? "")}</span>}
+              {updateState?.phase === "unsupported" && <span className="setting-hint">{updateState.reason === "portable" ? t("settings.unsupportedPortable") : t("settings.unsupportedDev")}</span>}
+              {(!updateState || updateState.phase === "idle") && <span className="setting-hint">{t("settings.updateHint")}</span>}
             </div>}
           </div>
         </div>

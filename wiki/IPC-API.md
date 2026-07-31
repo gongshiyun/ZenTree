@@ -1,4 +1,4 @@
-# IPC API
+﻿# IPC API
 
 ## Overview
 
@@ -86,6 +86,17 @@ Wrapped by the `safeHandler()` utility which catches exceptions and converts the
 | `closeWindow()` | `window:close` | — | `void` |
 | `isMaximized()` | `window:is-maximized` | — | `boolean` |
 
+### Updates
+
+| Method | IPC Channel | Parameters | Returns |
+|--------|-------------|-----------|---------|
+| `getUpdateState()` | `update:get-state` | — | `UpdateState` |
+| `checkForUpdates()` | `update:check` | — | `UpdateState` |
+| `downloadUpdate()` | `update:download` | — | `UpdateState` |
+| `installUpdate()` | `update:install` | — | `{ success }` |
+| `onUpdateEvent(cb)` | `update:event` | — | unsubscribe fn |
+
+`UpdateState` is `{ phase, currentVersion, version?, releaseNotes?, progress?, error?, reason? }` where `phase` is one of `idle | checking | available | not-available | downloading | downloaded | error | unsupported`. The main process broadcasts every state change on `update:event`; the renderer subscribes in Settings > About.
 ### Shell
 
 | Method | IPC Channel | Parameters | Returns |

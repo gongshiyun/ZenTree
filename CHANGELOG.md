@@ -2,6 +2,25 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.2.0] - 2026-08-01
+
+### Features
+
+- Added auto-update support (Settings > About > Check for Updates):
+  - Checks GitHub Releases for newer versions via `electron-updater`
+  - Downloads the new installer with live progress reporting
+  - Restart-and-install flow for NSIS builds (Settings > About > Install)
+  - Silent update check on startup (packaged builds only)
+  - Dev-mode and portable builds are detected and guided to the Releases page
+- New `UpdateManager` infrastructure service (`electron/updateManager.ts`) with
+  renderer-friendly state snapshots over IPC (`update:*` channels + `update:event`)
+
+### Packaging
+
+- Added `publish` (GitHub provider) configuration for auto-update feed
+- Rebuilt release artifacts (NSIS installer + portable exe) for v1.2.0
+
+
 ## [1.1.0] - 2026-08-01
 
 ### Architecture

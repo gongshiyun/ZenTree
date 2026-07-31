@@ -1,10 +1,12 @@
 import { ipcMain, dialog, BrowserWindow } from "electron";
 import type { SettingsRepository } from "./settingsRepository";
 import type { GitRepository } from "./gitRepository";
+import type { UpdateManager } from "./updateManager";
 
 interface IpcDeps {
   settings: SettingsRepository;
   git: GitRepository;
+  update: UpdateManager;
   getWindow: () => BrowserWindow | null;
 }
 
@@ -21,7 +23,7 @@ function safeHandler<T>(fn: (...args: unknown[]) => Promise<T>) {
 }
 
 /** Composition root for all IPC channels: window controls, settings, git, dialogs. */
-export function registerIpcHandlers({ settings, git, getWindow }: IpcDeps): void {
+export function registerIpcHandlers({ settings, git, update, getWindow }: IpcDeps): void {
   // --- Window control ---
   ipcMain.handle("window:minimize", () => getWindow()?.minimize());
   ipcMain.handle("window:maximize", () => {
@@ -95,6 +97,11 @@ export function registerIpcHandlers({ settings, git, getWindow }: IpcDeps): void
   ipcMain.handle("git:set-config", safeHandler(async (repoPath: unknown, key: unknown, value: unknown) =>
     git.setConfig(String(repoPath), String(key), String(value))));
 
+  // --- Updates ---
+  ipcMain.handle("update:get-state", safeHandler(async () => update.getState()));
+  ipcMain.handle("update:check", safeHandler(async () => update.check()));
+  ipcMain.handle("update:download", safeHandler(async () => update.download()));
+  ipcMain.handle("update:install", () => { update.install(); return { success: true }; });
   // --- Shell & dialogs ---
   ipcMain.handle("shell:open-git-bash", safeHandler(async (repoPath: unknown) => git.openGitBash(String(repoPath))));
   ipcMain.handle("dialog:open-directory", async () => {

@@ -3,6 +3,31 @@
  * the preload bridge, and the renderer (application/UI layers).
  */
 
+export type UpdatePhase =
+  | "idle"
+  | "checking"
+  | "available"
+  | "not-available"
+  | "downloading"
+  | "downloaded"
+  | "error"
+  | "unsupported";
+
+export interface UpdateProgress {
+  percent: number;
+  transferred: number;
+  total: number;
+}
+
+export interface UpdateState {
+  phase: UpdatePhase;
+  currentVersion: string;
+  version?: string;
+  releaseNotes?: string;
+  progress?: UpdateProgress;
+  error?: string;
+  reason?: "dev" | "portable";
+}
 export interface GitAPI {
   isRepo: (repoPath: string) => Promise<{ success: boolean; data?: boolean; error?: string }>;
   branches: (repoPath: string) => Promise<{ success: boolean; data?: { all: string[]; current: string; branches: Record<string, any> }; error?: string }>;
@@ -42,6 +67,11 @@ export interface GitAPI {
   maximizeWindow: () => Promise<void>;
   closeWindow: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
+  getUpdateState: () => Promise<{ success: boolean; data?: UpdateState; error?: string }>;
+  checkForUpdates: () => Promise<{ success: boolean; data?: UpdateState; error?: string }>;
+  downloadUpdate: () => Promise<{ success: boolean; data?: UpdateState; error?: string }>;
+  installUpdate: () => Promise<{ success: boolean; error?: string }>;
+  onUpdateEvent: (cb: (state: UpdateState) => void) => () => void;
 }
 
 export interface AppSettings {

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { GitAPI } from "../src/types";
+import type { GitAPI, UpdateState } from "../src/types";
 
 const api: GitAPI = {
   isRepo: (repoPath: string) => ipcRenderer.invoke("git:is-repo", repoPath),
@@ -40,6 +40,15 @@ const api: GitAPI = {
   maximizeWindow: () => ipcRenderer.invoke("window:maximize"),
   closeWindow: () => ipcRenderer.invoke("window:close"),
   isMaximized: () => ipcRenderer.invoke("window:is-maximized"),
+  getUpdateState: () => ipcRenderer.invoke("update:get-state"),
+  checkForUpdates: () => ipcRenderer.invoke("update:check"),
+  downloadUpdate: () => ipcRenderer.invoke("update:download"),
+  installUpdate: () => ipcRenderer.invoke("update:install"),
+  onUpdateEvent: (cb: (state: UpdateState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: UpdateState) => cb(state);
+    ipcRenderer.on("update:event", listener);
+    return () => { ipcRenderer.removeListener("update:event", listener); };
+  },
 };
 
 contextBridge.exposeInMainWorld("gitAPI", api);
