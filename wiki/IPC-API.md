@@ -86,6 +86,32 @@ Wrapped by the `safeHandler()` utility which catches exceptions and converts the
 | `closeWindow()` | `window:close` | — | `void` |
 | `isMaximized()` | `window:is-maximized` | — | `boolean` |
 
+### Advanced Git Operations
+
+| Method | IPC Channel | Parameters | Returns |
+|--------|-------------|-----------|---------|
+| `clone(url, destPath, branch?)` | `git:clone` | `string, string, string?` | `string` (path) |
+| `fileHistory(repoPath, filePath, maxCount?)` | `git:file-history` | `string, string, number?` | `FileHistoryEntry[]` |
+| `blame(repoPath, filePath, hash?)` | `git:blame` | `string, string, string?` | `BlameLine[]` |
+| `revertCommit(repoPath, hash)` | `git:revert` | `string, string` | - |
+| `compare(repoPath, fromRef, toRef)` | `git:compare` | `string, string, string` | `CompareResult` |
+| `compareFileDiff(repoPath, fromRef, toRef, filePath)` | `git:compare-file-diff` | `string, string, string, string` | `string` (diff) |
+| `cherryPick(repoPath, hash)` | `git:cherry-pick` | `string, string` | - |
+| `rebase(repoPath, upstream)` | `git:rebase` | `string, string` | - |
+| `rebaseAbort(repoPath)` | `git:rebase-abort` | `string` | - |
+| `tags(repoPath)` | `git:tags` | `string` | `TagInfo[]` |
+| `createTag(repoPath, name, ref, message?)` | `git:create-tag` | `string, string, string, string?` | - |
+| `deleteTag(repoPath, name)` | `git:delete-tag` | `string, string` | - |
+| `remotes(repoPath)` | `git:remotes` | `string` | `RemoteInfo[]` |
+| `addRemote(repoPath, name, url)` | `git:add-remote` | `string, string, string` | - |
+| `removeRemote(repoPath, name)` | `git:remove-remote` | `string, string` | - |
+| `setRemoteUrl(repoPath, name, url)` | `git:set-remote-url` | `string, string, string` | - |
+| `hostingUrl(repoPath, ref?)` | `git:hosting-url` | `string, string?` | `string \| null` |
+| `readGitignore(repoPath)` | `git:read-gitignore` | `string` | `string` |
+| `writeGitignore(repoPath, content)` | `git:write-gitignore` | `string, string` | - |
+| `mergetool(repoPath, filePath?)` | `git:mergetool` | `string, string?` | - |
+| `openExternal(url)` | `shell:open-external` | `string` | - |
+
 ### Updates
 
 | Method | IPC Channel | Parameters | Returns |

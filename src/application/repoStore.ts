@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { RepoInfo, CommitLogEntry, GraphData, GitStatusData, CommitDetail } from "../types";
+import type { RepoInfo, CommitLogEntry, GraphData, GitStatusData, CommitDetail, LogFilters, RemoteInfo, TagInfo } from "../types";
 import { setGlobalLocale, t } from "../i18n";
 import { buildGraphData } from "../domain/graph/layout";
 import { getThemePreset, applyTheme } from "../domain/theme/presets";
@@ -11,7 +11,7 @@ const PAGE_SIZE = 200;
 /** Monotonic token that invalidates in-flight refreshes after a newer one starts. */
 let refreshSeq = 0;
 
-interface SelectedDiffFile { path: string; isStaged: boolean; commitHash?: string; }
+interface SelectedDiffFile { path: string; isStaged: boolean; commitHash?: string; fromRef?: string; toRef?: string; }
 
 interface AppState {
   repos: RepoInfo[]; currentRepo: string | null;
@@ -24,6 +24,9 @@ interface AppState {
   themePreset: string; isDark: boolean; language: string;
   loading: boolean; loadingMessage: string; error: string | null;
   showSettings: boolean;
+  showClone: boolean;
+  showCompare: boolean;
+  tags: TagInfo[]; remotes: RemoteInfo[]; logFilters: LogFilters;
 
   addRepo: (path: string, name: string) => void;
   removeRepo: (path: string) => void;
@@ -39,7 +42,11 @@ interface AppState {
   setError: (error: string | null) => void;
   loadMoreCommits: () => Promise<void>;
   initFromSettings: () => Promise<void>;
-  refreshAll: (repoPath?: string) => Promise<void>;
+  refreshAll: (repoPath?: string, silent?: boolean) => Promise<void>;
+  setShowClone: (show: boolean) => void;
+  setShowCompare: (show: boolean) => void;
+  setLogFilters: (filters: LogFilters) => void;
+  reloadMeta: () => Promise<void>;
 }
 
 function graphWithRefs(entries: CommitLogEntry[], branchRefs?: Record<string, string[]>): GraphData {
@@ -55,6 +62,9 @@ export const useRepoStore = create<AppState>((set, get) => ({
   themePreset: "catppuccin-mocha", isDark: true, language: "en",
   loading: false, loadingMessage: "", error: null,
   showSettings: false,
+  showClone: false,
+  showCompare: false,
+  tags: [], remotes: [], logFilters: {},
 
   addRepo: (repoPath, name) => {
     const state = get();
@@ -101,8 +111,26 @@ export const useRepoStore = create<AppState>((set, get) => ({
     gitApi().setSetting("language", lang);
   },
   setShowSettings: (show) => set({ showSettings: show }),
+  setShowClone: (show) => set({ showClone: show }),
+  setShowCompare: (show) => set({ showCompare: show }),
   setLoading: (loading, message = "") => set({ loading, loadingMessage: message }),
   setError: (error) => set({ error }),
+  setLogFilters: (filters) => {
+    set({ logFilters: filters, logSkip: 0, hasMoreCommits: true });
+    get().refreshAll(undefined, true);
+  },
+  reloadMeta: async () => {
+    const state = get();
+    const repo = state.currentRepo;
+    if (!repo) return;
+    try {
+      const [tagsRes, remotesRes] = await Promise.all([gitApi().tags(repo), gitApi().remotes(repo)]);
+      set({
+        tags: tagsRes.success && tagsRes.data ? tagsRes.data : [],
+        remotes: remotesRes.success && remotesRes.data ? remotesRes.data : [],
+      });
+    } catch { /* keep previous values */ }
+  },
 
   loadMoreCommits: async () => {
     const state = get();
@@ -148,17 +176,20 @@ export const useRepoStore = create<AppState>((set, get) => ({
     } catch { /* settings may be unavailable in non-Electron dev; ignore */ }
   },
 
-  refreshAll: async (repoPath?: string) => {
+  refreshAll: async (repoPath?: string, silent = false) => {
     const state = get();
     const repo = repoPath || state.currentRepo;
     if (!repo) return;
     const seq = ++refreshSeq;
-    set({ loading: true, loadingMessage: t("status.refreshing"), error: null, logSkip: 0, hasMoreCommits: true, loadingMore: false });
+    set({ error: null, logSkip: 0, hasMoreCommits: true, loadingMore: false });
+    if (!silent) set({ loading: true, loadingMessage: t("status.refreshing") });
     try {
-      const [branchResult, logResult, statusResult] = await Promise.all([
+      const [branchResult, logResult, statusResult, tagsResult, remotesResult] = await Promise.all([
         gitApi().branches(repo),
-        gitApi().log(repo, 0, PAGE_SIZE),
+        gitApi().log(repo, 0, PAGE_SIZE, get().logFilters),
         gitApi().status(repo),
+        gitApi().tags(repo),
+        gitApi().remotes(repo),
       ]);
       if (seq !== refreshSeq) return;
 
@@ -189,6 +220,10 @@ export const useRepoStore = create<AppState>((set, get) => ({
         }
 
         if (statusResult.success && statusResult.data) set({ status: statusResult.data });
+        set({
+          tags: tagsResult.success && tagsResult.data ? tagsResult.data : [],
+          remotes: remotesResult.success && remotesResult.data ? remotesResult.data : [],
+        });
       } else if (branchResult.error) {
         set({ error: branchResult.error });
       }

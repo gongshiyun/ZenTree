@@ -1,4 +1,4 @@
-# ZenTree Wiki
+﻿# ZenTree Wiki
 
 A lightweight, modern Git GUI client built with **Electron + React + TypeScript**, delivering SourceTree-like core interactions with a faster, cleaner experience.
 
@@ -21,6 +21,15 @@ A lightweight, modern Git GUI client built with **Electron + React + TypeScript*
 | Keyboard Shortcuts | `F5` refresh · `Ctrl+Enter` commit · `Esc` dismiss errors |
 | Drag & Drop | Drop a folder onto welcome screen to add a repository |
 | Auto Update | Check GitHub Releases, download & install new versions (Settings > About) |
+| Clone Repository | Clone remote repos by URL with optional branch |
+| File History & Blame | Per-file history and line blame with commit navigation |
+| Revert / Cherry-pick / Rebase | Commit rollback, picking and branch rebasing |
+| Compare | Branch/tag/commit comparison with stats and file diffs |
+| Tags & Remotes | Manage tags and remotes in the sidebar |
+| Commit Filters | Filter graph by message, author and date |
+| Conflict Resolution | Launch merge tool for conflicted files |
+| Hosting Links | Open repos/branches/commits on GitHub/GitLab/Bitbucket |
+| Auto Refresh | Quiet refresh every 30s and on focus |
 
 ## Tech Stack
 

@@ -1,4 +1,4 @@
-# Build and Packaging
+﻿# Build and Packaging
 
 ## Build Pipeline
 
@@ -108,6 +108,20 @@ and is surfaced in the UI under **Settings > About > Updates**.
 
 The main process compiles to CommonJS because Electron's main process uses Node.js `require()`.
 
+## Testing
+
+ZenTree uses Vitest for both integration and unit tests:
+
+```bash
+npm test          # run once
+npm run test:watch
+```
+
+- `tests/gitRepository.test.ts` - integration tests against a real git binary
+  (clone, history, blame, revert, compare, cherry-pick, rebase, tags, remotes,
+  filters, conflicts, gitignore, core regression)
+- `tests/domain.test.ts` - pure unit tests (diff parser, hunk patches,
+  highlighting, graph layout, hosting URL parsing)
 ## Development vs Production
 
 | Aspect | Development | Production |

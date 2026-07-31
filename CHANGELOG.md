@@ -1,7 +1,27 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.3.0] - 2026-08-01
+
+### Features
+
+- **Clone Repository** - Clone a remote repo by URL (Settings > Clone / Welcome screen), with optional branch and live status
+- **File History & Blame** - Diff panel tabs: Diff / History / Blame for any file; click a history entry or blame line to open that commit's diff
+- **Revert / Cherry-pick / Rebase** - Commit actions in the file panel; rebase current branch onto another branch from the sidebar context menu (with abort support)
+- **Compare** - Compare any two branches/tags/commits (ahead/behind counts, per-file add/delete stats, click a file to open its diff)
+- **Tags & Remotes** - Create/list/delete tags and add/remove/edit remotes in the sidebar
+- **Commit Log Filters** - Filter by message, author and since-date from the top bar
+- **Conflict Resolution** - Conflicted files surface in the file panel with a Resolve (mergetool) action; conflict count shown in the status bar
+- **Hosting Platform Jump** - Open the repo, branch or commit on GitHub/GitLab/Bitbucket
+- **.gitignore Editor** - Edit the repository ignore file from Settings > Git
+- **Auto Refresh** - Quiet background refresh every 30s and on window focus
+
+### Testing
+
+- Added Vitest test framework with 35 tests:
+  - Git integration tests (real git binary): clone, file history, blame, revert, compare, cherry-pick, rebase + abort, tags, remotes, log filters, conflicts, mergetool, gitignore, core regression
+  - Pure unit tests: hosting-URL parsing, diff parser, hunk patch builder, syntax highlight, graph layout
 ## [1.2.0] - 2026-08-01
 
 ### Features

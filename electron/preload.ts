@@ -49,6 +49,27 @@ const api: GitAPI = {
     ipcRenderer.on("update:event", listener);
     return () => { ipcRenderer.removeListener("update:event", listener); };
   },
+  clone: (url, destPath, branch) => ipcRenderer.invoke("git:clone", url, destPath, branch),
+  fileHistory: (repoPath, filePath, maxCount) => ipcRenderer.invoke("git:file-history", repoPath, filePath, maxCount),
+  blame: (repoPath, filePath, hash) => ipcRenderer.invoke("git:blame", repoPath, filePath, hash),
+  revertCommit: (repoPath, hash) => ipcRenderer.invoke("git:revert", repoPath, hash),
+  compare: (repoPath, fromRef, toRef) => ipcRenderer.invoke("git:compare", repoPath, fromRef, toRef),
+  compareFileDiff: (repoPath, fromRef, toRef, filePath) => ipcRenderer.invoke("git:compare-file-diff", repoPath, fromRef, toRef, filePath),
+  cherryPick: (repoPath, hash) => ipcRenderer.invoke("git:cherry-pick", repoPath, hash),
+  rebase: (repoPath, upstream) => ipcRenderer.invoke("git:rebase", repoPath, upstream),
+  rebaseAbort: (repoPath) => ipcRenderer.invoke("git:rebase-abort", repoPath),
+  tags: (repoPath) => ipcRenderer.invoke("git:tags", repoPath),
+  createTag: (repoPath, name, ref, message) => ipcRenderer.invoke("git:create-tag", repoPath, name, ref, message),
+  deleteTag: (repoPath, name) => ipcRenderer.invoke("git:delete-tag", repoPath, name),
+  remotes: (repoPath) => ipcRenderer.invoke("git:remotes", repoPath),
+  addRemote: (repoPath, name, url) => ipcRenderer.invoke("git:add-remote", repoPath, name, url),
+  removeRemote: (repoPath, name) => ipcRenderer.invoke("git:remove-remote", repoPath, name),
+  setRemoteUrl: (repoPath, name, url) => ipcRenderer.invoke("git:set-remote-url", repoPath, name, url),
+  hostingUrl: (repoPath, ref) => ipcRenderer.invoke("git:hosting-url", repoPath, ref),
+  openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
+  readGitignore: (repoPath) => ipcRenderer.invoke("git:read-gitignore", repoPath),
+  writeGitignore: (repoPath, content) => ipcRenderer.invoke("git:write-gitignore", repoPath, content),
+  mergetool: (repoPath, filePath) => ipcRenderer.invoke("git:mergetool", repoPath, filePath),
 };
 
 contextBridge.exposeInMainWorld("gitAPI", api);

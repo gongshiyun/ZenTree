@@ -1037,3 +1037,61 @@
 .update-progress-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.2s ease; }
 .update-error { color: #f38ba8; }
 .settings-btn:disabled { opacity: 0.6; cursor: default; }
+/* Filter bar (commit log filters) */
+.filter-bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); }
+.filter-input { height: 24px; padding: 0 8px; border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-tertiary); color: var(--text-primary); font-size: 12px; outline: none; min-width: 0; }
+.filter-input:first-child { flex: 2; }
+.filter-input:nth-child(2) { flex: 1; }
+.filter-input:nth-child(3) { width: 130px; }
+.filter-clear { height: 24px; padding: 0 10px; border: 1px solid var(--border-color); border-radius: var(--radius); background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.filter-clear:hover { color: var(--danger); }
+
+/* Diff viewer tabs */
+.diff-view-tabs { display: flex; gap: 2px; margin-left: 10px; }
+.diff-view-tab { padding: 2px 10px; font-size: 11px; border: 1px solid var(--border-color); border-radius: var(--radius); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.diff-view-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* File history */
+.file-history-list { padding: 4px; overflow-y: auto; }
+.file-history-item { padding: 6px 8px; border-bottom: 1px solid var(--border-color); cursor: pointer; }
+.file-history-item:hover { background: var(--bg-tertiary); }
+.file-history-subject { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-history-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* Blame view */
+.blame-view { overflow-y: auto; font-family: var(--mono-font, Consolas, monospace); font-size: 11px; }
+.blame-line { display: flex; cursor: pointer; }
+.blame-line:hover { background: var(--bg-tertiary); }
+.blame-hash { width: 62px; padding: 1px 4px; color: var(--warning); text-align: right; flex: none; }
+.blame-author { width: 110px; padding: 1px 4px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+.blame-line-num { width: 36px; padding: 1px 4px; color: var(--text-muted); text-align: right; border-right: 1px solid var(--border-color); flex: none; }
+.blame-content { padding: 1px 6px; color: var(--text-primary); white-space: pre; }
+
+/* Clone dialog */
+.clone-dir-row { display: flex; gap: 6px; }
+.clone-dir-row input { flex: 1; min-width: 0; }
+
+/* Compare dialog */
+.compare-select { height: 30px; padding: 0 8px; border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-tertiary); color: var(--text-primary); font-size: 12px; outline: none; min-width: 0; }
+.compare-actions { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.compare-file-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius); }
+.compare-file-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; cursor: pointer; border-bottom: 1px solid var(--border-color); font-size: 12px; }
+.compare-file-item:last-child { border-bottom: none; }
+.compare-file-item:hover { background: var(--bg-tertiary); }
+.compare-stats { margin-left: auto; flex: none; font-size: 11px; }
+.compare-stats .add { color: var(--success); }
+.compare-stats .del { color: var(--danger); margin-left: 6px; }
+
+/* Commit actions row */
+.commit-actions { display: flex; gap: 4px; margin-left: auto; }
+
+/* Conflict file styling */
+.file-item.conflict { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.file-item.conflict:hover { background: color-mix(in srgb, var(--danger) 18%, transparent); }
+.file-status.C { color: var(--danger); }
+
+/* Status bar conflicts badge */
+.conflict-badge { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); border: 1px solid var(--danger); border-radius: var(--radius); padding: 1px 8px; font-size: 11px; }
+
+/* .gitignore editor */
+.gitignore-editor { width: 100%; min-height: 180px; resize: vertical; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius); font-family: var(--mono-font, Consolas, monospace); font-size: 12px; padding: 8px; outline: none; }

@@ -31,7 +31,7 @@ export interface UpdateState {
 export interface GitAPI {
   isRepo: (repoPath: string) => Promise<{ success: boolean; data?: boolean; error?: string }>;
   branches: (repoPath: string) => Promise<{ success: boolean; data?: { all: string[]; current: string; branches: Record<string, any> }; error?: string }>;
-  log: (repoPath: string, skip: number, maxCount: number) => Promise<{ success: boolean; data?: CommitLogEntry[]; error?: string }>;
+  log: (repoPath: string, skip: number, maxCount: number, filters?: LogFilters) => Promise<{ success: boolean; data?: CommitLogEntry[]; error?: string }>;
   status: (repoPath: string) => Promise<{ success: boolean; data?: GitStatusData; error?: string }>;
   show: (repoPath: string, hash: string) => Promise<{ success: boolean; data?: CommitDetail; error?: string }>;
   lastMessage: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
@@ -72,6 +72,83 @@ export interface GitAPI {
   downloadUpdate: () => Promise<{ success: boolean; data?: UpdateState; error?: string }>;
   installUpdate: () => Promise<{ success: boolean; error?: string }>;
   onUpdateEvent: (cb: (state: UpdateState) => void) => () => void;
+  clone: (url: string, destPath: string, branch?: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+  fileHistory: (repoPath: string, filePath: string, maxCount?: number) => Promise<{ success: boolean; data?: FileHistoryEntry[]; error?: string }>;
+  blame: (repoPath: string, filePath: string, hash?: string) => Promise<{ success: boolean; data?: BlameLine[]; error?: string }>;
+  revertCommit: (repoPath: string, hash: string) => Promise<{ success: boolean; error?: string }>;
+  compare: (repoPath: string, fromRef: string, toRef: string) => Promise<{ success: boolean; data?: CompareResult; error?: string }>;
+  compareFileDiff: (repoPath: string, fromRef: string, toRef: string, filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+  cherryPick: (repoPath: string, hash: string) => Promise<{ success: boolean; error?: string }>;
+  rebase: (repoPath: string, upstream: string) => Promise<{ success: boolean; error?: string }>;
+  rebaseAbort: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  tags: (repoPath: string) => Promise<{ success: boolean; data?: TagInfo[]; error?: string }>;
+  createTag: (repoPath: string, name: string, ref: string, message?: string) => Promise<{ success: boolean; error?: string }>;
+  deleteTag: (repoPath: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  remotes: (repoPath: string) => Promise<{ success: boolean; data?: RemoteInfo[]; error?: string }>;
+  addRemote: (repoPath: string, name: string, url: string) => Promise<{ success: boolean; error?: string }>;
+  removeRemote: (repoPath: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  setRemoteUrl: (repoPath: string, name: string, url: string) => Promise<{ success: boolean; error?: string }>;
+  hostingUrl: (repoPath: string, ref?: string) => Promise<{ success: boolean; data?: string | null; error?: string }>;
+  openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
+  readGitignore: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+  writeGitignore: (repoPath: string, content: string) => Promise<{ success: boolean; error?: string }>;
+  mergetool: (repoPath: string, filePath?: string) => Promise<{ success: boolean; error?: string }>;
+}
+
+export interface LogFilters {
+  query?: string;
+  author?: string;
+  since?: string;
+  until?: string;
+}
+
+export interface FileHistoryEntry {
+  hash: string;
+  shortHash: string;
+  author: string;
+  email: string;
+  timestamp: number;
+  subject: string;
+}
+
+export interface BlameLine {
+  hash: string;
+  shortHash: string;
+  author: string;
+  email: string;
+  timestamp: number;
+  lineNumber: number;
+  content: string;
+  subject?: string;
+}
+
+export interface CompareFileStat {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface CompareResult {
+  from: string;
+  to: string;
+  ahead: number;
+  behind: number;
+  files: CompareFileStat[];
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
+export interface TagInfo {
+  name: string;
+  hash: string;
+  date: string;
+  subject: string;
+}
+
+export interface RemoteInfo {
+  name: string;
+  url: string;
 }
 
 export interface AppSettings {

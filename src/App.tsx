@@ -10,6 +10,8 @@ import CommitBar from "./components/CommitBar";
 import StatusBar from "./components/StatusBar";
 import SettingsDialog from "./components/SettingsDialog";
 import DiffPanel from "./components/DiffPanel";
+import CloneDialog from "./components/CloneDialog";
+import CompareDialog from "./components/CompareDialog";
 
 function Welcome() {
   const t = useT();
@@ -45,6 +47,7 @@ function Welcome() {
       <h1>ZenTree</h1>
       <p>{t("app.welcome")}</p>
       <button className="open-btn" onClick={handleOpen}>{t("app.openRepo")}</button>
+      <button className="open-btn" style={{ marginLeft: 8 }} onClick={() => useRepoStore.getState().setShowClone(true)}>{t("app.cloneRepo")}</button>
       <p style={{ marginTop: 16, fontSize: 11, color: "var(--text-muted)" }}>{t("app.dragHint")}</p>
     </div>
   );
@@ -68,6 +71,18 @@ export default function App() {
 
   useEffect(() => { window.addEventListener("keydown", handleKeyDown); return () => window.removeEventListener("keydown", handleKeyDown); }, [handleKeyDown]);
 
+  // Quiet auto-refresh: every 30s and on window focus, detect external changes.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (useRepoStore.getState().currentRepo) useRepoStore.getState().refreshAll(undefined, true);
+    }, 30000);
+    const onFocus = () => {
+      if (useRepoStore.getState().currentRepo) useRepoStore.getState().refreshAll(undefined, true);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(timer); window.removeEventListener("focus", onFocus); };
+  }, []);
+
   return (
     <div className="app-layout">
       <TopBar />
@@ -86,6 +101,8 @@ export default function App() {
         </>
       ) : (<Welcome />)}
       <SettingsDialog />
+      <CloneDialog />
+      <CompareDialog />
     </div>
   );
 }

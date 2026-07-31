@@ -12,6 +12,9 @@ export default function Sidebar() {
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
   const refreshAll = useRepoStore((s) => s.refreshAll);
+  const reloadMeta = useRepoStore((s) => s.reloadMeta);
+  const tags = useRepoStore((s) => s.tags);
+  const remotes = useRepoStore((s) => s.remotes);
   const checkoutRemote = useRepoStore((s) => s.checkoutRemote);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; branch: string; isRemote: boolean } | null>(null);
@@ -21,6 +24,13 @@ export default function Sidebar() {
   const newBranchRef = useRef<HTMLInputElement>(null);
   const [showStash, setShowStash] = useState(false);
   const [stashList, setStashList] = useState<{ ref: string; subject: string }[]>([]);
+  const [showTags, setShowTags] = useState(false);
+  const [showTagInput, setShowTagInput] = useState(false);
+  const [tagName, setTagName] = useState("");
+  const [tagRef, setTagRef] = useState("");
+  const [showRemoteInput, setShowRemoteInput] = useState(false);
+  const [remoteName, setRemoteName] = useState("");
+  const [remoteUrl, setRemoteUrl] = useState("");
 
   useEffect(() => { const h = () => setContextMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
   useEffect(() => { if (showNewBranch && newBranchRef.current) newBranchRef.current.focus(); }, [showNewBranch]);
@@ -109,6 +119,59 @@ export default function Sidebar() {
 
   const handleContextMenu = useCallback((e: React.MouseEvent, branch: string, isRemote: boolean) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, branch, isRemote }); }, []);
 
+  const handleRebaseOnto = useCallback(async (branch: string) => {
+    if (!currentRepo) return;
+    if (!window.confirm(t("sidebar.confirmRebase").replace("{0}", branch).replace("{1}", currentBranch))) return;
+    setLoading(true, t("sidebar.rebasing").replace("{0}", branch));
+    try {
+      const r = await gitApi().rebase(currentRepo, branch);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, currentBranch, setLoading, setError, refreshAll, t]);
+
+  const handleCreateTag = useCallback(async () => {
+    if (!currentRepo || !tagName.trim()) return;
+    setLoading(true, t("tags.creating").replace("{0}", tagName.trim()));
+    try {
+      const r = await gitApi().createTag(currentRepo, tagName.trim(), tagRef.trim() || "HEAD");
+      if (r.success) { setShowTagInput(false); setTagName(""); setTagRef(""); await reloadMeta(); }
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, tagName, tagRef, setLoading, setError, reloadMeta, t]);
+
+  const handleDeleteTag = useCallback(async (name: string) => {
+    if (!currentRepo) return;
+    if (!window.confirm(t("tags.confirmDelete").replace("{0}", name))) return;
+    setLoading(true, t("tags.deleting").replace("{0}", name));
+    try {
+      const r = await gitApi().deleteTag(currentRepo, name);
+      if (r.success) await reloadMeta();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, reloadMeta, t]);
+
+  const handleAddRemote = useCallback(async () => {
+    if (!currentRepo || !remoteName.trim() || !remoteUrl.trim()) return;
+    setLoading(true, t("remotes.adding").replace("{0}", remoteName.trim()));
+    try {
+      const r = await gitApi().addRemote(currentRepo, remoteName.trim(), remoteUrl.trim());
+      if (r.success) { setShowRemoteInput(false); setRemoteName(""); setRemoteUrl(""); await reloadMeta(); }
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, remoteName, remoteUrl, setLoading, setError, reloadMeta, t]);
+
+  const handleRemoveRemote = useCallback(async (name: string) => {
+    if (!currentRepo) return;
+    if (!window.confirm(t("remotes.confirmDelete").replace("{0}", name))) return;
+    setLoading(true, t("remotes.deleting").replace("{0}", name));
+    try {
+      const r = await gitApi().removeRemote(currentRepo, name);
+      if (r.success) await reloadMeta();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, reloadMeta, t]);
+
   const [sidebarWidth, setSidebarWidth] = useState(200);
   const isResizing = useRef(false);
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -170,6 +233,52 @@ export default function Sidebar() {
           {stashList.length === 0 && <div className="empty-state" style={{ padding: 10 }}>{t("stash.empty")}</div>}
         </div>
       )}
+      <div className="sidebar-subheader" onClick={() => setShowTags(!showTags)} style={{ marginTop: 4 }}>
+        <span className="subheader-arrow">{showTags ? "\u25BC" : "\u25B6"}</span> {t("tags.title")}
+        <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setShowTagInput(!showTagInput); }} title={t("tags.addTip")}>+</button>
+      </div>
+      {showTags && (
+        <div className="sidebar-list" style={{ flex: "none", maxHeight: 160 }}>
+          {showTagInput && (
+            <div className="new-branch-input" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <input type="text" value={tagName} placeholder={t("tags.namePlaceholder")} onChange={(e) => setTagName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreateTag(); if (e.key === "Escape") { setShowTagInput(false); setTagName(""); } }} />
+              <input type="text" value={tagRef} placeholder={t("tags.refPlaceholder")} onChange={(e) => setTagRef(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreateTag(); }} />
+              <button onClick={handleCreateTag} disabled={!tagName.trim()}>{t("tags.create")}</button>
+            </div>
+          )}
+          {tags.map((tag) => (
+            <div key={tag.name} className="branch-item tag-item">
+              <span className="branch-icon">{"\u25C8"}</span>
+              <span className="stash-subject" title={`${tag.subject || tag.hash}`}>{tag.name}</span>
+              <span className="file-actions">
+                <button className="file-action-btn danger" onClick={() => handleDeleteTag(tag.name)}>{t("tags.delete")}</button>
+              </span>
+            </div>
+          ))}
+          {tags.length === 0 && !showTagInput && <div className="empty-state" style={{ padding: 10 }}>{t("tags.empty")}</div>}
+        </div>
+      )}
+      <div className="sidebar-subheader" onClick={() => setShowRemoteInput(!showRemoteInput)} style={{ marginTop: 4 }}>
+        <span className="subheader-arrow">{showRemoteInput ? "\u25BC" : "\u25B6"}</span> {t("remotes.title")}
+        <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setShowRemoteInput(!showRemoteInput); }} title={t("remotes.addTip")}>+</button>
+      </div>
+      {showRemoteInput && (
+        <div className="new-branch-input" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <input type="text" value={remoteName} placeholder={t("remotes.namePlaceholder")} onChange={(e) => setRemoteName(e.target.value)} />
+          <input type="text" value={remoteUrl} placeholder={t("remotes.urlPlaceholder")} onChange={(e) => setRemoteUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleAddRemote(); }} />
+          <button onClick={handleAddRemote} disabled={!remoteName.trim() || !remoteUrl.trim()}>{t("remotes.add")}</button>
+        </div>
+      )}
+      {remotes.map((remote) => (
+        <div key={remote.name} className="branch-item remote-item" title={remote.url}>
+          <span className="branch-icon">{"\u21C4"}</span>
+          <span className="stash-subject">{remote.name}</span>
+          <span className="file-actions">
+            <button className="file-action-btn danger" onClick={() => handleRemoveRemote(remote.name)}>{t("remotes.remove")}</button>
+          </span>
+        </div>
+      ))}
+      {remotes.length === 0 && !showRemoteInput && <div className="empty-state" style={{ padding: 10 }}>{t("remotes.empty")}</div>}
     </div>
     <div className="resize-handle" onMouseDown={handleResizeStart} />
     {contextMenu && (<div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
@@ -181,6 +290,9 @@ export default function Sidebar() {
       )}
       {!contextMenu.isRemote && contextMenu.branch !== currentBranch && (
         <div className="context-menu-item danger" onClick={() => { handleDeleteBranch(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.deleteBranch")} {contextMenu.branch}</div>
+      )}
+      {!contextMenu.isRemote && contextMenu.branch !== currentBranch && (
+        <div className="context-menu-item" onClick={() => { handleRebaseOnto(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.rebaseOnto").replace("{0}", contextMenu.branch)}</div>
       )}
       <div className="context-menu-divider" />
       <div className="context-menu-item" onClick={async () => { await navigator.clipboard.writeText(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.copyName")}</div>

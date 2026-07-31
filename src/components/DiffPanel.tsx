@@ -38,7 +38,9 @@ export default function DiffPanel() {
           filePath={selectedDiffFile.path}
           isStaged={selectedDiffFile.isStaged}
           commitHash={selectedDiffFile.commitHash}
-          readOnly={!!selectedDiffFile.commitHash}
+          compareFrom={selectedDiffFile.fromRef}
+          compareTo={selectedDiffFile.toRef}
+          readOnly={!!selectedDiffFile.commitHash || !!selectedDiffFile.fromRef}
           onClose={() => { setSelectedDiffFile(null); refreshAll(); }}
         />
       </div>

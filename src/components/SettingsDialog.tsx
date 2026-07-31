@@ -19,6 +19,8 @@ export default function SettingsDialog() {
   const [activeTab, setActiveTab] = useState<"general" | "appearance" | "git" | "about">("general");
   const [language, setLanguageLocal] = useState(getGlobalLocale());
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+  const [showGitignore, setShowGitignore] = useState(false);
+  const [gitignoreText, setGitignoreText] = useState("");
 
   useEffect(() => {
     if (!showSettings) return;
@@ -81,6 +83,24 @@ export default function SettingsDialog() {
     gitApi().installUpdate();
   }, []);
 
+  const handleLoadGitignore = useCallback(async () => {
+    if (!currentRepo) return;
+    const r = await gitApi().readGitignore(currentRepo);
+    if (r.success) { setGitignoreText(r.data ?? ""); setShowGitignore(true); }
+    else setError(r.error || t("settings.gitignoreFailed"));
+  }, [currentRepo, setError, t]);
+
+  const handleSaveGitignore = useCallback(async () => {
+    if (!currentRepo) return;
+    setLoading(true, t("settings.gitignoreSaving"));
+    try {
+      const r = await gitApi().writeGitignore(currentRepo, gitignoreText);
+      if (r.success) { setShowGitignore(false); await useRepoStore.getState().refreshAll(); }
+      else setError(r.error || t("settings.gitignoreFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, gitignoreText, setLoading, setError, t]);
+
   if (!showSettings) return null;
 
   return (
@@ -130,6 +150,16 @@ export default function SettingsDialog() {
                 <div className="setting-row"><label>{t("settings.userName")}</label><input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Your name"/></div>
                 <div className="setting-row"><label>{t("settings.userEmail")}</label><input type="text" value={userEmail} onChange={(e) => setUserEmail(e.target.value)} placeholder="your@email.com"/></div>
                 <span className="setting-hint">{t("settings.gitHint")}</span>
+                <div className="setting-row"><label>{t("settings.gitignore")}</label>
+                  <button className="settings-btn secondary" onClick={handleLoadGitignore}>{t("settings.gitignoreEdit")}</button>
+                </div>
+                {showGitignore && <>
+                  <textarea className="gitignore-editor" value={gitignoreText} onChange={(e) => setGitignoreText(e.target.value)} spellCheck={false} />
+                  <div className="setting-row">
+                    <button className="settings-btn primary" onClick={handleSaveGitignore}>{t("settings.gitignoreSave")}</button>
+                    <button className="settings-btn secondary" onClick={() => setShowGitignore(false)}>{t("settings.gitignoreCancel")}</button>
+                  </div>
+                </>}
               </> : <p className="setting-hint">{t("settings.noRepoHint")}</p>}
             </div>}
             {activeTab === "about" && <div className="settings-section">

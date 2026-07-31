@@ -1,4 +1,5 @@
-import { ipcMain, dialog, BrowserWindow } from "electron";
+import { ipcMain, dialog, BrowserWindow, shell } from "electron";
+import type { LogFilters } from "../src/types";
 import type { SettingsRepository } from "./settingsRepository";
 import type { GitRepository } from "./gitRepository";
 import type { UpdateManager } from "./updateManager";
@@ -45,8 +46,8 @@ export function registerIpcHandlers({ settings, git, update, getWindow }: IpcDep
   // --- Repository inspection ---
   ipcMain.handle("git:is-repo", safeHandler(async (repoPath: unknown) => git.isRepo(String(repoPath))));
   ipcMain.handle("git:branches", safeHandler(async (repoPath: unknown) => git.branches(String(repoPath))));
-  ipcMain.handle("git:log", safeHandler(async (repoPath: unknown, skip?: unknown, maxCount?: unknown) =>
-    git.log(String(repoPath), skip as number | undefined, maxCount as number | undefined)));
+  ipcMain.handle("git:log", safeHandler(async (repoPath: unknown, skip?: unknown, maxCount?: unknown, filters?: unknown) =>
+    git.log(String(repoPath), skip as number | undefined, maxCount as number | undefined, filters as LogFilters | undefined)));
   ipcMain.handle("git:status", safeHandler(async (repoPath: unknown) => git.status(String(repoPath))));
   ipcMain.handle("git:show", safeHandler(async (repoPath: unknown, hash: unknown) => git.show(String(repoPath), String(hash))));
   ipcMain.handle("git:last-message", safeHandler(async (repoPath: unknown) => git.lastMessage(String(repoPath))));
@@ -103,7 +104,42 @@ export function registerIpcHandlers({ settings, git, update, getWindow }: IpcDep
   ipcMain.handle("update:download", safeHandler(async () => update.download()));
   ipcMain.handle("update:install", () => { update.install(); return { success: true }; });
   // --- Shell & dialogs ---
+  // --- Clone / history / review ---
+  ipcMain.handle("git:clone", safeHandler(async (url: unknown, destPath: unknown, branch?: unknown) =>
+    git.clone(String(url), String(destPath), branch ? String(branch) : undefined)));
+  ipcMain.handle("git:file-history", safeHandler(async (repoPath: unknown, filePath: unknown, maxCount?: unknown) =>
+    git.fileHistory(String(repoPath), String(filePath), maxCount as number | undefined)));
+  ipcMain.handle("git:blame", safeHandler(async (repoPath: unknown, filePath: unknown, hash?: unknown) =>
+    git.blame(String(repoPath), String(filePath), hash ? String(hash) : undefined)));
+  ipcMain.handle("git:revert", safeHandler(async (repoPath: unknown, hash: unknown) => git.revertCommit(String(repoPath), String(hash))));
+  ipcMain.handle("git:compare", safeHandler(async (repoPath: unknown, fromRef: unknown, toRef: unknown) =>
+    git.compare(String(repoPath), String(fromRef), String(toRef))));
+  ipcMain.handle("git:compare-file-diff", safeHandler(async (repoPath: unknown, fromRef: unknown, toRef: unknown, filePath: unknown) =>
+    git.compareFileDiff(String(repoPath), String(fromRef), String(toRef), String(filePath))));
+  ipcMain.handle("git:cherry-pick", safeHandler(async (repoPath: unknown, hash: unknown) => git.cherryPick(String(repoPath), String(hash))));
+  ipcMain.handle("git:rebase", safeHandler(async (repoPath: unknown, upstream: unknown) => git.rebase(String(repoPath), String(upstream))));
+  ipcMain.handle("git:rebase-abort", safeHandler(async (repoPath: unknown) => git.rebaseAbort(String(repoPath))));
+  ipcMain.handle("git:tags", safeHandler(async (repoPath: unknown) => git.tags(String(repoPath))));
+  ipcMain.handle("git:create-tag", safeHandler(async (repoPath: unknown, name: unknown, ref: unknown, message?: unknown) =>
+    git.createTag(String(repoPath), String(name), String(ref), message ? String(message) : undefined)));
+  ipcMain.handle("git:delete-tag", safeHandler(async (repoPath: unknown, name: unknown) => git.deleteTag(String(repoPath), String(name))));
+  ipcMain.handle("git:remotes", safeHandler(async (repoPath: unknown) => git.remotes(String(repoPath))));
+  ipcMain.handle("git:add-remote", safeHandler(async (repoPath: unknown, name: unknown, url: unknown) =>
+    git.addRemote(String(repoPath), String(name), String(url))));
+  ipcMain.handle("git:remove-remote", safeHandler(async (repoPath: unknown, name: unknown) => git.removeRemote(String(repoPath), String(name))));
+  ipcMain.handle("git:set-remote-url", safeHandler(async (repoPath: unknown, name: unknown, url: unknown) =>
+    git.setRemoteUrl(String(repoPath), String(name), String(url))));
+  ipcMain.handle("git:hosting-url", safeHandler(async (repoPath: unknown, ref?: unknown) =>
+    git.hostingUrl(String(repoPath), ref ? String(ref) : undefined)));
+  ipcMain.handle("git:read-gitignore", safeHandler(async (repoPath: unknown) => git.readGitignore(String(repoPath))));
+  ipcMain.handle("git:write-gitignore", safeHandler(async (repoPath: unknown, content: unknown) =>
+    git.writeGitignore(String(repoPath), String(content))));
+  ipcMain.handle("git:mergetool", safeHandler(async (repoPath: unknown, filePath?: unknown) =>
+    git.mergetool(String(repoPath), filePath ? String(filePath) : undefined)));
+
+  // --- Shell & dialogs ---
   ipcMain.handle("shell:open-git-bash", safeHandler(async (repoPath: unknown) => git.openGitBash(String(repoPath))));
+  ipcMain.handle("shell:open-external", safeHandler(async (url: unknown) => { await shell.openExternal(String(url)); return true; }));
   ipcMain.handle("dialog:open-directory", async () => {
     const win = getWindow();
     if (!win) return null;

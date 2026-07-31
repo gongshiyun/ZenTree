@@ -21,6 +21,15 @@ A lightweight, modern Git GUI client built with Electron + React + TypeScript. D
 - **Keyboard Shortcuts** — `F5` refresh, `Ctrl+Enter` commit, `Esc` dismiss errors
 - **Drag & Drop** — Drop a folder onto the welcome screen to add a repository
 - **Auto Update** — Checks GitHub Releases for new versions, downloads and installs them from Settings > About
+- **Clone Repository** — Clone remote repos by URL with optional branch
+- **File History & Blame** — Per-file history and line-by-line blame with one-click commit navigation
+- **Revert / Cherry-pick / Rebase** — Safe commit rollback, commit picking and branch rebasing
+- **Compare** — Compare branches/tags/commits with ahead/behind stats and file diffs
+- **Tags & Remotes** — Manage tags and remotes from the sidebar
+- **Commit Filters** — Filter the graph by message, author and date
+- **Conflict Resolution** — One-click launch of your merge tool for conflicted files
+- **Hosting Links** — Open repos, branches and commits on GitHub/GitLab/Bitbucket
+- **Auto Refresh** — Detects external changes every 30s and on focus
 
 ## Tech Stack
 

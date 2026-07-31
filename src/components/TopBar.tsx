@@ -12,11 +12,18 @@ export default function TopBar() {
   const language = useRepoStore((s) => s.language);
   const setThemePreset = useRepoStore((s) => s.setThemePreset);
   const setShowSettings = useRepoStore((s) => s.setShowSettings);
+  const setShowClone = useRepoStore((s) => s.setShowClone);
+  const setShowCompare = useRepoStore((s) => s.setShowCompare);
+  const setLogFilters = useRepoStore((s) => s.setLogFilters);
+  const remotes = useRepoStore((s) => s.remotes);
   const loading = useRepoStore((s) => s.loading);
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
   const [searchText, setSearchText] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [fQuery, setFQuery] = useState("");
+  const [fAuthor, setFAuthor] = useState("");
+  const [fSince, setFSince] = useState("");
   const selectorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,6 +31,14 @@ export default function TopBar() {
     const h = (e: MouseEvent) => { if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) { setShowDropdown(false); setSearchText(""); } };
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, [showDropdown]);
+
+  // Debounced commit-log filters
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLogFilters({ query: fQuery.trim() || undefined, author: fAuthor.trim() || undefined, since: fSince || undefined });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [fQuery, fAuthor, fSince, setLogFilters]);
 
   const filteredRepos = repos.filter((r) => r.name.toLowerCase().includes(searchText.toLowerCase()) || r.path.toLowerCase().includes(searchText.toLowerCase()));
 
@@ -64,6 +79,13 @@ export default function TopBar() {
   const handlePush = () => runAsync(() => gitApi().push(currentRepo!), t("topbar.pushing"));
   const handleRefresh = () => useRepoStore.getState().refreshAll();
 
+  const handleOpenOnHosting = useCallback(async () => {
+    if (!currentRepo) return;
+    const r = await gitApi().hostingUrl(currentRepo);
+    if (r.success && r.data) await gitApi().openExternal(r.data);
+    else setError(r.error || t("topbar.noRemote"));
+  }, [currentRepo, setError]);
+
   const handleGitBash = useCallback(async () => {
     if (!currentRepo) return;
     setLoading(true, t("topbar.bashOpen"));
@@ -75,8 +97,9 @@ export default function TopBar() {
   }, [currentRepo, setLoading, setError, t]);
 
   const currentRepoName = repos.find((r) => r.path === currentRepo)?.name || "";
+  const hasRemote = remotes.length > 0;
 
-  return (
+  return (<>
     <div className="top-bar drag-region">
       <span className="window-title no-drag" onClick={() => setShowSettings(true)}>ZenTree</span>
       <div className="repo-selector no-drag" ref={selectorRef}>
@@ -91,7 +114,10 @@ export default function TopBar() {
               {filteredRepos.map((r) => (<div key={r.path} className={`repo-dropdown-item${r.path === currentRepo ? " active" : ""}`} onClick={() => handleRepoChange(r.path)}><span className="repo-item-name">{r.name}</span><span className="repo-item-path">{r.path}</span></div>))}
               {filteredRepos.length === 0 && <div className="repo-dropdown-empty">{searchText ? t("topbar.noMatch") : t("topbar.noAdded")}</div>}
             </div>
-            <div className="repo-dropdown-footer"><button className="toolbar-btn add-repo" onClick={handleAddRepo} style={{ width: "100%", justifyContent: "center" }}>{t("topbar.add")}</button></div>
+            <div className="repo-dropdown-footer">
+              <button className="toolbar-btn add-repo" onClick={handleAddRepo} style={{ flex: 1, justifyContent: "center" }}>{t("topbar.add")}</button>
+              <button className="toolbar-btn add-repo" onClick={() => { setShowClone(true); setShowDropdown(false); }} style={{ flex: 1, justifyContent: "center" }}>{t("topbar.clone")}</button>
+            </div>
           </div>
         )}
       </div>
@@ -100,7 +126,9 @@ export default function TopBar() {
         <button className="toolbar-btn" onClick={handlePull} disabled={loading} title={t("topbar.pullTip")}>{t("topbar.pull")}</button>
         <button className="toolbar-btn" onClick={handlePush} disabled={loading} title={t("topbar.pushTip")}>{t("topbar.push")}</button>
         <button className="toolbar-btn" onClick={handleRefresh} disabled={loading} title={t("topbar.refreshTip")}>{t("topbar.refresh")}</button>
+        <button className="toolbar-btn" onClick={() => setShowCompare(true)} disabled={loading} title={t("topbar.compareTip")}>{t("topbar.compare")}</button>
         <span className="toolbar-separator" />
+        <button className="toolbar-btn" onClick={handleOpenOnHosting} disabled={!hasRemote || loading} title={t("topbar.hostingTip")}>{t("topbar.hosting")}</button>
         <button className="toolbar-btn" onClick={handleGitBash} disabled={loading} title={t("topbar.bashTip")}>{t("topbar.bash")}</button>
       </div>)}
       <div className="top-bar-spacer" />
@@ -115,5 +143,13 @@ export default function TopBar() {
         <button className="window-control-btn close" onClick={() => gitApi().closeWindow()} title={t("topbar.close")}><svg width="12" height="12" viewBox="0 0 12 12"><line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5"/><line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" strokeWidth="1.5"/></svg></button>
       </div>
     </div>
-  );
+    {currentRepo && (
+      <div className="filter-bar no-drag">
+        <input className="filter-input" type="text" placeholder={t("topbar.filterQuery")} value={fQuery} onChange={(e) => setFQuery(e.target.value)} />
+        <input className="filter-input" type="text" placeholder={t("topbar.filterAuthor")} value={fAuthor} onChange={(e) => setFAuthor(e.target.value)} />
+        <input className="filter-input" type="date" title={t("topbar.filterSince")} value={fSince} onChange={(e) => setFSince(e.target.value)} />
+        {(fQuery || fAuthor || fSince) && <button className="filter-clear" onClick={() => { setFQuery(""); setFAuthor(""); setFSince(""); }}>{t("topbar.filterClear")}</button>}
+      </div>
+    )}
+  </>);
 }

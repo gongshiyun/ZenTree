@@ -5,7 +5,7 @@ import { useT } from "../i18n";
 
 type FileTab = "unstaged" | "staged";
 
-type FileStatus = "untracked" | "modified" | "deleted" | "renamed" | "added";
+type FileStatus = "untracked" | "modified" | "deleted" | "renamed" | "added" | "conflict";
 
 interface FileEntry {
   /** Real filesystem path used for git operations. */
@@ -17,8 +17,8 @@ interface FileEntry {
   discardPaths?: string[];
 }
 
-function statLabel(s: FileStatus): string { switch (s) { case "untracked": return "U"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; default: return "M"; } }
-function statIcon(s: FileStatus): string { switch (s) { case "untracked": return "U"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; default: return "M"; } }
+function statLabel(s: FileStatus): string { switch (s) { case "untracked": return "U"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; case "conflict": return "C"; default: return "M"; } }
+function statIcon(s: FileStatus): string { switch (s) { case "untracked": return "U"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; case "conflict": return "C"; default: return "M"; } }
 
 export default function FilePanel() {
   const t = useT();
@@ -47,6 +47,7 @@ export default function FilePanel() {
     for (const r of status.renamed || []) {
       e.push({ path: r.to, label: `${r.from} \u2192 ${r.to}`, status: "renamed", discardPaths: [r.from, r.to] });
     }
+    for (const f of status.conflicted || []) e.push({ path: f, status: "conflict" });
     return e;
   }, [status]);
 
@@ -98,8 +99,56 @@ export default function FilePanel() {
     runOp(() => gitApi().discard(currentRepo, paths), t("status.discarding").replace("{0}", label), t("error.discardFailed"));
   }, [currentRepo, runOp, t]);
 
+  const handleResolveConflict = useCallback((file: FileEntry) => {
+    if (!currentRepo) return;
+    runOp(() => gitApi().mergetool(currentRepo, file.path), t("files.resolving").replace("{0}", file.path), t("error.opFailed"));
+  }, [currentRepo, runOp, t]);
+
+  const handleRevertCommit = useCallback(async () => {
+    if (!currentRepo || !selectedCommit) return;
+    if (!window.confirm(t("commit.confirmRevert").replace("{0}", selectedCommit.substring(0, 7)))) return;
+    setLoading(true, t("commit.reverting"));
+    try {
+      const r = await gitApi().revertCommit(currentRepo, selectedCommit);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, selectedCommit, setLoading, setError, refreshAll, t]);
+
+  const handleCherryPick = useCallback(async () => {
+    if (!currentRepo || !selectedCommit) return;
+    if (!window.confirm(t("commit.confirmCherryPick").replace("{0}", selectedCommit.substring(0, 7)))) return;
+    setLoading(true, t("commit.cherryPicking"));
+    try {
+      const r = await gitApi().cherryPick(currentRepo, selectedCommit);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, selectedCommit, setLoading, setError, refreshAll, t]);
+
+  const handleCopyHash = useCallback(() => {
+    if (selectedCommit) navigator.clipboard.writeText(selectedCommit);
+  }, [selectedCommit]);
+
+  const handleOpenOnHosting = useCallback(async () => {
+    if (!currentRepo || !selectedCommit) return;
+    const r = await gitApi().hostingUrl(currentRepo, selectedCommit);
+    if (r.success && r.data) await gitApi().openExternal(r.data);
+    else setError(r.error || t("files.noRemote"));
+  }, [currentRepo, selectedCommit, setError]);
+
   if (selectedCommit && commitDetail) {
-    return (<div className="file-panel"><div className="file-panel-header"><div className="file-tab active">{t("files.filesIn")} {selectedCommit.substring(0, 7)}</div></div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, commitHash: selectedCommit })}><span className="file-name">{f}</span></div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
+    return (<div className="file-panel"><div className="file-panel-header">
+      <div className="file-tab active">{t("files.filesIn")} {selectedCommit.substring(0, 7)}</div>
+      <div className="commit-actions">
+        <button className="file-action-btn" onClick={handleCopyHash} title={t("commit.copyHash")}>{t("commit.copy")}</button>
+        <button className="file-action-btn" onClick={handleRevertCommit} title={t("commit.revertTip")}>{t("commit.revert")}</button>
+        <button className="file-action-btn" onClick={handleCherryPick} title={t("commit.cherryPickTip")}>{t("commit.cherryPick")}</button>
+        <button className="file-action-btn" onClick={handleOpenOnHosting} title={t("commit.openOnHostingTip")}>{t("commit.openOnHosting")}</button>
+      </div>
+    </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, commitHash: selectedCommit })}><span className="file-name">{f}</span></div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
   }
 
   const currentFiles = activeTab === "unstaged" ? unstagedFiles : stagedFiles;
@@ -109,11 +158,13 @@ export default function FilePanel() {
     <div className={`file-tab${activeTab === "staged" ? " active" : ""}`} onClick={() => setActiveTab("staged")}>{t("files.staged")} <span className="count">{stagedFiles.length}</span></div>
   </div><div className="file-list">
     {currentFiles.map((file) => { const sl = statLabel(file.status); const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged"); const display = file.label || file.path; return (
-      <div key={activeTab + ":" + file.path} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged" })}>
+      <div key={activeTab + ":" + file.path} className={`file-item${isSel ? " selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged" })}>
         <span className={`file-status ${sl}`}>{statIcon(file.status)}</span><span className="file-name" title={display}>{display}</span>
         <span className="file-actions" onClick={(e) => e.stopPropagation()}>
-          {activeTab === "unstaged" ? <button className="file-action-btn" onClick={() => handleStage(file)}>{t("files.stage")}</button> : <button className="file-action-btn" onClick={() => handleUnstage(file)}>{t("files.unstage")}</button>}
-          <button className="file-action-btn danger" onClick={() => handleDiscard(file)}>{t("files.discard")}</button>
+          {file.status === "conflict"
+            ? <button className="file-action-btn" onClick={() => handleResolveConflict(file)}>{t("files.resolve")}</button>
+            : (activeTab === "unstaged" ? <button className="file-action-btn" onClick={() => handleStage(file)}>{t("files.stage")}</button> : <button className="file-action-btn" onClick={() => handleUnstage(file)}>{t("files.unstage")}</button>)}
+          {file.status !== "conflict" && <button className="file-action-btn danger" onClick={() => handleDiscard(file)}>{t("files.discard")}</button>}
         </span>
       </div>
     ); })}

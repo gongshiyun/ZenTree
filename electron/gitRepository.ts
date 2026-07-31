@@ -1,4 +1,5 @@
 import simpleGit, { SimpleGit } from "simple-git";
+import type { BlameLine, CompareFileStat, CompareResult, FileHistoryEntry, LogFilters, RemoteInfo, TagInfo } from "../src/types";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -37,11 +38,15 @@ export class GitRepository {
   }
 
   /** Paginated commit log. Returns an empty list for a repository with no commits. */
-  async log(repoPath: string, skip?: number, maxCount?: number) {
+  async log(repoPath: string, skip?: number, maxCount?: number, filters?: LogFilters) {
     const git = this.git(repoPath);
     const args = ["log", `--format=%H${LOG_SEP}%P${LOG_SEP}%an${LOG_SEP}%ae${LOG_SEP}%at${LOG_SEP}%s`];
     if (skip) args.push(`--skip=${skip}`);
     if (maxCount) args.push(`--max-count=${maxCount}`);
+    if (filters?.query) args.push("--grep=" + filters.query, "--regexp-ignore-case");
+    if (filters?.author) args.push("--author=" + filters.author);
+    if (filters?.since) args.push("--since=" + filters.since);
+    if (filters?.until) args.push("--until=" + filters.until);
     let result: string;
     try {
       result = await git.raw(args);
@@ -291,4 +296,225 @@ export class GitRepository {
     childProcess.execFile(bashPath, [], { cwd: repoPath });
     return "Git Bash opened";
   }
+
+  /** Clone a repository into destPath (parent directory must exist). */
+  async clone(url: string, destPath: string, branch?: string): Promise<string> {
+    if (fs.existsSync(destPath) && fs.readdirSync(destPath).length > 0) {
+      throw new Error("Destination directory is not empty");
+    }
+    const options = branch ? ["--branch", branch] : [];
+    await simpleGit({ binary: this.getGitPath() || "git" }).clone(url, destPath, options);
+    return destPath;
+  }
+
+  /** Commit history for a single file (follows renames). */
+  async fileHistory(repoPath: string, filePath: string, maxCount = 200): Promise<FileHistoryEntry[]> {
+    const args = ["log", "--follow", `--format=%H${LOG_SEP}%an${LOG_SEP}%ae${LOG_SEP}%at${LOG_SEP}%s`, `--max-count=${maxCount}`, "--", filePath];
+    const result = await this.git(repoPath).raw(args);
+    return result.split("\n").filter(Boolean).map((line: string) => {
+      const [hash, author, email, date, subject] = line.split(LOG_SEP);
+      return { hash, shortHash: hash.substring(0, 7), author, email, timestamp: parseInt(date, 10), subject };
+    });
+  }
+
+  /** Line-by-line blame via --line-porcelain. */
+  async blame(repoPath: string, filePath: string, hash?: string): Promise<BlameLine[]> {
+    const args = ["blame", "--line-porcelain"];
+    if (hash) args.push(hash);
+    args.push("--", filePath);
+    const result = await this.git(repoPath).raw(args);
+    const lines = result.split("\n");
+    const out: BlameLine[] = [];
+    const groupStartRe = /^([a-f0-9]{40}) (\d+) (\d+)(?: (\d+))?$/;
+    // Per --line-porcelain, every record is: header line, metadata lines, content line.
+    // The content is always the LAST line of the group (with a leading tab).
+    let current: { hash: string; lineNumber: number } | null = null;
+    let groupLines: string[] = [];
+    const finalize = () => {
+      if (!current) return;
+      // Drop the empty artifact produced by the trailing newline of the output
+      while (groupLines.length > 0 && groupLines[groupLines.length - 1] === "") groupLines.pop();
+      const raw = groupLines.length > 0 ? groupLines[groupLines.length - 1] : "";
+      const content = raw.replace(/^\t/, "");
+      const meta: Partial<BlameLine> = {};
+      for (const ml of groupLines.slice(0, -1)) {
+        const kv = ml.match(/^(author|author-mail|author-time|summary) (.*)$/);
+        if (!kv) continue;
+        if (kv[1] === "author") meta.author = kv[2];
+        else if (kv[1] === "author-mail") meta.email = kv[2];
+        else if (kv[1] === "author-time") meta.timestamp = parseInt(kv[2], 10);
+        else if (kv[1] === "summary") meta.subject = kv[2];
+      }
+      out.push({
+        hash: current.hash,
+        shortHash: current.hash.substring(0, 7),
+        lineNumber: current.lineNumber,
+        content,
+        author: meta.author ?? "",
+        email: meta.email ?? "",
+        timestamp: meta.timestamp ?? 0,
+        subject: meta.subject,
+      });
+    };
+    for (const line of lines) {
+      const h = line.match(groupStartRe);
+      if (h) {
+        finalize();
+        current = { hash: h[1], lineNumber: parseInt(h[3], 10) };
+        groupLines = [];
+        continue;
+      }
+      if (current) groupLines.push(line);
+    }
+    finalize();
+    return out;
+  }
+
+  /** Create a revert commit for the given commit. */
+  async revertCommit(repoPath: string, hash: string): Promise<string> {
+    return this.git(repoPath).raw(["revert", "--no-edit", hash]);
+  }
+
+  /** Compare two refs: ahead/behind counts plus per-file diff stats. */
+  async compare(repoPath: string, fromRef: string, toRef: string): Promise<CompareResult> {
+    const git = this.git(repoPath);
+    const counts = (await git.raw(["rev-list", "--left-right", "--count", `${fromRef}...${toRef}`])).trim().split(/\s+/);
+    const ahead = parseInt(counts[0] || "0", 10);
+    const behind = parseInt(counts[1] || "0", 10);
+
+    const numstat = await git.raw(["diff", "--numstat", fromRef, toRef]);
+    const nameStatus = await git.raw(["diff", "--name-status", fromRef, toRef]);
+    const statusMap = new Map<string, string>();
+    for (const line of nameStatus.split("\n").filter(Boolean)) {
+      const parts = line.split("\t");
+      if (parts.length >= 2) {
+        // Renames/copies report "R100\told\tnew"
+        const target = parts[parts.length - 1];
+        statusMap.set(target, parts[0].replace(/\d+$/, ""));
+      }
+    }
+    let totalAdditions = 0;
+    let totalDeletions = 0;
+    const files: CompareFileStat[] = [];
+    for (const line of numstat.split("\n").filter(Boolean)) {
+      const [add, del, ...rest] = line.split("\t");
+      const filePath = rest.join("\t");
+      const additions = add === "-" ? 0 : parseInt(add, 10);
+      const deletions = del === "-" ? 0 : parseInt(del, 10);
+      totalAdditions += additions;
+      totalDeletions += deletions;
+      files.push({ path: filePath, status: statusMap.get(filePath) || "M", additions, deletions });
+    }
+    return { from: fromRef, to: toRef, ahead, behind, files, totalAdditions, totalDeletions };
+  }
+
+  async compareFileDiff(repoPath: string, fromRef: string, toRef: string, filePath: string): Promise<string> {
+    return this.git(repoPath).raw(["diff", fromRef, toRef, "--", filePath]);
+  }
+
+  /** Rebase the current branch onto the given upstream ref. */
+  async rebase(repoPath: string, upstream: string): Promise<string> {
+    return this.git(repoPath).raw(["rebase", upstream]);
+  }
+
+  /** Abort an in-progress rebase. */
+  async rebaseAbort(repoPath: string): Promise<string> {
+    return this.git(repoPath).raw(["rebase", "--abort"]);
+  }
+
+  /** Apply one or more commits onto the current HEAD. */
+  async cherryPick(repoPath: string, hash: string): Promise<string> {
+    return this.git(repoPath).raw(["cherry-pick", hash]);
+  }
+
+  async tags(repoPath: string): Promise<TagInfo[]> {
+    const result = await this.git(repoPath).raw(["tag", "-l", "--format=%(refname:short)%00%(objectname:short)%00%(creatordate:iso8601)%00%(contents:subject)"]);
+    return result.split("\n").filter(Boolean).map((line: string) => {
+      const [name, hash, date, subject] = line.split("\0");
+      return { name, hash: hash || "", date: date || "", subject: subject || "" };
+    });
+  }
+
+  async createTag(repoPath: string, name: string, ref: string, message?: string): Promise<string> {
+    const args = message ? ["tag", "-a", name, "-m", message, ref] : ["tag", name, ref];
+    return this.git(repoPath).raw(args);
+  }
+
+  async deleteTag(repoPath: string, name: string): Promise<string> {
+    return this.git(repoPath).raw(["tag", "-d", name]);
+  }
+
+  async remotes(repoPath: string): Promise<RemoteInfo[]> {
+    const result = await this.git(repoPath).raw(["config", "--get-regexp", "^remote\\..*\\.url$"]);
+    const map = new Map<string, string>();
+    for (const line of result.split("\n").filter(Boolean)) {
+      const m = line.match(/^remote\.(.+)\.url (.*)$/);
+      if (m) map.set(m[1], m[2]);
+    }
+    return [...map.entries()].map(([name, url]) => ({ name, url }));
+  }
+
+  async addRemote(repoPath: string, name: string, url: string): Promise<string> {
+    return this.git(repoPath).raw(["remote", "add", name, url]);
+  }
+
+  async removeRemote(repoPath: string, name: string): Promise<string> {
+    return this.git(repoPath).raw(["remote", "remove", name]);
+  }
+
+  async setRemoteUrl(repoPath: string, name: string, url: string): Promise<string> {
+    return this.git(repoPath).raw(["remote", "set-url", name, url]);
+  }
+
+  async readGitignore(repoPath: string): Promise<string> {
+    const p = path.join(repoPath, ".gitignore");
+    return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
+  }
+
+  async writeGitignore(repoPath: string, content: string): Promise<boolean> {
+    fs.writeFileSync(path.join(repoPath, ".gitignore"), content, "utf8");
+    return true;
+  }
+
+  /** Launch the configured merge tool for conflicted files. */
+  async mergetool(repoPath: string, filePath?: string): Promise<string> {
+    const tool = (await this.git(repoPath).raw(["config", "merge.tool"])).trim();
+    if (!tool) {
+      throw new Error("No merge tool configured. Run: git config --global merge.tool <tool>");
+    }
+    const args = ["mergetool", "--no-prompt"];
+    if (filePath) args.push("--", filePath);
+    return this.git(repoPath).raw(args);
+  }
+
+  /** Build a hosting-platform URL (GitHub/GitLab/Bitbucket) for a repo or ref. */
+  async hostingUrl(repoPath: string, ref?: string): Promise<string | null> {
+    const remotes = await this.remotes(repoPath);
+    if (remotes.length === 0) return null;
+    const preferred = remotes.find((r) => /github|gitlab|bitbucket/.test(r.url)) || remotes[0];
+    return parseHostingUrl(preferred.url, ref);
+  }
+}
+
+/** Parse a remote URL into a hosting-platform web URL (pure, testable). */
+export function parseHostingUrl(remoteUrl: string, ref?: string): string | null {
+  let url = remoteUrl.trim();
+  if (!url) return null;
+  // git@github.com:owner/repo.git  ->  https://github.com/owner/repo
+  let m = url.match(/^(?:ssh:\/\/)?git@([^:]+):(.+)$/);
+  if (m) url = `https://${m[1]}/${m[2]}`;
+  // ssh://git@github.com/owner/repo.git
+  m = url.match(/^ssh:\/\/git@([^/]+)\/(.+)$/);
+  if (m) url = `https://${m[1]}/${m[2]}`;
+  if (!/^https?:\/\//.test(url)) return null;
+  url = url.replace(/\.git$/, "").replace(/\/$/, "");
+  const hostMatch = url.match(/^https?:\/\/([^/]+)/);
+  if (!hostMatch) return null;
+  const host = hostMatch[1];
+  if (!ref) return url;
+  if (/^[0-9a-f]{7,40}$/i.test(ref)) {
+    return /gitlab\./.test(host) ? `${url}/-/commit/${ref}` : `${url}/commit/${ref}`;
+  }
+  const branch = encodeURIComponent(ref);
+  return /gitlab\./.test(host) ? `${url}/-/tree/${branch}` : `${url}/tree/${branch}`;
 }
