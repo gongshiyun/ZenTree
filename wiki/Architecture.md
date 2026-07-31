@@ -64,18 +64,26 @@ UI Update ← Zustand Store ← Component ← IPC Response ←┘
 
 | Module | Responsibility | Dependencies |
 |--------|---------------|--------------|
-| `electron/main.ts` | Window lifecycle, IPC handlers, Git operations, settings I/O | electron, simple-git, fs, child_process |
-| `electron/preload.ts` | Secure bridge (contextBridge) | electron |
-| `src/stores/repoStore.ts` | Global state, graph data construction, theme application | zustand, i18n |
-| `src/renderer/canvasRenderer.ts` | Canvas 2D rendering, camera, hit-testing, events | types |
-| `src/components/*` | UI presentation, user interaction | stores, i18n, types |
+| `electron/main.ts` | Composition root: wires settings, git, window and IPC | electron |
+| `electron/windowManager.ts` | BrowserWindow lifecycle + bounds persistence | electron |
+| `electron/settingsRepository.ts` | Settings JSON persistence (infrastructure) | fs, path |
+| `electron/gitRepository.ts` | simple-git adapter, git-bash locator (infrastructure) | simple-git, fs, child_process |
+| `electron/ipc.ts` | IPC channel registration, validation, safeHandler | electron |
+| `electron/preload.ts` | Secure bridge (contextBridge), typed by shared GitAPI | electron |
+| `src/domain/graph/*` | Pure graph layout + lane/color algorithms | types |
+| `src/domain/theme/presets.ts` | Theme presets + CSS variable application | — |
+| `src/domain/diff/*` | Diff parsing, hunk patch building, syntax highlighting (pure) | types |
+| `src/application/repoStore.ts` | Zustand store: state + use cases (refresh, load more, settings init) | zustand, i18n, domain |
+| `src/infrastructure/gitBridge.ts` | Renderer-side gateway over window.gitAPI | types |
+| `src/renderer/canvasRenderer.ts` | Canvas 2D rendering, camera, hit-testing, events | domain/graph, types |
+| `src/components/*` | UI presentation, user interaction | application, i18n, types |
 | `src/i18n/*` | Locale strings, reactive translation hooks | — |
-| `src/types/index.ts` | Shared interfaces (GitAPI, GraphNode, DiffHunk, etc.) | — |
+| `src/types/index.ts` | Shared contracts (GitAPI, AppSettings, GraphNode, DiffHunk, etc.) | — |
 
 ## Security Model
 
 - `contextIsolation: true` — renderer cannot access Node.js APIs
 - `nodeIntegration: false` — no `require()` in renderer
-- `sandbox: false` — required for `simple-git` IPC (preload needs Node)
+- `sandbox: true` — preload only uses `contextBridge`/`ipcRenderer`, which work sandboxed
 - All filesystem access confined to main process
 - Hunk patches written to OS temp dir and cleaned up immediately

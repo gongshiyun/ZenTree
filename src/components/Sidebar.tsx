@@ -1,6 +1,7 @@
 ﻿import { useCallback, useState, useRef, useEffect } from "react";
-import { useRepoStore } from "../stores/repoStore";
+import { useRepoStore } from "../application/repoStore";
 import { useT } from "../i18n";
+import { gitApi } from "../infrastructure/gitBridge";
 
 export default function Sidebar() {
   const t = useT();
@@ -27,7 +28,7 @@ export default function Sidebar() {
   const loadStashList = useCallback(async () => {
     if (!currentRepo) return;
     try {
-      const r = await window.gitAPI.stashList(currentRepo);
+      const r = await gitApi().stashList(currentRepo);
       if (r.success && r.data) setStashList(r.data);
       else setStashList([]);
     } catch { setStashList([]); }
@@ -39,7 +40,7 @@ export default function Sidebar() {
     if (!currentRepo) return;
     setLoading(true, t("stash.saving"));
     try {
-      const r = await window.gitAPI.stashSave(currentRepo);
+      const r = await gitApi().stashSave(currentRepo);
       if (r.success) { await refreshAll(); await loadStashList(); }
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
@@ -49,7 +50,7 @@ export default function Sidebar() {
     if (!currentRepo) return;
     setLoading(true, t("stash.popping"));
     try {
-      const r = await window.gitAPI.stashPop(currentRepo, ref);
+      const r = await gitApi().stashPop(currentRepo, ref);
       if (r.success) { await refreshAll(); await loadStashList(); }
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
@@ -60,7 +61,7 @@ export default function Sidebar() {
     if (!window.confirm(t("stash.confirmDrop").replace("{0}", subject))) return;
     setLoading(true, t("stash.dropping"));
     try {
-      const r = await window.gitAPI.stashDrop(currentRepo, ref);
+      const r = await gitApi().stashDrop(currentRepo, ref);
       if (r.success) await loadStashList();
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
@@ -69,7 +70,7 @@ export default function Sidebar() {
   const handleCheckout = useCallback(async (branch: string) => {
     if (!currentRepo || branch === currentBranch) return;
     setLoading(true, t("status.checkingOut").replace("{0}", branch));
-    try { const r = await window.gitAPI.checkout(currentRepo, branch); if (r.success) await refreshAll(); else setError(r.error || t("error.checkoutFailed")); }
+    try { const r = await gitApi().checkout(currentRepo, branch); if (r.success) await refreshAll(); else setError(r.error || t("error.checkoutFailed")); }
     catch (err: any) { setError(err.message || t("error.checkoutFailed")); } finally { setLoading(false, ""); }
   }, [currentRepo, currentBranch, setLoading, setError, refreshAll]);
 
@@ -77,7 +78,7 @@ export default function Sidebar() {
     if (!currentRepo || !newBranchName.trim()) return;
     setLoading(true, t("sidebar.creatingBranch").replace("{0}", newBranchName.trim()));
     try {
-      const r = await window.gitAPI.createBranch(currentRepo, newBranchName.trim(), true);
+      const r = await gitApi().createBranch(currentRepo, newBranchName.trim(), true);
       if (r.success) { setShowNewBranch(false); setNewBranchName(""); await refreshAll(); }
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
@@ -89,7 +90,7 @@ export default function Sidebar() {
     if (!window.confirm(t("sidebar.confirmDelete").replace("{0}", branch))) return;
     setLoading(true, t("sidebar.deletingBranch").replace("{0}", branch));
     try {
-      const r = await window.gitAPI.deleteBranch(currentRepo, branch, false);
+      const r = await gitApi().deleteBranch(currentRepo, branch, false);
       if (r.success) await refreshAll();
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
@@ -100,7 +101,7 @@ export default function Sidebar() {
     if (!window.confirm(t("sidebar.confirmMerge").replace("{0}", branch).replace("{1}", currentBranch))) return;
     setLoading(true, t("sidebar.merging").replace("{0}", branch));
     try {
-      const r = await window.gitAPI.merge(currentRepo, branch);
+      const r = await gitApi().merge(currentRepo, branch);
       if (r.success) await refreshAll();
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }

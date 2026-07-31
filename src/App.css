@@ -1026,6 +1026,8 @@
 .commit-bar textarea { resize: vertical; min-height: 54px; max-height: 300px; overflow: auto; }
 
 /* Remove old fixed height constraint */
- }
 /* Repo dropdown footer */
 .repo-dropdown-footer { padding: 6px; border-top: 1px solid var(--border-color); }
+/* Electron frameless-window drag regions */
+.drag-region { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }

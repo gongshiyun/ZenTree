@@ -72,20 +72,28 @@ npm run pack
 
 ```
 ZenTree/
-├── electron/          # Electron main process + preload
-│   ├── main.ts        # IPC handlers, window management
-│   └── preload.ts     # contextBridge API
+├── electron/              # Electron 主进程（基础设施层）
+│   ├── main.ts            # 组合根：装配 settings/git/window/ipc
+│   ├── windowManager.ts   # 窗口生命周期 + 尺寸持久化
+│   ├── settingsRepository.ts  # 设置 JSON 持久化适配器
+│   ├── gitRepository.ts   # simple-git 适配器 + Git Bash 定位
+│   ├── ipc.ts             # IPC 通道注册（校验 + 错误包装）
+│   └── preload.ts         # contextBridge 安全桥（共享 GitAPI 类型）
 ├── src/
-│   ├── components/    # React UI components
-│   ├── stores/        # Zustand state management
-│   ├── renderer/      # Canvas graph renderer
-│   ├── i18n/          # English / Chinese locales
-│   └── types/         # TypeScript type definitions
+│   ├── domain/            # 领域层（纯逻辑，无 UI/IPC 依赖）
+│   │   ├── graph/         # 提交图谱布局算法、分支配色
+│   │   ├── theme/         # 主题预设与 CSS 变量应用
+│   │   └── diff/          # 差异解析、hunk 补丁、语法高亮
+│   ├── application/       # 应用层：Zustand store（状态 + 用例编排）
+│   ├── infrastructure/    # 渲染侧网关：gitBridge
+│   ├── components/        # 界面层 React 组件
+│   ├── renderer/          # Canvas 图谱渲染器
+│   ├── i18n/              # 中英文语言包
+│   └── types/             # 跨层共享类型契约
 ├── package.json
 ├── vite.config.ts
 └── tsconfig.json
 ```
-
 ## License
 
 MIT

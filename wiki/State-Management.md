@@ -2,7 +2,7 @@
 
 ## Overview
 
-ZenTree uses **Zustand 5** for global state management. A single store (`useRepoStore`) holds all application state and actions, defined in `src/stores/repoStore.ts`.
+ZenTree uses **Zustand 5** for global state management. A single store (`useRepoStore`) holds all application state and actions, defined in `src/application/repoStore.ts`.
 
 ## Store Shape
 

@@ -1,10 +1,14 @@
+/**
+ * Shared contracts between the Electron main process (infrastructure),
+ * the preload bridge, and the renderer (application/UI layers).
+ */
+
 export interface GitAPI {
   isRepo: (repoPath: string) => Promise<{ success: boolean; data?: boolean; error?: string }>;
   branches: (repoPath: string) => Promise<{ success: boolean; data?: { all: string[]; current: string; branches: Record<string, any> }; error?: string }>;
   log: (repoPath: string, skip: number, maxCount: number) => Promise<{ success: boolean; data?: CommitLogEntry[]; error?: string }>;
   status: (repoPath: string) => Promise<{ success: boolean; data?: GitStatusData; error?: string }>;
   show: (repoPath: string, hash: string) => Promise<{ success: boolean; data?: CommitDetail; error?: string }>;
-  showDetail: (repoPath: string, hash: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   lastMessage: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   stage: (repoPath: string, files: string[]) => Promise<{ success: boolean; error?: string }>;
   unstage: (repoPath: string, files: string[]) => Promise<{ success: boolean; error?: string }>;
@@ -32,12 +36,23 @@ export interface GitAPI {
   revertHunk: (repoPath: string, patchContent: string) => Promise<{ success: boolean; error?: string }>;
   getConfig: (repoPath: string) => Promise<{ success: boolean; data?: { userName: string; userEmail: string }; error?: string }>;
   setConfig: (repoPath: string, key: string, value: string) => Promise<{ success: boolean; error?: string }>;
-  getSettings: () => Promise<Record<string, any>>;
-  setSetting: (key: string, value: any) => Promise<{ success: boolean }>;
+  getSettings: () => Promise<AppSettings>;
+  setSetting: (key: string, value: unknown) => Promise<{ success: boolean }>;
   minimizeWindow: () => Promise<void>;
   maximizeWindow: () => Promise<void>;
   closeWindow: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
+}
+
+export interface AppSettings {
+  windowWidth?: number;
+  windowHeight?: number;
+  gitPath?: string;
+  repos?: { path: string; name: string }[];
+  themePreset?: string;
+  language?: "en" | "zh";
+  lastRepo?: string | null;
+  [key: string]: unknown;
 }
 
 export interface CommitLogEntry {
@@ -83,13 +98,6 @@ export interface DiffLine {
   content: string;
   oldLineNum?: number;
   newLineNum?: number;
-}
-
-export interface ThemePreset {
-  name: string;
-  label: string;
-  colors: Record<string, string>;
-  isDark: boolean;
 }
 
 declare global {

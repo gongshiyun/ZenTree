@@ -1,35 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useRepoStore } from "../stores/repoStore";
+import { useRepoStore } from "../application/repoStore";
 import { useT } from "../i18n";
-import { highlightLine } from "../utils/highlight";
+import { highlightLine } from "../domain/diff/highlight";
+import { parseDiff, buildHunkPatch } from "../domain/diff/parser";
+import { gitApi } from "../infrastructure/gitBridge";
 import type { DiffHunk } from "../types";
-
-function parseDiff(diffText: string): DiffHunk[] {
-  const hunks: DiffHunk[] = [];
-  const lines = diffText.split("\n");
-  let cur: DiffHunk | null = null;
-  let ol = 0, nl = 0;
-  for (const line of lines) {
-    const m = line.match(/^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@(.*)/);
-    if (m) {
-      if (cur) hunks.push(cur);
-      cur = { header: m[0], oldStart: +m[1], oldCount: +(m[2]||1), newStart: +m[3], newCount: +(m[4]||1), lines: [] };
-      ol = cur.oldStart; nl = cur.newStart;
-    } else if (cur) {
-      if (line.startsWith("-")) cur.lines.push({ type: "deletion", content: line.substring(1), oldLineNum: ol++ });
-      else if (line.startsWith("+")) cur.lines.push({ type: "addition", content: line.substring(1), newLineNum: nl++ });
-      else if (line.startsWith(" ")||line==="") cur.lines.push({ type: "context", content: line.startsWith(" ")?line.substring(1):line, oldLineNum: ol++, newLineNum: nl++ });
-    }
-  }
-  if (cur) hunks.push(cur);
-  return hunks;
-}
-
-function buildHunkPatch(fp: string, h: DiffHunk): string {
-  const ls = [`diff --git a/${fp} b/${fp}`, `--- a/${fp}`, `+++ b/${fp}`, h.header];
-  for (const l of h.lines) ls.push(l.type==="addition"?"+"+l.content:l.type==="deletion"?"-"+l.content:" "+l.content);
-  return ls.join("\n")+"\n";
-}
 
 interface Props { filePath: string; isStaged: boolean; onClose: () => void; commitHash?: string; readOnly?: boolean; }
 
@@ -49,7 +24,7 @@ export default function DiffViewer({ filePath, isStaged, onClose, commitHash, re
     if (!currentRepo) return;
     setFetching(true); setFetchError("");
     (async () => {
-      const r = commitHash ? await window.gitAPI.commitFileDiff(currentRepo, commitHash, filePath) : await window.gitAPI.diffFile(currentRepo, filePath, isStaged);
+      const r = commitHash ? await gitApi().commitFileDiff(currentRepo, commitHash, filePath) : await gitApi().diffFile(currentRepo, filePath, isStaged);
       if (r.success && r.data !== undefined) setDiffText(r.data);
       else setFetchError(r.error || t("diff.fetchFailed"));
       setFetching(false);
@@ -62,9 +37,9 @@ export default function DiffViewer({ filePath, isStaged, onClose, commitHash, re
     setLoading(true, action==="stage"?t("diff.stagingHunk"):action==="unstage"?t("diff.unstagingHunk"):t("diff.revertingHunk"));
     try {
       let r;
-      if (action==="stage") r = await window.gitAPI.stageHunk(currentRepo, patch);
-      else if (action==="unstage") r = await window.gitAPI.unstageHunk(currentRepo, patch);
-      else r = await window.gitAPI.revertHunk(currentRepo, patch);
+      if (action==="stage") r = await gitApi().stageHunk(currentRepo, patch);
+      else if (action==="unstage") r = await gitApi().unstageHunk(currentRepo, patch);
+      else r = await gitApi().revertHunk(currentRepo, patch);
       if (r.success) { await refreshAll(); setRefreshKey(k=>k+1); }
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); }
@@ -78,7 +53,7 @@ export default function DiffViewer({ filePath, isStaged, onClose, commitHash, re
       <div className="diff-header">
         <button className="diff-back-btn" onClick={onClose}>{t("diff.back")}</button>
         <span className="diff-file-name">{fileName}</span>
-        <span className="diff-badge">{isStaged ? t("diff.staged") : t("diff.unstaged")}</span>
+        <span className="diff-badge">{commitHash ? t("diff.commit") : (isStaged ? t("diff.staged") : t("diff.unstaged"))}</span>
       </div>
       <div className="diff-content">
         {fetching && <div className="diff-empty"><span className="spinner" /> {t("diff.loading")}</div>}

@@ -1,5 +1,5 @@
-﻿import { useT } from "../i18n";
-import { useRepoStore } from "../stores/repoStore";
+import { useT } from "../i18n";
+import { useRepoStore } from "../application/repoStore";
 
 export default function StatusBar() {
   const t = useT();

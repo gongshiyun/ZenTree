@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useRepoStore } from "../stores/repoStore";
+import { useRepoStore } from "../application/repoStore";
 import { GraphRenderer } from "../renderer/canvasRenderer";
 import { useT } from "../i18n";
+import { gitApi } from "../infrastructure/gitBridge";
 import type { GraphNode } from "../types";
 
 function formatDate(ts: number): string {
@@ -98,13 +99,15 @@ export default function CommitGraph() {
         },
         onClick: async (node) => {
           selectCommit(node.hash);
-          if (currentRepo) {
-            const result = await window.gitAPI.show(currentRepo, node.hash);
+          const repo = useRepoStore.getState().currentRepo;
+          if (repo) {
+            const result = await gitApi().show(repo, node.hash);
             if (result.success && result.data) {
               setCommitDetail(result.data);
             }
           }
         },
+        onNearBottom: () => useRepoStore.getState().loadMoreCommits(),
         onContextMenu: (node, x, y) => {
           setCtxMenu({ x, y, node });
         },
@@ -165,7 +168,7 @@ export default function CommitGraph() {
     setCtxMenu(null);
     setLoading(true, t("graph.resetting").replace("{0}", mode));
     try {
-      const r = await window.gitAPI.reset(currentRepo, hash, mode);
+      const r = await gitApi().reset(currentRepo, hash, mode);
       if (r.success) await refreshAll();
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }

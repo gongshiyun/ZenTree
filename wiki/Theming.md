@@ -2,7 +2,7 @@
 
 ## Overview
 
-ZenTree supports **10 color themes** (8 dark + 2 light) implemented via CSS custom properties. Themes are defined as presets in `src/stores/repoStore.ts` and applied at runtime by setting variables on `document.documentElement`.
+ZenTree supports **10 color themes** (8 dark + 2 light) implemented via CSS custom properties. Themes are defined as presets in `src/domain/theme/presets.ts` and applied at runtime by setting variables on `document.documentElement`.
 
 ## Theme Presets
 

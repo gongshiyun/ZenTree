@@ -84,6 +84,7 @@ const en: Record<string, string> = {
   "commit.amendTip": "Amend last commit",
   "commit.commitTip": " staged file(s)",
   "diff.back": "← Back",
+  "diff.commit": "Commit",
   "diff.staged": "Staged",
   "diff.unstaged": "Unstaged",
   "diff.stageBtn": "Stage",

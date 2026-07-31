@@ -4,7 +4,7 @@
 
 ```
 npm run build
-    ├── tsc -p tsconfig.main.json    → dist-electron/main.js + preload.js
+    ├── tsc -p tsconfig.main.json    → dist-electron/electron/main.js + preload.js
     └── vite build                   → dist/ (bundled renderer)
 
 npm run pack

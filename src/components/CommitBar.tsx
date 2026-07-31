@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useRepoStore } from "../stores/repoStore";
+import { useRepoStore } from "../application/repoStore";
+import { gitApi } from "../infrastructure/gitBridge";
 import { useT } from "../i18n";
 
 export default function CommitBar() {
@@ -28,7 +29,7 @@ export default function CommitBar() {
       userMessageRef.current = message;
       (async () => {
         try {
-          const r = await window.gitAPI.lastMessage(currentRepo);
+          const r = await gitApi().lastMessage(currentRepo);
           if (r.success && r.data) { setLastCommitMsg(r.data); setMessage(r.data); }
         } catch { /* */ }
       })();
@@ -36,18 +37,18 @@ export default function CommitBar() {
       setMessage(userMessageRef.current);
       setLastCommitMsg("");
     }
-  }, [amend, currentRepo]);
+  }, [amend, currentRepo, message]);
 
   const handleCommit = useCallback(async () => {
     if (!currentRepo) return;
     setLoading(true, amend ? t("commit.amending") : t("commit.committing"));
     try {
-      const r = await window.gitAPI.commit(currentRepo, message.trim(), amend);
+      const r = await gitApi().commit(currentRepo, message.trim(), amend);
       if (r.success) { setMessage(""); setAmend(false); userMessageRef.current = ""; setLastCommitMsg(""); await refreshAll(); }
       else setError(r.error || t("error.commitFailed"));
     } catch (err: any) { setError(err.message || t("error.commitFailed")); }
     finally { setLoading(false, ""); }
-  }, [currentRepo, message, amend, setLoading, setError, refreshAll]);
+  }, [currentRepo, message, amend, setLoading, setError, refreshAll, t]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleCommit(); }

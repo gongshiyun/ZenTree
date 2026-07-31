@@ -84,6 +84,7 @@ const zh: Record<string, string> = {
   "commit.amendTip": "修改上一次提交",
   "commit.commitTip": " 个已暂存文件",
   "diff.back": "← 返回",
+  "diff.commit": "提交",
   "diff.staged": "已暂存",
   "diff.unstaged": "未暂存",
   "diff.stageBtn": "暂存",

@@ -1,8 +1,7 @@
 import type { GraphData, GraphNode, GraphEdge } from "../types";
+import { GRAPH_LANE_WIDTH } from "../domain/graph/layout";
 
 const NODE_RADIUS = 7;
-const ROW_HEIGHT = 32;
-const LANE_WIDTH = 24;
 const PADDING_LEFT = 20;
 const PADDING_TOP = 16;
 
@@ -28,7 +27,6 @@ export class GraphRenderer {
   private dragCameraStart: Camera = { offsetX: 0, offsetY: 0, scale: 1 };
   private theme: "dark" | "light" = "dark";
   private rafId: number | null = null;
-  private renderDirty = false;
   private highlightHashes: Set<string> = new Set();
 
   // Callbacks
@@ -66,8 +64,9 @@ export class GraphRenderer {
   }
 
   setData(data: GraphData) {
+    const firstLoad = this.data.nodes.length === 0 && data.nodes.length > 0;
     this.data = data;
-    if (this.data.nodes.length > 0) {
+    if (firstLoad) {
       const firstNode = this.data.nodes[0];
       this.camera.offsetX = this.width / 2 - firstNode.x;
       this.camera.offsetY = 40;
@@ -109,7 +108,6 @@ export class GraphRenderer {
     if (this.rafId !== null) return;
     this.rafId = requestAnimationFrame(() => {
       this.rafId = null;
-      this.renderDirty = false;
       this.render();
     });
   }
@@ -171,7 +169,7 @@ export class GraphRenderer {
     const { ctx, data } = this;
     const refs = data.branchRefs;
     if (!refs) return;
-    const textX = data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
+    const textX = data.maxLane * GRAPH_LANE_WIDTH + GRAPH_LANE_WIDTH + 12;
     const labelX = textX + 420; // position labels after commit text area
     for (const node of data.nodes) {
       if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
@@ -272,7 +270,7 @@ export class GraphRenderer {
       ctx.stroke();
 
       // Commit subject text
-      const textX = data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
+      const textX = data.maxLane * GRAPH_LANE_WIDTH + GRAPH_LANE_WIDTH + 12;
       const subj = node.subject;
       const displayText = subj.length > 50 ? subj.substring(0, 50) + "..." : subj;
       ctx.fillStyle = isDark ? "#abb2bf" : "#555";
@@ -307,7 +305,7 @@ export class GraphRenderer {
   private hitTest(sx: number, sy: number): GraphNode | null {
     const world = this.screenToWorld(sx, sy);
     const hitRadius = NODE_RADIUS + 6;
-    const textX = this.data.maxLane * LANE_WIDTH + LANE_WIDTH + 12;
+    const textX = this.data.maxLane * GRAPH_LANE_WIDTH + GRAPH_LANE_WIDTH + 12;
     const halfFont = 7;
     const nodes = this.data.nodes;
     if (nodes.length === 0) return null;

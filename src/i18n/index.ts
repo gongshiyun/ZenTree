@@ -36,12 +36,5 @@ export function useT() {
   return t;
 }
 
-export function useLocale(): [Locale, (l: Locale) => void] {
-  const setLocale = useCallback((locale: Locale) => {
-    setGlobalLocale(locale);
-    window.gitAPI?.setSetting("language", locale);
-  }, []);
-  return [_currentLocale, setLocale];
-}
 
 

@@ -1,5 +1,7 @@
-﻿import { useEffect, useCallback } from "react";
-import { useRepoStore } from "./stores/repoStore";
+import { useEffect, useCallback } from "react";
+import { useRepoStore } from "./application/repoStore";
+import { useT } from "./i18n";
+import { gitApi } from "./infrastructure/gitBridge";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import CommitGraph from "./components/CommitGraph";
@@ -10,19 +12,40 @@ import SettingsDialog from "./components/SettingsDialog";
 import DiffPanel from "./components/DiffPanel";
 
 function Welcome() {
+  const t = useT();
   const handleOpen = async () => {
-    const api = window.gitAPI; if (!api) return;
-    const path = await api.openDirectory();
-    if (path) { const nm = path.split(/[/\\]/).pop() || path; useRepoStore.getState().addRepo(path, nm); useRepoStore.getState().setCurrentRepo(path); useRepoStore.getState().refreshAll(path); }
+    const path = await gitApi().openDirectory();
+    if (path) {
+      const nm = path.split(/[/\\]/).pop() || path;
+      const store = useRepoStore.getState();
+      store.addRepo(path, nm);
+      store.setCurrentRepo(path);
+      store.refreshAll(path);
+    }
+  };
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    const files = e.dataTransfer.files;
+    if (files.length === 0) return;
+    const dp = (files[0] as File & { path?: string }).path || "";
+    if (!dp) return;
+    const r = await gitApi().isRepo(dp);
+    if (r.success && r.data) {
+      const nm = dp.split(/[/\\]/).pop() || dp;
+      const store = useRepoStore.getState();
+      store.addRepo(dp, nm);
+      store.setCurrentRepo(dp);
+      store.refreshAll(dp);
+    } else {
+      useRepoStore.getState().setError(`"${dp}" ${t("app.invalidRepo")}`);
+    }
   };
   return (
-    <div className="welcome" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "link"; }} onDrop={async (e) => {
-      e.preventDefault(); const files = e.dataTransfer.files; if (files.length > 0) { const dp = (files[0] as any).path as string; const api = window.gitAPI; if (!api) return; const r = await api.isRepo(dp); if (r.success && r.data) { const nm = dp.split(/[/\\]/).pop() || dp; useRepoStore.getState().addRepo(dp, nm); useRepoStore.getState().setCurrentRepo(dp); useRepoStore.getState().refreshAll(dp); } else { useRepoStore.getState().setError(`"${dp}" is not a valid Git repository.`); } }
-    }}>
+    <div className="welcome" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "link"; }} onDrop={handleDrop}>
       <h1>ZenTree</h1>
-      <p>A lightweight Git GUI client.</p>
-      <button className="open-btn" onClick={handleOpen}>+ Open Repository</button>
-      <p style={{ marginTop: 16, fontSize: 11, color: "var(--text-muted)" }}>Or drag and drop a Git repository folder here</p>
+      <p>{t("app.welcome")}</p>
+      <button className="open-btn" onClick={handleOpen}>{t("app.openRepo")}</button>
+      <p style={{ marginTop: 16, fontSize: 11, color: "var(--text-muted)" }}>{t("app.dragHint")}</p>
     </div>
   );
 }
@@ -33,23 +56,12 @@ export default function App() {
   const refreshAll = useRepoStore((s) => s.refreshAll);
   const setError = useRepoStore((s) => s.setError);
 
-  // Init language and repos from saved settings
+  // Restore language, theme, saved repos and the last opened repository.
   useEffect(() => {
-    (async () => {
-      try {
-        const s = await window.gitAPI.getSettings();
-        if (s?.language) useRepoStore.getState().setLanguage(s.language);
-        if (s?.repos && Array.isArray(s.repos)) {
-          const store = useRepoStore.getState();
-          for (const r of s.repos) {
-            if (r.path && r.name) store.addRepo(r.path, r.name);
-          }
-        }
-      } catch { /* */ }
-    })();
+    useRepoStore.getState().initFromSettings();
   }, []);
 
-  const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === "F5") { e.preventDefault(); if (currentRepo) refreshAll(); }
     if (e.key === "Escape") setError(null);
   }, [currentRepo, refreshAll, setError]);

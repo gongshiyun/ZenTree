@@ -1,4 +1,4 @@
-import { useRepoStore } from "../stores/repoStore";
+import { useRepoStore } from "../application/repoStore";
 import DiffViewer from "./DiffViewer";
 import { useRef, useCallback, useState } from "react";
 
@@ -37,6 +37,8 @@ export default function DiffPanel() {
         <DiffViewer
           filePath={selectedDiffFile.path}
           isStaged={selectedDiffFile.isStaged}
+          commitHash={selectedDiffFile.commitHash}
+          readOnly={!!selectedDiffFile.commitHash}
           onClose={() => { setSelectedDiffFile(null); refreshAll(); }}
         />
       </div>
