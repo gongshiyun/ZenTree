@@ -43,6 +43,8 @@ Download the latest installer from [Releases](../../releases):
 - **`ZenTree Setup x.x.x.exe`** — NSIS installer with desktop shortcut
 - **`win-unpacked/ZenTree.exe`** — Portable version (no installation required)
 
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
 ### System Requirements
 
 - Windows 10 or later
@@ -90,6 +92,7 @@ ZenTree/
 │   ├── renderer/          # Canvas 图谱渲染器
 │   ├── i18n/              # 中英文语言包
 │   └── types/             # 跨层共享类型契约
+├── CHANGELOG.md
 ├── package.json
 ├── vite.config.ts
 └── tsconfig.json

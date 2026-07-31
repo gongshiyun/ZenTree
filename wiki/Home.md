@@ -48,11 +48,23 @@ A lightweight, modern Git GUI client built with **Electron + React + TypeScript*
 
 ```
 ZenTree/
-├── electron/              # Electron main process
-│   ├── main.ts            # IPC handlers, window management, Git operations
-│   └── preload.ts         # contextBridge API (renderer ↔ main)
+├── electron/              # Electron main process (infrastructure layer)
+│   ├── main.ts            # Composition root: wires settings/git/window/ipc
+│   ├── windowManager.ts   # Window lifecycle + size persistence
+│   ├── settingsRepository.ts  # Settings JSON persistence adapter
+│   ├── gitRepository.ts   # simple-git adapter + Git Bash detection
+│   ├── ipc.ts             # IPC channel registration (validation + error wrap)
+│   └── preload.ts         # contextBridge secure bridge (GitAPI types)
 ├── src/
-│   ├── components/        # React UI components
+│   ├── domain/            # Domain layer (pure logic, no UI/IPC deps)
+│   │   ├── graph/         # Commit graph layout + branch colors
+│   │   ├── theme/         # Theme presets + CSS variable application
+│   │   └── diff/          # Diff parsing, hunk patches, syntax highlighting
+│   ├── application/       # Application layer: Zustand store + use-case orchestration
+│   │   └── repoStore.ts   # Global state + graph builder
+│   ├── infrastructure/    # Renderer-side gateway
+│   │   └── gitBridge.ts   # IPC bridge to window.gitAPI
+│   ├── components/        # React UI components (interface layer)
 │   │   ├── TopBar.tsx     # Title bar, repo selector, toolbar
 │   │   ├── Sidebar.tsx    # Branch list (local + remote)
 │   │   ├── CommitGraph.tsx# Canvas graph wrapper
@@ -62,8 +74,6 @@ ZenTree/
 │   │   ├── CommitBar.tsx  # Commit message input + amend
 │   │   ├── StatusBar.tsx  # Loading/error indicator
 │   │   └── SettingsDialog.tsx # Settings modal
-│   ├── stores/
-│   │   └── repoStore.ts   # Zustand global state + graph builder
 │   ├── renderer/
 │   │   └── canvasRenderer.ts # Canvas 2D graph engine
 │   ├── i18n/
@@ -76,6 +86,7 @@ ZenTree/
 │   ├── App.css            # Global styles
 │   ├── theme.css          # CSS custom properties
 │   └── main.tsx           # React entry point
+├── CHANGELOG.md
 ├── package.json
 ├── vite.config.ts
 ├── tsconfig.json          # Renderer TS config

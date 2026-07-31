@@ -8,7 +8,7 @@ source_files:
     - electron/main.ts
     - electron/preload.ts
     - src/components/SettingsDialog.tsx
-    - src/stores/repoStore.ts
+    - src/application/repoStore.ts
     - vite.config.ts
     - package.json
 ---

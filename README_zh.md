@@ -43,6 +43,8 @@
 - **`ZenTree Setup x.x.x.exe`** — NSIS 安装程序（含桌面快捷方式）
 - **`win-unpacked/ZenTree.exe`** — 绿色免安装版
 
+完整发布记录见 [CHANGELOG.md](CHANGELOG.md)。
+
 ### 系统要求
 
 - Windows 10 及以上
@@ -90,6 +92,7 @@ ZenTree/
 │   ├── renderer/          # Canvas 图谱渲染器
 │   ├── i18n/              # 中英文语言包
 │   └── types/             # 跨层共享类型契约
+├── CHANGELOG.md
 ├── package.json
 ├── vite.config.ts
 └── tsconfig.json

@@ -2,7 +2,7 @@
 
 <cite>
 **本文引用的文件**   
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [index.ts](file://src/types/index.ts)
 - [App.tsx](file://src/App.tsx)
 - [CommitGraph.tsx](file://src/components/CommitGraph.tsx)
@@ -37,7 +37,7 @@
 **更新** 新增了仓库持久化功能和增强的分页处理机制，提升了用户体验和数据加载效率。
 
 ## 项目结构
-- 状态定义与持久化：位于 src/stores/repoStore.ts，集中管理仓库级状态、UI 状态与主题设置，并支持本地持久化存储。
+- 状态定义与持久化：位于 src/application/repoStore.ts，集中管理仓库级状态、UI 状态与主题设置，并支持本地持久化存储。
 - 类型定义：位于 src/types/index.ts，统一描述 AppState 字段、枚举与接口契约。
 - UI 层消费：各组件通过 useStore(selector) 订阅所需切片，避免不必要重渲染。
 - 主题系统：基于 CSS 自定义属性，由 store 中的主题键驱动样式切换。
@@ -69,7 +69,7 @@ Store --> ThemeCSS
 ```
 
 **图表来源** 
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [index.ts](file://src/types/index.ts)
 - [App.tsx](file://src/App.tsx)
 - [CommitGraph.tsx](file://src/components/CommitGraph.tsx)
@@ -78,7 +78,7 @@ Store --> ThemeCSS
 - [theme.css](file://src/theme.css)
 
 **章节来源**
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [index.ts](file://src/types/index.ts)
 
 ## 核心组件
@@ -109,7 +109,7 @@ Store --> ThemeCSS
   - 版本兼容：支持不同版本的设置格式迁移
 
 **章节来源**
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [index.ts](file://src/types/index.ts)
 
 ## 架构总览
@@ -133,7 +133,7 @@ Canvas-->>UI : 完成绘制
 ```
 
 **图表来源** 
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 
 ## 详细组件分析
@@ -242,10 +242,10 @@ SavePersist --> End(["结束"])
 ```
 
 **图表来源** 
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 **章节来源**
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### 图数据构建算法（车道分配）
 - 输入：提交节点集合与父子边集合
@@ -274,10 +274,10 @@ J --> |否| K["结束"]
 ```
 
 **图表来源** 
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 **章节来源**
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### 主题应用机制
 - 存储层：store.state.themeKey 保存当前主题键
@@ -304,13 +304,13 @@ CSS-->>User : 界面主题立即切换
 ```
 
 **图表来源** 
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [App.tsx](file://src/App.tsx)
 - [theme.css](file://src/theme.css)
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
 
 **章节来源**
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [App.tsx](file://src/App.tsx)
 - [theme.css](file://src/theme.css)
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
@@ -345,12 +345,12 @@ Store->>Persist : 异步保存数据
 ```
 
 **图表来源** 
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 - [Sidebar.tsx](file://src/components/Sidebar.tsx)
 
 **章节来源**
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 - [Sidebar.tsx](file://src/components/Sidebar.tsx)
 
@@ -369,7 +369,7 @@ Store->>Persist : 异步保存数据
   - 权限问题：优雅处理文件访问权限异常
 
 **章节来源**
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ## 依赖分析
 - 模块耦合
@@ -401,7 +401,7 @@ CommitGraph --> Canvas["Canvas 2D"]
 
 **图表来源** 
 - [App.tsx](file://src/App.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 - [Sidebar.tsx](file://src/components/Sidebar.tsx)
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
@@ -409,7 +409,7 @@ CommitGraph --> Canvas["Canvas 2D"]
 
 **章节来源**
 - [App.tsx](file://src/App.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 - [Sidebar.tsx](file://src/components/Sidebar.tsx)
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
@@ -439,7 +439,7 @@ CommitGraph --> Canvas["Canvas 2D"]
   - 使用性能分析工具识别瓶颈
 
 **章节来源**
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [App.tsx](file://src/App.tsx)
 
 ## 结论
@@ -454,7 +454,7 @@ ZenTree 的 Zustand 状态管理以清晰的 AppState 形状、高效的图数�
   - 分页（Pagination）：将大数据集分割成较小块以提高加载和渲染性能
 - 参考文件
   - 状态定义：src/types/index.ts
-  - 状态实现：src/stores/repoStore.ts
+  - 状态实现：src/application/repoStore.ts
   - 主题样式：src/theme.css
   - 入口应用：src/App.tsx
   - 图渲染：src/components/CommitGraph.tsx

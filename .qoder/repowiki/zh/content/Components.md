@@ -12,7 +12,7 @@
 - [CommitBar.tsx](file://src/components/CommitBar.tsx)
 - [StatusBar.tsx](file://src/components/StatusBar.tsx)
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [index.ts](file://src/types/index.ts)
 - [main.tsx](file://src/main.tsx)
 </cite>
@@ -70,7 +70,7 @@ App --> Types["types/index.ts<br/>共享类型"]
 - [CommitBar.tsx](file://src/components/CommitBar.tsx)
 - [StatusBar.tsx](file://src/components/StatusBar.tsx)
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [index.ts](file://src/types/index.ts)
 
 章节来源
@@ -122,7 +122,7 @@ UI-->>U : 重渲染 CommitGraph/FilePanel/DiffViewer
 ```
 
 图表来源
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [index.ts](file://src/types/index.ts)
 - [main.tsx](file://src/main.tsx)
 
@@ -150,7 +150,7 @@ Render --> End
 
 章节来源
 - [TopBar.tsx](file://src/components/TopBar.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [StatusBar.tsx](file://src/components/StatusBar.tsx)
 
 ### Sidebar（侧边导航）
@@ -192,11 +192,11 @@ Sidebar --> Store : "读写状态"
 
 图表来源
 - [Sidebar.tsx](file://src/components/Sidebar.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 章节来源
 - [Sidebar.tsx](file://src/components/Sidebar.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### CommitGraph（提交图）
 - 职责：Canvas 2D 绘制提交图，支持滚动、缩放、节点点击、视口裁剪。
@@ -236,7 +236,7 @@ UpdateView --> Draw
 
 **Section sources**
 - [CommitGraph.tsx](file://src/components/CommitGraph.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### FilePanel（文件面板）
 - 职责：展示当前提交或分支的文件树，支持选中、过滤、展开/折叠。
@@ -263,11 +263,11 @@ FilePanel --> Store : "读取/更新选中文件"
 
 图表来源
 - [FilePanel.tsx](file://src/components/FilePanel.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 章节来源
 - [FilePanel.tsx](file://src/components/FilePanel.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### DiffPanel（差异面板容器）
 - 职责：管理差异数据的生命周期与布局，承载 DiffViewer。
@@ -292,12 +292,12 @@ DP-->>FP : highlightLine(lineNo)
 图表来源
 - [DiffPanel.tsx](file://src/components/DiffPanel.tsx)
 - [DiffViewer.tsx](file://src/components/DiffViewer.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 章节来源
 - [DiffPanel.tsx](file://src/components/DiffPanel.tsx)
 - [DiffViewer.tsx](file://src/components/DiffViewer.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### DiffViewer（差异查看器）
 - 职责：渲染差异内容，支持行高亮、搜索、跳转、复制。
@@ -322,7 +322,7 @@ Copy --> Render
 
 章节来源
 - [DiffViewer.tsx](file://src/components/DiffViewer.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### CommitBar（提交信息条）
 - 职责：展示选中提交的哈希、作者、时间、消息摘要与快捷操作。
@@ -346,11 +346,11 @@ CommitBar --> Store : "选中提交"
 
 图表来源
 - [CommitBar.tsx](file://src/components/CommitBar.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 章节来源
 - [CommitBar.tsx](file://src/components/CommitBar.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### StatusBar（状态栏）
 - 职责：显示仓库状态、操作进度、错误与提示信息。
@@ -360,7 +360,7 @@ CommitBar --> Store : "选中提交"
 
 章节来源
 - [StatusBar.tsx](file://src/components/StatusBar.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ### SettingsDialog（设置对话框）
 - 职责：打开/关闭设置面板，修改主题、语言、缓存策略等。
@@ -385,11 +385,11 @@ Store-->>SB : re-render with new theme/lang
 
 图表来源
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 章节来源
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 
 ## 依赖关系分析
 - 组件层：TopBar、Sidebar、CommitGraph、FilePanel、DiffPanel、DiffViewer、CommitBar、StatusBar、SettingsDialog 均依赖 repoStore 提供的状态与动作。
@@ -406,12 +406,12 @@ IPC --> Main["Electron 主进程"]
 
 图表来源
 - [index.ts](file://src/types/index.ts)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [main.tsx](file://src/main.tsx)
 
 章节来源
 - [index.ts](file://src/types/index.ts)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [main.tsx](file://src/main.tsx)
 
 ## 性能考量
@@ -434,7 +434,7 @@ IPC --> Main["Electron 主进程"]
 
 章节来源
 - [StatusBar.tsx](file://src/components/StatusBar.tsx)
-- [repoStore.ts](file://src/stores/repoStore.ts)
+- [repoStore.ts](file://src/application/repoStore.ts)
 - [SettingsDialog.tsx](file://src/components/SettingsDialog.tsx)
 
 ## 结论

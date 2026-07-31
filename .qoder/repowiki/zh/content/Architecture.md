@@ -5,7 +5,7 @@
 - [electron/main.ts](file://electron/main.ts)
 - [electron/preload.ts](file://electron/preload.ts)
 - [src/renderer/canvasRenderer.ts](file://src/renderer/canvasRenderer.ts)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [src/components/CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 - [src/components/DiffPanel.tsx](file://src/components/DiffPanel.tsx)
 - [src/components/FilePanel.tsx](file://src/components/FilePanel.tsx)
@@ -73,7 +73,7 @@ MainTSX --> App
 - [electron/preload.ts](file://electron/preload.ts)
 - [src/App.tsx](file://src/App.tsx)
 - [src/main.tsx](file://src/main.tsx)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [src/components/CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 - [src/components/DiffPanel.tsx](file://src/components/DiffPanel.tsx)
 - [src/components/FilePanel.tsx](file://src/components/FilePanel.tsx)
@@ -106,7 +106,7 @@ MainTSX --> App
 **章节来源**
 - [electron/main.ts](file://electron/main.ts)
 - [electron/preload.ts](file://electron/preload.ts)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [src/renderer/canvasRenderer.ts](file://src/renderer/canvasRenderer.ts)
 - [src/components/CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 - [src/components/DiffPanel.tsx](file://src/components/DiffPanel.tsx)
@@ -138,7 +138,7 @@ Store-->>UI : 状态更新，触发重绘
 **图表来源**
 - [electron/preload.ts](file://electron/preload.ts)
 - [electron/main.ts](file://electron/main.ts)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [src/components/CommitGraph.tsx](file://src/components/CommitGraph.tsx)
 - [src/components/DiffPanel.tsx](file://src/components/DiffPanel.tsx)
 - [src/components/FilePanel.tsx](file://src/components/FilePanel.tsx)
@@ -178,13 +178,13 @@ UIUpdate --> End(["结束"])
 - [src/main.tsx](file://src/main.tsx)
 - [electron/main.ts](file://electron/main.ts)
 - [electron/preload.ts](file://electron/preload.ts)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 
 **章节来源**
 - [wiki/IPC-API.md](file://wiki/IPC-API.md)
 - [electron/preload.ts](file://electron/preload.ts)
 - [electron/main.ts](file://electron/main.ts)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 
 ### 模块边界与职责划分
 - 渲染进程
@@ -245,7 +245,7 @@ RepoStore --> MainProcess : "IPC 调用"
 - [src/components/DiffPanel.tsx](file://src/components/DiffPanel.tsx)
 - [src/components/FilePanel.tsx](file://src/components/FilePanel.tsx)
 - [src/renderer/canvasRenderer.ts](file://src/renderer/canvasRenderer.ts)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [electron/main.ts](file://electron/main.ts)
 
 **章节来源**
@@ -254,7 +254,7 @@ RepoStore --> MainProcess : "IPC 调用"
 - [src/components/DiffPanel.tsx](file://src/components/DiffPanel.tsx)
 - [src/components/FilePanel.tsx](file://src/components/FilePanel.tsx)
 - [src/renderer/canvasRenderer.ts](file://src/renderer/canvasRenderer.ts)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [electron/main.ts](file://electron/main.ts)
 
 ### 关键设计决策
@@ -299,12 +299,12 @@ Selector-->>UI : 订阅变更，触发重渲染
 ```
 
 **图表来源**
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [wiki/State-Management.md](file://wiki/State-Management.md)
 
 **章节来源**
 - [wiki/State-Management.md](file://wiki/State-Management.md)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 
 #### simple-git 替代 nodegit
 - 动机：nodegit 编译复杂、体积大；simple-git 轻量、易集成、生态成熟。
@@ -383,12 +383,12 @@ IPC --> GitOps
 
 **图表来源**
 - [package.json](file://package.json)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [electron/main.ts](file://electron/main.ts)
 
 **章节来源**
 - [package.json](file://package.json)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [electron/main.ts](file://electron/main.ts)
 
 ## 性能考量
@@ -420,7 +420,7 @@ IPC --> GitOps
 **章节来源**
 - [electron/preload.ts](file://electron/preload.ts)
 - [electron/main.ts](file://electron/main.ts)
-- [src/stores/repoStore.ts](file://src/stores/repoStore.ts)
+- [src/application/repoStore.ts](file://src/application/repoStore.ts)
 - [src/renderer/canvasRenderer.ts](file://src/renderer/canvasRenderer.ts)
 
 ## 结论

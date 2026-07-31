@@ -6,7 +6,7 @@ scope:
     - '**'
 source_files:
     - electron/main.ts
-    - src/stores/repoStore.ts
+    - src/application/repoStore.ts
     - src/components/CommitBar.tsx
     - src/components/DiffViewer.tsx
     - src/App.tsx
@@ -19,7 +19,7 @@ source_files:
 
 ## 2. 关键文件与位置
 - `electron/main.ts`：定义 `safeHandler`、Git IPC 处理器、设置存储 I/O 的错误处理逻辑。
-- `src/stores/repoStore.ts`：集中式状态管理，包含 `error`、`loading`、`loadingMessage` 等错误相关状态及 `setError`、`setLoading` 等 setter。
+- `src/application/repoStore.ts`：集中式状态管理，包含 `error`、`loading`、`loadingMessage` 等错误相关状态及 `setError`、`setLoading` 等 setter。
 - `src/components/CommitBar.tsx`、`src/components/DiffViewer.tsx`：调用 `window.gitAPI` 后根据 `result.success` 分支设置错误到 store 或本地 state。
 - `src/App.tsx`：拖拽打开仓库时调用 `setError` 展示无效路径错误。
 
