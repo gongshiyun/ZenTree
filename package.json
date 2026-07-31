@@ -1,6 +1,6 @@
 {
   "name": "zentree",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "A lightweight Git GUI client built with Electron, React, and Canvas",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -40,7 +40,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "mac": {
       "target": [
@@ -90,7 +91,8 @@
       "provider": "github",
       "owner": "gongshiyun",
       "repo": "ZenTree"
-    }
+    },
+    "icon": "build/icon"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
