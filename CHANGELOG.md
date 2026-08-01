@@ -2,6 +2,19 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.3.3] - 2026-08-02
+
+### Features
+
+- **Stage / unstage all** - one-click buttons in the file panel (including untracked files)
+- **Interactive rebase** - right-click a branch, then pick / reword / squash / fixup / drop commits and reorder them with up/down controls
+- **Commit file stats** - each file in a commit shows its +add / -delete line counts
+- **Remote branch operations** - push current branch, pull a specific remote branch, delete a remote branch, prune stale branches
+
+### Testing
+
+- 9 new integration tests (51 total): stage/unstage all, commit stats, interactive rebase (squash/drop/reword/reorder), remote push/fetch/pull/delete/prune
+
 ## [1.3.2] - 2026-08-01
 
 ### Fixes

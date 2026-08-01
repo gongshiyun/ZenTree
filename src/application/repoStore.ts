@@ -26,6 +26,7 @@ interface AppState {
   showSettings: boolean;
   showClone: boolean;
   showCompare: boolean;
+  showRebase: string | null;
   tags: TagInfo[]; remotes: RemoteInfo[]; logFilters: LogFilters;
 
   addRepo: (path: string, name: string) => void;
@@ -45,6 +46,7 @@ interface AppState {
   refreshAll: (repoPath?: string, silent?: boolean) => Promise<void>;
   setShowClone: (show: boolean) => void;
   setShowCompare: (show: boolean) => void;
+  setShowRebase: (base: string | null) => void;
   setLogFilters: (filters: LogFilters) => void;
   reloadMeta: () => Promise<void>;
 }
@@ -64,6 +66,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
   showSettings: false,
   showClone: false,
   showCompare: false,
+  showRebase: null,
   tags: [], remotes: [], logFilters: {},
 
   addRepo: (repoPath, name) => {
@@ -113,6 +116,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
   setShowSettings: (show) => set({ showSettings: show }),
   setShowClone: (show) => set({ showClone: show }),
   setShowCompare: (show) => set({ showCompare: show }),
+  setShowRebase: (base) => set({ showRebase: base }),
   setLoading: (loading, message = "") => set({ loading, loadingMessage: message }),
   setError: (error) => set({ error }),
   setLogFilters: (filters) => {

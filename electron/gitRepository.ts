@@ -1,5 +1,5 @@
 import simpleGit, { SimpleGit } from "simple-git";
-import type { BlameLine, CompareFileStat, CompareResult, FileHistoryEntry, LogFilters, RemoteInfo, TagInfo } from "../src/types";
+import type { BlameLine, CompareFileStat, CompareResult, FileHistoryEntry, LogFilters, RebaseTodoEntry, RemoteInfo, TagInfo } from "../src/types";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -87,14 +87,38 @@ export class GitRepository {
     const result = await this.git(repoPath).raw(["show", hash, "--name-only", `--format=%H${LOG_SEP}%an${LOG_SEP}%ae${LOG_SEP}%at${LOG_SEP}%s`]);
     const lines = result.split("\n").filter(Boolean);
     const headerParts = lines[0].split(LOG_SEP);
+    const stats = await this.commitStats(repoPath, hash);
     return {
       hash: headerParts[0], author: headerParts[1], email: headerParts[2],
       timestamp: parseInt(headerParts[3], 10), subject: headerParts[4], files: lines.slice(1),
+      stats,
     };
+  }
+
+  /** Per-file add/delete line counts for a commit. */
+  async commitStats(repoPath: string, hash: string): Promise<{ path: string; additions: number; deletions: number; binary?: boolean }[]> {
+    const result = await this.git(repoPath).raw(["show", "--numstat", "--format=", hash]);
+    return result.split("\n").filter(Boolean).map((line) => {
+      const [add, del, ...rest] = line.split("\t");
+      const filePath = rest.join("\t");
+      if (add === "-" || del === "-") {
+        return { path: filePath, additions: 0, deletions: 0, binary: true };
+      }
+      return { path: filePath, additions: parseInt(add, 10), deletions: parseInt(del, 10) };
+    });
   }
 
   async lastMessage(repoPath: string): Promise<string> {
     return (await this.git(repoPath).raw(["log", "-1", "--format=%B"])).trim();
+  }
+
+  /** Commits in `from..to` in oldest-first order (the rebase todo order). */
+  async logRange(repoPath: string, from: string, to: string): Promise<{ hash: string; subject: string }[]> {
+    const result = await this.git(repoPath).raw(["log", `${from}..${to}`, "--reverse", `--format=%H${LOG_SEP}%s`]);
+    return result.split("\n").filter(Boolean).map((line) => {
+      const [hash, subject] = line.split(LOG_SEP);
+      return { hash, subject };
+    });
   }
 
   async diffFile(repoPath: string, filePath: string, staged: boolean, fromPath?: string): Promise<string> {
@@ -147,8 +171,18 @@ export class GitRepository {
     return this.git(repoPath).add(files);
   }
 
+  /** Stage all working-tree changes (including untracked files). */
+  async stageAll(repoPath: string) {
+    return this.git(repoPath).raw(["add", "-A"]);
+  }
+
   async unstage(repoPath: string, files: string[]) {
     return this.git(repoPath).reset(["HEAD", ...files]);
+  }
+
+  /** Unstage everything (mixed reset to HEAD). */
+  async unstageAll(repoPath: string) {
+    return this.git(repoPath).raw(["reset"]);
   }
 
   /** Discard working-tree changes. Untracked files are removed with git clean. */
@@ -231,12 +265,85 @@ export class GitRepository {
     return this.git(repoPath).fetch();
   }
 
+  /** Fetch a specific branch from a remote. */
+  async fetchBranch(repoPath: string, remote: string, branch: string) {
+    return this.git(repoPath).raw(["fetch", remote, branch]);
+  }
+
   async pull(repoPath: string) {
     return this.git(repoPath).pull();
   }
 
+  /** Pull a specific branch from a remote. */
+  async pullBranch(repoPath: string, remote: string, branch: string) {
+    return this.git(repoPath).raw(["pull", remote, branch]);
+  }
+
   async push(repoPath: string) {
     return this.git(repoPath).push();
+  }
+
+  /** Push the current branch to a remote and set the upstream. */
+  async pushBranch(repoPath: string, remote: string, branch: string) {
+    return this.git(repoPath).raw(["push", "-u", remote, branch]);
+  }
+
+  /** Delete a branch on the remote. */
+  async deleteRemoteBranch(repoPath: string, remote: string, branch: string) {
+    return this.git(repoPath).raw(["push", remote, "--delete", branch]);
+  }
+
+  /** Prune stale remote-tracking branches of a remote. */
+  async pruneRemote(repoPath: string, remote: string) {
+    return this.git(repoPath).raw(["remote", "prune", remote]);
+  }
+
+  /**
+   * Run an interactive rebase non-interactively. The todo list is generated
+   * from the entries and injected via GIT_SEQUENCE_EDITOR; reword is applied
+   * with `exec git commit --amend -F` so no text editor is required.
+   */
+  async rebaseInteractive(repoPath: string, base: string, entries: RebaseTodoEntry[]): Promise<void> {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "zentree-rebase-"));
+    try {
+      const lines: string[] = [];
+      for (const e of entries) {
+        if (e.action === "drop") continue;
+        lines.push(`${e.action} ${e.hash} ${e.subject}`);
+        if (e.action === "reword" && e.rewordMessage) {
+          const msgFile = path.join(tmpDir, `msg-${e.hash.substring(0, 8)}.txt`);
+          fs.writeFileSync(msgFile, e.rewordMessage, "utf8");
+          lines.push(`exec git commit --amend -F "${msgFile.replace(/\\/g, "/")}"`);
+        }
+      }
+      const todoFile = path.join(tmpDir, "git-rebase-todo.txt");
+      fs.writeFileSync(todoFile, lines.join("\n") + "\n", "utf8");
+
+      // GIT_SEQUENCE_EDITOR overwrites the todo file git prepares with ours.
+      // git runs editor commands through the msys/posix shell, so use an sh
+      // script (LF endings) with an msys-style path for the todo copy source.
+      const msysPath = (p: string) => `/${p.replace(/^([A-Za-z]):/, (_m, c) => c.toLowerCase()).replace(/\\/g, "/")}`;
+      const sequenceEditor = path.join(tmpDir, "sequence-editor.sh");
+      fs.writeFileSync(sequenceEditor, `#!/bin/sh\ncp "${msysPath(todoFile)}" "$1"\n`, "utf8");
+
+      // squash combines messages and opens an editor; accept the default text.
+      const noopEditor = path.join(tmpDir, "noop-editor.sh");
+      fs.writeFileSync(noopEditor, "#!/bin/sh\nexit 0\n", "utf8");
+
+      const gitPath = this.getGitPath() || "git";
+      await new Promise<void>((resolve, reject) => {
+        childProcess.execFile(gitPath, ["rebase", "-i", base], {
+          cwd: repoPath,
+          env: { ...process.env, GIT_SEQUENCE_EDITOR: sequenceEditor.replace(/\\/g, "/"), GIT_EDITOR: noopEditor.replace(/\\/g, "/") },
+          maxBuffer: 16 * 1024 * 1024,
+        }, (err) => {
+          if (err) reject(new Error(`Rebase failed: ${err.message}`));
+          else resolve();
+        });
+      });
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
   }
 
   async getConfig(repoPath: string) {

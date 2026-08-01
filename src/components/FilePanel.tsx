@@ -106,6 +106,16 @@ export default function FilePanel() {
     runOp(() => gitApi().discard(currentRepo, paths), t("status.discarding").replace("{0}", label), t("error.discardFailed"));
   }, [currentRepo, runOp, t]);
 
+  const handleStageAll = useCallback(() => {
+    if (!currentRepo) return;
+    runOp(() => gitApi().stageAll(currentRepo), t("status.staging").replace("{0}", t("files.all")), t("error.stageFailed"));
+  }, [currentRepo, runOp, t]);
+
+  const handleUnstageAll = useCallback(() => {
+    if (!currentRepo) return;
+    runOp(() => gitApi().unstageAll(currentRepo), t("status.unstaging").replace("{0}", t("files.all")), t("error.unstageFailed"));
+  }, [currentRepo, runOp, t]);
+
   const handleResolveConflict = useCallback((file: FileEntry) => {
     if (!currentRepo) return;
     runOp(() => gitApi().mergetool(currentRepo, file.path), t("files.resolving").replace("{0}", file.path), t("error.opFailed"));
@@ -155,7 +165,7 @@ export default function FilePanel() {
         <button className="file-action-btn" onClick={handleCherryPick} title={t("commit.cherryPickTip")}>{t("commit.cherryPick")}</button>
         <button className="file-action-btn" onClick={handleOpenOnHosting} title={t("commit.openOnHostingTip")}>{t("commit.openOnHosting")}</button>
       </div>
-    </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, status: "modified", commitHash: selectedCommit })}><span className="file-name">{f}</span></div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
+    </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; const st = commitDetail.stats?.find((s) => s.path === f); return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, status: "modified", commitHash: selectedCommit })}><span className="file-name" title={f}>{f}</span>{st && !st.binary && (<span className="file-stat"><span className="stat-add">+{st.additions}</span><span className="stat-del">-{st.deletions}</span></span>)}</div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
   }
 
   const currentFiles = activeTab === "unstaged" ? unstagedFiles : stagedFiles;
@@ -163,6 +173,13 @@ export default function FilePanel() {
   return (<div className="file-panel"><div className="file-panel-header">
     <div className={`file-tab${activeTab === "unstaged" ? " active" : ""}`} onClick={() => setActiveTab("unstaged")}>{t("files.unstaged")} <span className="count">{unstagedFiles.length}</span></div>
     <div className={`file-tab${activeTab === "staged" ? " active" : ""}`} onClick={() => setActiveTab("staged")}>{t("files.staged")} <span className="count">{stagedFiles.length}</span></div>
+    <span style={{ flex: 1 }} />
+    {activeTab === "unstaged" && unstagedFiles.length > 0 && (
+      <button className="file-action-btn" onClick={handleStageAll} title={t("files.stageAllTip")}>{t("files.stageAll")}</button>
+    )}
+    {activeTab === "staged" && stagedFiles.length > 0 && (
+      <button className="file-action-btn" onClick={handleUnstageAll} title={t("files.unstageAllTip")}>{t("files.unstageAll")}</button>
+    )}
   </div><div className="file-list">
     {currentFiles.map((file) => { const sl = statLabel(file.status); const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged"); const display = file.label || file.path; return (
       <div key={activeTab + ":" + file.path} className={`file-item${isSel ? " selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged", status: file.status, fromPath: file.fromPath })}>

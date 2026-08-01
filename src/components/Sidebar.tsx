@@ -16,6 +16,7 @@ export default function Sidebar() {
   const tags = useRepoStore((s) => s.tags);
   const remotes = useRepoStore((s) => s.remotes);
   const checkoutRemote = useRepoStore((s) => s.checkoutRemote);
+  const setShowRebase = useRepoStore((s) => s.setShowRebase);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; branch: string; isRemote: boolean } | null>(null);
   const [showRemotes, setShowRemotes] = useState(true);
@@ -172,6 +173,59 @@ export default function Sidebar() {
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, reloadMeta, t]);
 
+  const defaultRemote = remotes[0]?.name || "origin";
+
+  const handlePushCurrent = useCallback(async () => {
+    if (!currentRepo) return;
+    setLoading(true, t("topbar.pushing"));
+    try {
+      const r = await gitApi().pushBranch(currentRepo, defaultRemote, currentBranch);
+      if (!r.success) setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, defaultRemote, currentBranch, setLoading, setError, t]);
+
+  const parseRemoteBranch = useCallback((b: string): { remote: string; branch: string } => {
+    const parts = b.replace(/^remotes\//, "").split("/");
+    return { remote: parts[0], branch: parts.slice(1).join("/") };
+  }, []);
+
+  const handlePullBranch = useCallback(async (remoteBranch: string) => {
+    if (!currentRepo) return;
+    const { remote, branch } = parseRemoteBranch(remoteBranch);
+    setLoading(true, t("topbar.pulling"));
+    try {
+      const r = await gitApi().pullBranch(currentRepo, remote, branch);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, parseRemoteBranch, setLoading, setError, refreshAll, t]);
+
+  const handleDeleteRemoteBranch = useCallback(async (remoteBranch: string) => {
+    if (!currentRepo) return;
+    const { remote, branch } = parseRemoteBranch(remoteBranch);
+    if (!window.confirm(t("sidebar.confirmDeleteRemote").replace("{0}", branch).replace("{1}", remote))) return;
+    setLoading(true, t("remotes.deleting").replace("{0}", branch));
+    try {
+      const r = await gitApi().deleteRemoteBranch(currentRepo, remote, branch);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, parseRemoteBranch, setLoading, setError, refreshAll, t]);
+
+  const handlePruneRemote = useCallback(async (remote: string) => {
+    if (!currentRepo) return;
+    setLoading(true, t("remotes.pruning").replace("{0}", remote));
+    try {
+      const r = await gitApi().pruneRemote(currentRepo, remote);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, refreshAll, t]);
+
   const [sidebarWidth, setSidebarWidth] = useState(200);
   const isResizing = useRef(false);
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -205,7 +259,10 @@ export default function Sidebar() {
         {branches.length === 0 && <div className="empty-state" style={{ padding: 20 }}>{t("sidebar.noBranches")}</div>}
         <div className="sidebar-subheader" onClick={() => setShowRemotes(!showRemotes)}>
           <span className="subheader-arrow">{showRemotes ? "\u25BC" : "\u25B6"}</span> {t("sidebar.remotes")}
-          <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setShowRemoteInput(!showRemoteInput); }} title={t("remotes.addTip")}>+</button>
+          {remotes.length > 0 && (
+          <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); handlePruneRemote(defaultRemote); }} title={t("sidebar.prune")}>&#8635;</button>
+          )}
+          <button className="sidebar-add-btn" onClick={(e) => { e.stopPropagation(); setShowRemoteInput(!showRemoteInput); }} title={t("remotes.addTip")}>+</button>
         </div>
         {showRemotes && (<>
           {remotes.map((remote) => (
@@ -281,8 +338,18 @@ export default function Sidebar() {
     <div className="resize-handle" onMouseDown={handleResizeStart} />
     {contextMenu && (<div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
       {contextMenu.isRemote
-        ? <div className="context-menu-item" onClick={() => { checkoutRemote(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkoutRemote").replace("{0}", contextMenu.branch.replace(/^remotes\//, ""))}</div>
-        : <div className="context-menu-item" onClick={() => { handleCheckout(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkout")} {contextMenu.branch}</div>}
+        ? <><div className="context-menu-item" onClick={() => { checkoutRemote(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkoutRemote").replace("{0}", contextMenu.branch.replace(/^remotes\//, ""))}</div>
+          <div className="context-menu-item" onClick={() => { handlePullBranch(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.pullBranch")}</div>
+          <div className="context-menu-item danger" onClick={() => { handleDeleteRemoteBranch(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.deleteRemoteBranch")}</div>
+          <div className="context-menu-divider" />
+        </>
+        : <><div className="context-menu-item" onClick={() => { handleCheckout(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkout")} {contextMenu.branch}</div>
+          {contextMenu.branch !== currentBranch && (
+            <div className="context-menu-item" onClick={() => { setShowRebase(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.interactiveRebase")}</div>
+          )}
+          <div className="context-menu-item" onClick={() => { handlePushCurrent(); setContextMenu(null); }}>{t("sidebar.pushCurrent")}</div>
+          <div className="context-menu-divider" />
+        </>}
       {!contextMenu.isRemote && contextMenu.branch !== currentBranch && (
         <div className="context-menu-item" onClick={() => { handleMergeBranch(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.mergeInto").replace("{0}", contextMenu.branch)}</div>
       )}
@@ -292,7 +359,6 @@ export default function Sidebar() {
       {!contextMenu.isRemote && contextMenu.branch !== currentBranch && (
         <div className="context-menu-item" onClick={() => { handleRebaseOnto(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.rebaseOnto").replace("{0}", contextMenu.branch)}</div>
       )}
-      <div className="context-menu-divider" />
       <div className="context-menu-item" onClick={async () => { await navigator.clipboard.writeText(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.copyName")}</div>
     </div>)}
   </>);

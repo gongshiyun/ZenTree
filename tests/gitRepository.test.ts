@@ -14,6 +14,7 @@ const repos: string[] = [];
 
 function makeRepo(name: string): string {
   const dir = path.join(tempRoot, name);
+  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   repos.push(dir);
   return dir;
@@ -115,6 +116,173 @@ describe("working-tree diffs", () => {
     const diff = await repo.diffFile(dir, "new.txt", true, "old.txt");
     expect(diff).toContain("rename from old.txt");
     expect(diff).toContain("rename to new.txt");
+  });
+});
+
+describe("stage all / unstage all", () => {
+  it("stages and unstages every change including untracked files", async () => {
+    const dir = makeRepo("stage-all");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    await commitAll(dir, "initial");
+
+    writeFile(dir, "a.txt", "1\n2\n");
+    writeFile(dir, "new.txt", "new\n");
+    await repo.stageAll(dir);
+
+    let st = await repo.status(dir);
+    expect(st.staged).toContain("a.txt");
+    expect(st.created).toContain("new.txt");
+
+    await repo.unstageAll(dir);
+    st = await repo.status(dir);
+    expect(st.staged).not.toContain("a.txt");
+    expect(st.modified).toContain("a.txt");
+    expect(st.not_added).toContain("new.txt");
+  });
+});
+
+describe("commit stats", () => {
+  it("reports per-file add/delete line counts", async () => {
+    const dir = makeRepo("commit-stats");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n2\n3\n");
+    await commitAll(dir, "initial");
+    writeFile(dir, "a.txt", "1\n3\n4\n");
+    writeFile(dir, "b.txt", "x\n");
+    const hash = await commitAll(dir, "second");
+
+    const stats = await repo.commitStats(dir, hash);
+    const a = stats.find((s) => s.path === "a.txt");
+    const b = stats.find((s) => s.path === "b.txt");
+    expect(a?.additions).toBe(1);
+    expect(a?.deletions).toBe(1);
+    expect(b?.additions).toBe(1);
+    expect(b?.deletions).toBe(0);
+
+    const detail = await repo.show(dir, hash);
+    expect(detail.stats).toHaveLength(2);
+  });
+});
+
+describe("interactive rebase", () => {
+  async function makeLinear(dir: string): Promise<string[]> {
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "a\n");
+    await commitAll(dir, "c1");
+    writeFile(dir, "b.txt", "b\n");
+    await commitAll(dir, "c2");
+    writeFile(dir, "c.txt", "c\n");
+    await commitAll(dir, "c3");
+    return (await repo.logRange(dir, "HEAD~2", "HEAD")).map((c) => c.hash);
+  }
+
+  it("lists commits in oldest-first order", async () => {
+    const dir = makeRepo("rebase-range");
+    const range = await makeLinear(dir);
+    expect(range).toHaveLength(2);
+    const subjects = (await repo.logRange(dir, "HEAD~2", "HEAD")).map((c) => c.subject);
+    expect(subjects).toEqual(["c2", "c3"]);
+  });
+
+  it("squashes commits into the previous one", async () => {
+    const dir = makeRepo("rebase-squash");
+    const [c2, c3] = await makeLinear(dir);
+    const subjects = (await repo.logRange(dir, "HEAD~2", "HEAD")).map((c) => c.subject);
+    await repo.rebaseInteractive(dir, "HEAD~2", [
+      { action: "pick", hash: c2, subject: subjects[0] },
+      { action: "squash", hash: c3, subject: subjects[1] },
+    ]);
+    const log = await repo.log(dir, 0, 10);
+    expect(log).toHaveLength(2); // c1 + (c3 squashed into c2)
+  });
+
+  it("drops a commit", async () => {
+    const dir = makeRepo("rebase-drop");
+    const [c2, c3] = await makeLinear(dir);
+    const subjects = (await repo.logRange(dir, "HEAD~2", "HEAD")).map((c) => c.subject);
+    await repo.rebaseInteractive(dir, "HEAD~2", [
+      { action: "drop", hash: c2, subject: subjects[0] },
+      { action: "pick", hash: c3, subject: subjects[1] },
+    ]);
+    const log = await repo.log(dir, 0, 10);
+    expect(log).toHaveLength(2);
+    expect(log[0].subject).toBe("c3");
+    expect(log[1].subject).toBe("c1");
+  });
+
+  it("rewrites a commit message", async () => {
+    const dir = makeRepo("rebase-reword");
+    const [c2, c3] = await makeLinear(dir);
+    const subjects = (await repo.logRange(dir, "HEAD~2", "HEAD")).map((c) => c.subject);
+    await repo.rebaseInteractive(dir, "HEAD~2", [
+      { action: "reword", hash: c2, subject: subjects[0], rewordMessage: "c2-rewritten" },
+      { action: "pick", hash: c3, subject: subjects[1] },
+    ]);
+    const log = await repo.log(dir, 0, 10);
+    expect(log).toHaveLength(3);
+    expect(log[1].subject).toBe("c2-rewritten");
+  });
+
+  it("reorders commits", async () => {
+    const dir = makeRepo("rebase-reorder");
+    const [c2, c3] = await makeLinear(dir);
+    const subjects = (await repo.logRange(dir, "HEAD~2", "HEAD")).map((c) => c.subject);
+    await repo.rebaseInteractive(dir, "HEAD~2", [
+      { action: "pick", hash: c3, subject: subjects[1] },
+      { action: "pick", hash: c2, subject: subjects[0] },
+    ]);
+    const log = await repo.log(dir, 0, 10);
+    expect(log[0].subject).toBe("c2");
+    expect(log[1].subject).toBe("c3");
+    expect(log[2].subject).toBe("c1");
+  });
+});
+
+describe("remote branch operations", () => {
+  async function makeBareSetup(): Promise<{ src: string; bare: string; work: string }> {
+    const src = makeRepo("remote-src");
+    await initRepo(src);
+    writeFile(src, "a.txt", "hello\n");
+    await commitAll(src, "initial");
+    await repo["git"](src).branch(["-M", "main"]);
+    const bare = makeRepo(`remote-bare-${Math.random().toString(36).slice(2, 8)}`);
+    fs.rmdirSync(bare);
+    await repo["git"](src).raw(["clone", "--bare", src, bare]);
+    await repo["git"](src).raw(["remote", "add", "origin", bare]);
+    await repo["git"](src).raw(["push", "-u", "origin", "main"]);
+    const work = makeRepo("remote-work");
+    fs.rmdirSync(work);
+    await repo["git"](src).raw(["clone", bare, work]);
+    return { src, bare, work };
+  }
+
+  it("pushes a branch, fetches it, deletes it and prunes", async () => {
+    const { src, work } = await makeBareSetup();
+    await repo["git"](work).raw(["checkout", "-b", "feat"]);
+    writeFile(work, "b.txt", "b\n");
+    await commitAll(work, "feat commit");
+
+    await repo.pushBranch(work, "origin", "feat");
+    await repo.fetchBranch(src, "origin", "feat");
+    expect(await repo["git"](src).raw(["branch", "-r"])).toContain("origin/feat");
+
+    await repo.deleteRemoteBranch(work, "origin", "feat");
+    await repo.pruneRemote(src, "origin");
+    const after = await repo["git"](src).raw(["branch", "-r"]);
+    expect(after).not.toContain("feat");
+  });
+
+  it("pulls a specific branch", async () => {
+    const { src, work } = await makeBareSetup();
+    // src adds a commit and pushes; work pulls it by branch name
+    writeFile(src, "a.txt", "hello\nworld\n");
+    await commitAll(src, "update from src");
+    await repo["git"](src).raw(["push", "origin", "main"]);
+
+    await repo.pullBranch(work, "origin", "main");
+    const content = fs.readFileSync(path.join(work, "a.txt"), "utf8").replace(/\r/g, "");
+    expect(content).toBe("hello\nworld\n");
   });
 });
 
