@@ -2,6 +2,32 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.3.2] - 2026-08-01
+
+### Fixes
+
+- **Commit log filters now work** - the IPC bridge dropped filter params, so message/author/since filtering never applied; paged loading also keeps filters active
+- **Untracked files show their content** - clicking a new file renders its content as additions instead of an empty diff
+- **Renamed files show their diff** - renames pass both old and new paths so git can pair them
+- **Diff panel opens at max width** - the content pane defaults to the widest supported size
+- **Sidebar remote sections merged** - one "Remotes" section (config + remote branches) instead of two confusingly labelled sections
+- **Date/time search fully localized** - a built-in i18n date picker replaces the OS control (year/month/day, weekdays, Today/Clear)
+- **Welcome screen** - plain background, no decorative glow
+
+### UI / UX
+
+- **Commit graph** - graph column pinned to the left, no drag-panning; wheel scrolls, Ctrl+wheel zooms, on-canvas zoom controls (- / % / + / 1:1), no blank space above the first commit
+- **Commit bar** - "Amend last commit" moved above the commit button (top-right, flush with the bar); unchecking amend clears the message box
+- **Settings icon** - proper gear icon
+- **New app icon** - black rounded-square with a white Git branch glyph on a transparent background
+- Apple-style polish across toolbar, sidebar, dialogs, tooltips and diff view
+
+## [1.3.1] - 2026-08-01
+
+### Changes
+
+- Refresh app icon with Git branch design
+
 ## [1.3.0] - 2026-08-01
 
 ### Features

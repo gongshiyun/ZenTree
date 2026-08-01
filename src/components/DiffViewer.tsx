@@ -3,12 +3,15 @@ import { useRepoStore } from "../application/repoStore";
 import { useT } from "../i18n";
 import { highlightLine } from "../domain/diff/highlight";
 import { parseDiff, buildHunkPatch } from "../domain/diff/parser";
+import { buildUntrackedDiff } from "../domain/diff/untracked";
 import { gitApi } from "../infrastructure/gitBridge";
 import type { DiffHunk, FileHistoryEntry, BlameLine } from "../types";
 
 interface Props {
   filePath: string;
   isStaged: boolean;
+  status?: string;
+  fromPath?: string;
   onClose: () => void;
   commitHash?: string;
   readOnly?: boolean;
@@ -18,7 +21,7 @@ interface Props {
 
 type ViewMode = "diff" | "history" | "blame";
 
-export default function DiffViewer({ filePath, isStaged, onClose, commitHash, readOnly, compareFrom, compareTo }: Props) {
+export default function DiffViewer({ filePath, isStaged, status, fromPath, onClose, commitHash, readOnly, compareFrom, compareTo }: Props) {
   const currentRepo = useRepoStore((s) => s.currentRepo);
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
@@ -34,6 +37,7 @@ export default function DiffViewer({ filePath, isStaged, onClose, commitHash, re
   const [blame, setBlame] = useState<BlameLine[]>([]);
   const hunks = useMemo(() => parseDiff(diffText), [diffText]);
   const isCompare = !!(compareFrom && compareTo);
+  const isUntracked = status === "untracked";
 
   useEffect(() => {
     setView("diff");
@@ -50,12 +54,13 @@ export default function DiffViewer({ filePath, isStaged, onClose, commitHash, re
       let r;
       if (isCompare) r = await gitApi().compareFileDiff(currentRepo, compareFrom!, compareTo!, filePath);
       else if (diffCommit) r = await gitApi().commitFileDiff(currentRepo, diffCommit, filePath);
-      else r = await gitApi().diffFile(currentRepo, filePath, isStaged);
-      if (r.success && r.data !== undefined) setDiffText(r.data);
+      else if (isUntracked) r = await gitApi().readWorkingFile(currentRepo, filePath);
+      else r = await gitApi().diffFile(currentRepo, filePath, isStaged, fromPath);
+      if (r.success && r.data !== undefined) setDiffText(isUntracked ? buildUntrackedDiff(filePath, r.data) : r.data);
       else setFetchError(r.error || t("diff.fetchFailed"));
       setFetching(false);
     })();
-  }, [currentRepo, filePath, isStaged, refreshKey, diffCommit, isCompare, compareFrom, compareTo]);
+  }, [currentRepo, filePath, isStaged, status, fromPath, refreshKey, diffCommit, isCompare, compareFrom, compareTo]);
 
   // Load history / blame data when those tabs are opened
   useEffect(() => {

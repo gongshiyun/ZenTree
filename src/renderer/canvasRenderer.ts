@@ -1,9 +1,11 @@
-import type { GraphData, GraphNode, GraphEdge } from "../types";
+﻿import type { GraphData, GraphNode, GraphEdge } from "../types";
 import { GRAPH_LANE_WIDTH } from "../domain/graph/layout";
 
 const NODE_RADIUS = 7;
 const PADDING_LEFT = 20;
 const PADDING_TOP = 16;
+/** Fixed horizontal anchor: the commit graph column is pinned to the left edge. */
+const LOCK_OFFSET_X = 16;
 
 interface Camera {
   offsetX: number;
@@ -24,8 +26,8 @@ export class GraphRenderer {
   private isDragging = false;
   private dragStartX = 0;
   private dragStartY = 0;
-  private dragCameraStart: Camera = { offsetX: 0, offsetY: 0, scale: 1 };
   private theme: "dark" | "light" = "dark";
+  private cssVars: { bg: string; textPrimary: string; textSecondary: string; textMuted: string; accent: string; warning: string } = { bg: "#1a1b26", textPrimary: "#cdd6f4", textSecondary: "#a6adc8", textMuted: "#6c7086", accent: "#89b4fa", warning: "#f9e2af" };
   private rafId: number | null = null;
   private highlightHashes: Set<string> = new Set();
 
@@ -67,9 +69,8 @@ export class GraphRenderer {
     const firstLoad = this.data.nodes.length === 0 && data.nodes.length > 0;
     this.data = data;
     if (firstLoad) {
-      const firstNode = this.data.nodes[0];
-      this.camera.offsetX = this.width / 2 - firstNode.x;
-      this.camera.offsetY = 40;
+      this.camera.offsetX = LOCK_OFFSET_X;
+      this.camera.offsetY = 0;
     }
     this.scheduleRender();
   }
@@ -88,9 +89,28 @@ export class GraphRenderer {
     const node = this.data.nodes.find((n) => n.hash === hash);
     if (!node) return;
     this.camera.offsetY = this.height / 2 - node.y * this.camera.scale;
-    this.camera.offsetX = this.width / 2 - node.x * this.camera.scale;
     this.selectedHash = hash;
     this.scheduleRender();
+  }
+
+  /** Zoom by a factor, anchored at the vertical center (graph stays pinned left). */
+  zoomBy(factor: number) {
+    const newScale = Math.max(0.1, Math.min(5, this.camera.scale * factor));
+    const anchorY = this.screenToWorld(0, this.height / 2).y;
+    this.camera.scale = newScale;
+    this.camera.offsetY = this.height / 2 - anchorY * newScale;
+    this.scheduleRender();
+  }
+
+  /** Reset zoom to 100% and scroll back to the top. */
+  resetZoom() {
+    this.camera.scale = 1;
+    this.camera.offsetY = 0;
+    this.scheduleRender();
+  }
+
+  getScale(): number {
+    return this.camera.scale;
   }
 
   handleResize() {
@@ -103,6 +123,28 @@ export class GraphRenderer {
     this.scheduleRender();
   }
 
+  /** Read theme colors from CSS variables so the canvas follows the active theme. */
+  private readCssVars() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+    this.cssVars = {
+      bg: v("--bg-primary", "#1a1b26"),
+      textPrimary: v("--text-primary", "#cdd6f4"),
+      textSecondary: v("--text-secondary", "#a6adc8"),
+      textMuted: v("--text-muted", "#6c7086"),
+      accent: v("--accent", "#89b4fa"),
+      warning: v("--warning", "#f9e2af"),
+    };
+  }
+
+  /** Convert a hex color to rgba() with the given alpha. */
+  private withAlpha(hex: string, alpha: number): string {
+    const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+
   /** Schedule a render on the next animation frame (coalesces multiple requests). */
   private scheduleRender() {
     if (this.rafId !== null) return;
@@ -113,11 +155,12 @@ export class GraphRenderer {
   }
 
   render() {
+    this.readCssVars();
     const { ctx, width, height, camera, data } = this;
     const isDark = this.theme === "dark";
 
     // Clear
-    ctx.fillStyle = isDark ? "#1a1b26" : "#fafafa";
+    ctx.fillStyle = this.cssVars.bg;
     ctx.fillRect(0, 0, width, height);
 
     const scale = Math.max(0.1, Math.min(5, camera.scale));
@@ -148,7 +191,7 @@ export class GraphRenderer {
     ctx.restore();
 
     // Draw node count info
-    ctx.fillStyle = isDark ? "#555" : "#aaa";
+    ctx.fillStyle = this.cssVars.textMuted;
     ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
     const countText = `${data.nodes.length} commits`;
     ctx.fillText(countText, 12, height - 8);
@@ -175,7 +218,7 @@ export class GraphRenderer {
       if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
       const names = refs[node.hash];
       if (!names || names.length === 0) continue;
-      ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.font = "bold 10.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.textBaseline = "middle";
       const baseY = node.y - 10;
       for (let i = 0; i < names.length; i++) {
@@ -186,7 +229,7 @@ export class GraphRenderer {
         ctx.beginPath();
         ctx.roundRect(labelX, ly - 8, w, 16, 4);
         ctx.fill();
-        ctx.fillStyle = isDark ? "#1a1b26" : "#fff";
+        ctx.fillStyle = this.cssVars.bg;
         ctx.fillText(name, labelX + 6, ly);
       }
     }
@@ -246,7 +289,7 @@ export class GraphRenderer {
       if (isHighlighted && !isSelected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, r + 5, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(226, 192, 68, 0.35)";
+        ctx.fillStyle = this.withAlpha(this.cssVars.warning, 0.35);
         ctx.fill();
       }
 
@@ -254,7 +297,7 @@ export class GraphRenderer {
       if (isSelected || isHovered) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, r + 3, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected ? "rgba(97, 175, 239, 0.3)" : "rgba(150, 150, 150, 0.2)";
+        ctx.fillStyle = isSelected ? this.withAlpha(this.cssVars.accent, 0.3) : this.withAlpha(this.cssVars.textSecondary, 0.2);
         ctx.fill();
       }
 
@@ -265,7 +308,7 @@ export class GraphRenderer {
       ctx.fill();
 
       // Outline
-      ctx.strokeStyle = isDark ? "#1a1b26" : "#fafafa";
+      ctx.strokeStyle = this.cssVars.bg;
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
@@ -273,20 +316,20 @@ export class GraphRenderer {
       const textX = data.maxLane * GRAPH_LANE_WIDTH + GRAPH_LANE_WIDTH + 12;
       const subj = node.subject;
       const displayText = subj.length > 50 ? subj.substring(0, 50) + "..." : subj;
-      ctx.fillStyle = isDark ? "#abb2bf" : "#555";
-      ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillStyle = this.cssVars.textPrimary;
+      ctx.font = "12.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.textBaseline = "middle";
       ctx.fillText(displayText, textX, node.y);
       const subjW = ctx.measureText(displayText).width;
-      ctx.fillStyle = isDark ? "#6c7086" : "#9399b2";
-      ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillStyle = this.cssVars.textSecondary;
+      ctx.font = "11.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.fillText(node.author, textX + subjW + 8, node.y);
       // Date column
       const authorW = ctx.measureText(node.author).width;
       const d = new Date(node.timestamp * 1000);
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-      ctx.fillStyle = isDark ? "#555b6e" : "#aaa";
-      ctx.font = "10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      ctx.fillStyle = this.cssVars.textMuted;
+      ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.fillText(dateStr, textX + subjW + authorW + 20, node.y);
     }
   }
@@ -350,81 +393,55 @@ export class GraphRenderer {
   private handleWheel = (e: WheelEvent) => {
     e.preventDefault();
 
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(0.1, Math.min(5, this.camera.scale * zoomFactor));
-
-    // Zoom toward cursor
-    const mouseX = e.offsetX;
-    const mouseY = e.offsetY;
-
-    const worldBefore = this.screenToWorld(mouseX, mouseY);
-    this.camera.scale = newScale;
-    const worldAfter = this.screenToWorld(mouseX, mouseY);
-
-    this.camera.offsetX += (worldAfter.x - worldBefore.x) * newScale;
-    this.camera.offsetY += (worldAfter.y - worldBefore.y) * newScale;
-
-    this.scheduleRender();
-  };
-
-  private handleMouseDown = (e: MouseEvent) => {
-    const node = this.hitTest(e.offsetX, e.offsetY);
-
-    if (node) {
-      // Start drag on node (but also track for click)
-      this.isDragging = false;
-      this.dragStartX = e.offsetX;
-      this.dragStartY = e.offsetY;
+    // Ctrl/Cmd + wheel zooms; plain wheel scrolls vertically (SourceTree-like).
+    if (e.ctrlKey || e.metaKey) {
+      const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+      this.zoomBy(zoomFactor);
     } else {
-      // Start pan
-      this.isDragging = true;
-      this.dragStartX = e.offsetX;
-      this.dragStartY = e.offsetY;
-      this.dragCameraStart = { ...this.camera };
+      this.camera.offsetY -= e.deltaY;
+      this.camera.offsetY = Math.min(120, Math.max(this.minOffsetY(), this.camera.offsetY));
+      this.scheduleRender();
     }
   };
 
-  private handleMouseMove = (e: MouseEvent) => {
-    if (this.isDragging) {
-      const dx = e.offsetX - this.dragStartX;
-      const dy = e.offsetY - this.dragStartY;
+  /** Lower bound for vertical scrolling so the graph cannot be scrolled past its end. */
+  private minOffsetY(): number {
+    const last = this.data.nodes[this.data.nodes.length - 1];
+    if (!last) return -this.height;
+    return Math.min(120, this.height - last.y * this.camera.scale - 40);
+  }
 
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        this.camera.offsetX = this.dragCameraStart.offsetX + dx;
-        this.camera.offsetY = this.dragCameraStart.offsetY + dy;
-        this.hoveredNode = null;
-        this.onHover?.(null);
-        this.scheduleRender();
-        return;
-      }
+  private handleMouseDown = (e: MouseEvent) => {
+    // Drag-panning is intentionally disabled; track presses only for click detection.
+    this.isDragging = true;
+    this.dragStartX = e.offsetX;
+    this.dragStartY = e.offsetY;
+  };
+
+  private handleMouseMove = (e: MouseEvent) => {
+    // If the pointer moved while pressed, treat it as a cancelled click.
+    if (this.isDragging && (Math.abs(e.offsetX - this.dragStartX) > 2 || Math.abs(e.offsetY - this.dragStartY) > 2)) {
+      this.isDragging = false;
     }
 
     const node = this.hitTest(e.offsetX, e.offsetY);
     if (node !== this.hoveredNode) {
       this.hoveredNode = node;
-      this.canvas.style.cursor = node ? "pointer" : "grab";
+      this.canvas.style.cursor = node ? "pointer" : "default";
       this.onHover?.(node);
       this.scheduleRender();
     }
   };
 
   private handleMouseUp = (e: MouseEvent) => {
-    if (this.isDragging) {
-      this.isDragging = false;
-      return;
-    }
+    if (!this.isDragging) return;
+    this.isDragging = false;
 
-    // Check if click (minimal movement)
-    const dx = Math.abs(e.offsetX - this.dragStartX);
-    const dy = Math.abs(e.offsetY - this.dragStartY);
-
-    if (dx < 3 && dy < 3) {
-      const node = this.hitTest(e.offsetX, e.offsetY);
-      if (node) {
-        this.selectedHash = node.hash;
-        this.onClick?.(node);
-        this.scheduleRender();
-      }
+    const node = this.hitTest(e.offsetX, e.offsetY);
+    if (node) {
+      this.selectedHash = node.hash;
+      this.onClick?.(node);
+      this.scheduleRender();
     }
   };
 

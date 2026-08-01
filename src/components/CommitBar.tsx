@@ -34,7 +34,9 @@ export default function CommitBar() {
         } catch { /* */ }
       })();
     } else {
-      setMessage(userMessageRef.current);
+      // Unchecking amend clears the message box.
+      setMessage("");
+      userMessageRef.current = "";
       setLastCommitMsg("");
     }
   }, [amend, currentRepo, message]);
@@ -80,16 +82,18 @@ export default function CommitBar() {
 
   return (
     <div className="commit-bar">
-      <div className="commit-textarea-wrap">
-        <textarea
-          ref={textareaRef}
-          style={{ height: textareaH, resize: "none" }}
-          placeholder={canCommit ? t("commit.placeholder") : t("commit.noStaged")}
-          value={message}
-          onChange={handleMsgChange}
-          onKeyDown={handleKeyDown}
-        />
-        <div className="commit-resize-handle" onMouseDown={handleResizeStart} title="Drag to resize" />
+      <div className="commit-body">
+        <div className="commit-textarea-wrap">
+          <textarea
+            ref={textareaRef}
+            style={{ height: textareaH, resize: "none" }}
+            placeholder={canCommit ? t("commit.placeholder") : t("commit.noStaged")}
+            value={message}
+            onChange={handleMsgChange}
+            onKeyDown={handleKeyDown}
+          />
+          <div className="commit-resize-handle" onMouseDown={handleResizeStart} title="Drag to resize" />
+        </div>
       </div>
       <div className="commit-options">
         <label className="amend-check">

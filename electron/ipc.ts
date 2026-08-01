@@ -86,6 +86,8 @@ export function registerIpcHandlers({ settings, git, update, getWindow }: IpcDep
     git.diffFile(String(repoPath), String(filePath), Boolean(staged))));
   ipcMain.handle("git:commit-file-diff", safeHandler(async (repoPath: unknown, hash: unknown, filePath: unknown) =>
     git.commitFileDiff(String(repoPath), String(hash), String(filePath))));
+  ipcMain.handle("git:read-file", safeHandler(async (repoPath: unknown, filePath: unknown) =>
+    git.readWorkingFile(String(repoPath), String(filePath))));
   ipcMain.handle("git:stage-hunk", safeHandler(async (repoPath: unknown, patchContent: unknown) =>
     git.stageHunk(String(repoPath), String(patchContent))));
   ipcMain.handle("git:unstage-hunk", safeHandler(async (repoPath: unknown, patchContent: unknown) =>

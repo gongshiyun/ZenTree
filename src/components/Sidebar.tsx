@@ -203,11 +203,30 @@ export default function Sidebar() {
           </div>
         ))}
         {branches.length === 0 && <div className="empty-state" style={{ padding: 20 }}>{t("sidebar.noBranches")}</div>}
-        {remoteBranches.length > 0 && (<>
-          <div className="sidebar-subheader" onClick={() => setShowRemotes(!showRemotes)}>
-            <span className="subheader-arrow">{showRemotes ? "\u25BC" : "\u25B6"}</span> {t("sidebar.remotes")} ({remoteBranches.length})
-          </div>
-          {showRemotes && remoteBranches.map((b) => (
+        <div className="sidebar-subheader" onClick={() => setShowRemotes(!showRemotes)}>
+          <span className="subheader-arrow">{showRemotes ? "\u25BC" : "\u25B6"}</span> {t("sidebar.remotes")}
+          <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setShowRemoteInput(!showRemoteInput); }} title={t("remotes.addTip")}>+</button>
+        </div>
+        {showRemotes && (<>
+          {remotes.map((remote) => (
+            <div key={remote.name} className="branch-item remote-item" title={remote.url}>
+              <span className="branch-icon">{"\u21C4"}</span>
+              <span className="stash-subject">{remote.name}</span>
+              <span className="file-actions">
+                <button className="file-action-btn danger" onClick={() => handleRemoveRemote(remote.name)}>{t("remotes.remove")}</button>
+              </span>
+            </div>
+          ))}
+          {remotes.length === 0 && !showRemoteInput && <div className="empty-state" style={{ padding: 10 }}>{t("remotes.empty")}</div>}
+          {showRemoteInput && (
+            <div className="new-branch-input" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <input type="text" value={remoteName} placeholder={t("remotes.namePlaceholder")} onChange={(e) => setRemoteName(e.target.value)} />
+              <input type="text" value={remoteUrl} placeholder={t("remotes.urlPlaceholder")} onChange={(e) => setRemoteUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleAddRemote(); }} />
+              <button onClick={handleAddRemote} disabled={!remoteName.trim() || !remoteUrl.trim()}>{t("remotes.add")}</button>
+            </div>
+          )}
+          {remoteBranches.length > 0 && <div className="sidebar-group-label">{t("sidebar.remoteBranches")}</div>}
+          {remoteBranches.map((b) => (
             <div key={b} className="branch-item remote" onDoubleClick={() => checkoutRemote(b)} onContextMenu={(e) => handleContextMenu(e, b, true)} title={b + t("sidebar.dblClick")}>
               <span className="branch-icon remote-icon">{"\u21C4"}</span><span>{b.replace(/^remotes\//, "")}</span>
             </div>
@@ -258,27 +277,6 @@ export default function Sidebar() {
           {tags.length === 0 && !showTagInput && <div className="empty-state" style={{ padding: 10 }}>{t("tags.empty")}</div>}
         </div>
       )}
-      <div className="sidebar-subheader" onClick={() => setShowRemoteInput(!showRemoteInput)} style={{ marginTop: 4 }}>
-        <span className="subheader-arrow">{showRemoteInput ? "\u25BC" : "\u25B6"}</span> {t("remotes.title")}
-        <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setShowRemoteInput(!showRemoteInput); }} title={t("remotes.addTip")}>+</button>
-      </div>
-      {showRemoteInput && (
-        <div className="new-branch-input" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <input type="text" value={remoteName} placeholder={t("remotes.namePlaceholder")} onChange={(e) => setRemoteName(e.target.value)} />
-          <input type="text" value={remoteUrl} placeholder={t("remotes.urlPlaceholder")} onChange={(e) => setRemoteUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleAddRemote(); }} />
-          <button onClick={handleAddRemote} disabled={!remoteName.trim() || !remoteUrl.trim()}>{t("remotes.add")}</button>
-        </div>
-      )}
-      {remotes.map((remote) => (
-        <div key={remote.name} className="branch-item remote-item" title={remote.url}>
-          <span className="branch-icon">{"\u21C4"}</span>
-          <span className="stash-subject">{remote.name}</span>
-          <span className="file-actions">
-            <button className="file-action-btn danger" onClick={() => handleRemoveRemote(remote.name)}>{t("remotes.remove")}</button>
-          </span>
-        </div>
-      ))}
-      {remotes.length === 0 && !showRemoteInput && <div className="empty-state" style={{ padding: 10 }}>{t("remotes.empty")}</div>}
     </div>
     <div className="resize-handle" onMouseDown={handleResizeStart} />
     {contextMenu && (<div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>

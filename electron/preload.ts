@@ -1,10 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { GitAPI, UpdateState } from "../src/types";
+import type { GitAPI, LogFilters, UpdateState } from "../src/types";
 
 const api: GitAPI = {
   isRepo: (repoPath: string) => ipcRenderer.invoke("git:is-repo", repoPath),
   branches: (repoPath: string) => ipcRenderer.invoke("git:branches", repoPath),
-  log: (repoPath: string, skip: number, maxCount: number) => ipcRenderer.invoke("git:log", repoPath, skip, maxCount),
+  log: (repoPath: string, skip: number, maxCount: number, filters?: LogFilters) =>
+    ipcRenderer.invoke("git:log", repoPath, skip, maxCount, filters),
   status: (repoPath: string) => ipcRenderer.invoke("git:status", repoPath),
   show: (repoPath: string, hash: string) => ipcRenderer.invoke("git:show", repoPath, hash),
   lastMessage: (repoPath: string) => ipcRenderer.invoke("git:last-message", repoPath),
@@ -29,6 +30,7 @@ const api: GitAPI = {
   openGitBash: (repoPath: string) => ipcRenderer.invoke("shell:open-git-bash", repoPath),
   diffFile: (repoPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke("git:diff-file", repoPath, filePath, staged),
   commitFileDiff: (repoPath: string, hash: string, filePath: string) => ipcRenderer.invoke("git:commit-file-diff", repoPath, hash, filePath),
+  readWorkingFile: (repoPath: string, filePath: string) => ipcRenderer.invoke("git:read-file", repoPath, filePath),
   stageHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:stage-hunk", repoPath, patchContent),
   unstageHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:unstage-hunk", repoPath, patchContent),
   revertHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:revert-hunk", repoPath, patchContent),

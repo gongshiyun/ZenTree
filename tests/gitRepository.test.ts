@@ -79,6 +79,45 @@ describe("clone", () => {
   });
 });
 
+describe("working-tree diffs", () => {
+  it("reads the content of an untracked file", async () => {
+    const dir = makeRepo("untracked-read");
+    await initRepo(dir);
+    writeFile(dir, "u.txt", "untracked content\n");
+    const content = await repo.readWorkingFile(dir, "u.txt");
+    expect(content).toBe("untracked content\n");
+  });
+
+  it("rejects reading a missing file", async () => {
+    const dir = makeRepo("missing-read");
+    await initRepo(dir);
+    await expect(repo.readWorkingFile(dir, "nope.txt")).rejects.toThrow();
+  });
+
+  it("shows a deletion for the source of an uncommitted rename", async () => {
+    const dir = makeRepo("rename-away");
+    await initRepo(dir);
+    writeFile(dir, "old.txt", "same content\n");
+    await commitAll(dir, "initial");
+    // Filesystem rename (not staged) so `git diff` must detect it with -M.
+    fs.renameSync(path.join(dir, "old.txt"), path.join(dir, "new.txt"));
+    const diff = await repo.diffFile(dir, "old.txt", false);
+    expect(diff).toContain("deleted file mode");
+    expect(diff).toContain("-same content");
+  });
+
+  it("shows a diff for a staged rename", async () => {
+    const dir = makeRepo("rename-staged");
+    await initRepo(dir);
+    writeFile(dir, "old.txt", "same content\n");
+    await commitAll(dir, "initial");
+    await repo["git"](dir).raw(["mv", "old.txt", "new.txt"]);
+    const diff = await repo.diffFile(dir, "new.txt", true, "old.txt");
+    expect(diff).toContain("rename from old.txt");
+    expect(diff).toContain("rename to new.txt");
+  });
+});
+
 describe("fileHistory", () => {
   it("returns commits touching the file, newest first", async () => {
     const dir = makeRepo("history");

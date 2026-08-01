@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+﻿import { useEffect, useCallback } from "react";
 import { useRepoStore } from "./application/repoStore";
 import { useT } from "./i18n";
 import { gitApi } from "./infrastructure/gitBridge";
@@ -47,8 +47,8 @@ function Welcome() {
       <h1>ZenTree</h1>
       <p>{t("app.welcome")}</p>
       <button className="open-btn" onClick={handleOpen}>{t("app.openRepo")}</button>
-      <button className="open-btn" style={{ marginLeft: 8 }} onClick={() => useRepoStore.getState().setShowClone(true)}>{t("app.cloneRepo")}</button>
-      <p style={{ marginTop: 16, fontSize: 11, color: "var(--text-muted)" }}>{t("app.dragHint")}</p>
+      <button className="open-btn secondary" onClick={() => useRepoStore.getState().setShowClone(true)}>{t("app.cloneRepo")}</button>
+      <p className="welcome-hint">{t("app.dragHint")}</p>
     </div>
   );
 }

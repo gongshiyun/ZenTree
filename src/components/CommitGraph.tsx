@@ -30,6 +30,7 @@ export default function CommitGraph() {
   const [searchText, setSearchText] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [matchIndex, setMatchIndex] = useState(0);
+  const [zoom, setZoom] = useState(100);
   const mousePosRef = useRef({ x: 0, y: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -174,8 +175,24 @@ export default function CommitGraph() {
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [ctxMenu, currentRepo, setLoading, setError, refreshAll]);
 
+  const handleZoom = useCallback((factor: number) => {
+    rendererRef.current?.zoomBy(factor);
+    setZoom(Math.round((rendererRef.current?.getScale() ?? 1) * 100));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    rendererRef.current?.resetZoom();
+    setZoom(100);
+  }, []);
+
   return (
     <div className="graph-container" ref={containerRef} onMouseMove={handleMouseMove}>
+      <div className="graph-zoom-controls">
+        <button className="graph-zoom-btn" onClick={() => handleZoom(1 / 1.2)} title={t("graph.zoomOut")}>&minus;</button>
+        <span className="graph-zoom-label">{zoom}%</span>
+        <button className="graph-zoom-btn" onClick={() => handleZoom(1.2)} title={t("graph.zoomIn")}>+</button>
+        <button className="graph-zoom-btn" onClick={handleZoomReset} title={t("graph.zoomReset")}>1:1</button>
+      </div>
       {showSearch && (
         <div className="graph-search-bar">
           <input

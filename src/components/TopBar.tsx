@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState, useEffect } from "react";
+﻿import { useCallback, useRef, useState, useEffect } from "react";
 import { useRepoStore } from "../application/repoStore";
 import { useT } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
+import DatePicker from "./DatePicker";
 
 export default function TopBar() {
   const t = useT();
@@ -105,7 +106,11 @@ export default function TopBar() {
       <div className="repo-selector no-drag" ref={selectorRef}>
         <div className="repo-selector-trigger" onClick={() => setShowDropdown(!showDropdown)}>
           <span className="repo-name">{currentRepoName || (repos.length === 0 ? t("topbar.noRepos") : t("topbar.selectRepo"))}</span>
-          <span className="dropdown-arrow">{showDropdown ? "\u25B2" : "\u25BC"}</span>
+          <span className="dropdown-arrow">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
         </div>
         {showDropdown && (
           <div className="repo-dropdown">
@@ -134,9 +139,23 @@ export default function TopBar() {
       <div className="top-bar-spacer" />
       <div className="top-bar-right no-drag">
         <button className="toolbar-btn add-repo" onClick={handleAddRepo} title={t("topbar.addRepo")}>{t("topbar.add")}</button>
-        <button className="toolbar-btn icon-only" onClick={() => setThemePreset(isDark ? "catppuccin-latte" : "catppuccin-mocha")} title={t("topbar.toggleTheme")}>{isDark ? "\u2600" : "\u263E"}</button>
+        <button className="toolbar-btn icon-only" onClick={() => setThemePreset(isDark ? "catppuccin-latte" : "catppuccin-mocha")} title={t("topbar.toggleTheme")}>{isDark ? (
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+              <circle cx="8" cy="8" r="3.2" />
+              <path d="M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M3.2 12.8l1.1-1.1M11.7 4.3l1.1-1.1" />
+            </svg>
+          ) : (
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13.5 9.2A6 6 0 0 1 6.8 2.5 6 6 0 1 0 13.5 9.2Z" />
+            </svg>
+          )}</button>
         <button className="toolbar-btn" onClick={() => useRepoStore.getState().setLanguage(language === "zh" ? "en" : "zh")} title={t("topbar.settings")} style={{ fontSize: 11, fontWeight: 600, padding: "0 8px" }}>{language === "zh" ? "\u4E2D" : "EN"}</button>
-        <button className="toolbar-btn icon-only" onClick={() => setShowSettings(true)} title={t("topbar.settings")}>&#9881;</button>
+        <button className="toolbar-btn icon-only" onClick={() => setShowSettings(true)} title={t("topbar.settings")}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3.2" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
         <span className="window-controls-sep" />
         <button className="window-control-btn" onClick={() => gitApi().minimizeWindow()} title={t("topbar.minimize")}><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg></button>
         <button className="window-control-btn" onClick={() => gitApi().maximizeWindow()} title={t("topbar.maximize")}><svg width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" rx="1" stroke="currentColor" fill="none" strokeWidth="1"/></svg></button>
@@ -145,9 +164,10 @@ export default function TopBar() {
     </div>
     {currentRepo && (
       <div className="filter-bar no-drag">
-        <input className="filter-input" type="text" placeholder={t("topbar.filterQuery")} value={fQuery} onChange={(e) => setFQuery(e.target.value)} />
-        <input className="filter-input" type="text" placeholder={t("topbar.filterAuthor")} value={fAuthor} onChange={(e) => setFAuthor(e.target.value)} />
-        <input className="filter-input" type="date" title={t("topbar.filterSince")} value={fSince} onChange={(e) => setFSince(e.target.value)} />
+        <input className="filter-input filter-query" type="text" placeholder={t("topbar.filterQuery")} value={fQuery} onChange={(e) => setFQuery(e.target.value)} />
+        <input className="filter-input filter-author" type="text" placeholder={t("topbar.filterAuthor")} value={fAuthor} onChange={(e) => setFAuthor(e.target.value)} />
+        <span className="filter-label">{t("topbar.filterSince")}</span>
+        <DatePicker value={fSince} onChange={setFSince} />
         {(fQuery || fAuthor || fSince) && <button className="filter-clear" onClick={() => { setFQuery(""); setFAuthor(""); setFSince(""); }}>{t("topbar.filterClear")}</button>}
       </div>
     )}

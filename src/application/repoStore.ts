@@ -11,7 +11,7 @@ const PAGE_SIZE = 200;
 /** Monotonic token that invalidates in-flight refreshes after a newer one starts. */
 let refreshSeq = 0;
 
-interface SelectedDiffFile { path: string; isStaged: boolean; commitHash?: string; fromRef?: string; toRef?: string; }
+interface SelectedDiffFile { path: string; isStaged: boolean; status?: string; fromPath?: string; commitHash?: string; fromRef?: string; toRef?: string; }
 
 interface AppState {
   repos: RepoInfo[]; currentRepo: string | null;
@@ -138,7 +138,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
     const seq = refreshSeq;
     set({ loadingMore: true });
     try {
-      const result = await gitApi().log(state.currentRepo, state.logSkip, PAGE_SIZE);
+      const result = await gitApi().log(state.currentRepo, state.logSkip, PAGE_SIZE, get().logFilters);
       if (seq !== refreshSeq) return;
       if (result.success && result.data && result.data.length > 0) {
         const merged = [...state.logEntries, ...result.data];

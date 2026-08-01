@@ -1,8 +1,8 @@
-import type { CommitLogEntry, GraphData, GraphEdge, GraphNode } from "../../types";
+﻿import type { CommitLogEntry, GraphData, GraphEdge, GraphNode } from "../../types";
 import { hashToColor } from "./colors";
 
 /** Vertical spacing between commit rows in world coordinates. */
-export const GRAPH_ROW_HEIGHT = 28;
+export const GRAPH_ROW_HEIGHT = 30;
 /** Horizontal spacing between lanes in world coordinates. */
 export const GRAPH_LANE_WIDTH = 22;
 

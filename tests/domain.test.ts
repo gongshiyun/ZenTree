@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseDiff, buildHunkPatch } from "../src/domain/diff/parser";
 import { highlightLine } from "../src/domain/diff/highlight";
+import { buildUntrackedDiff } from "../src/domain/diff/untracked";
 import { buildGraphData } from "../src/domain/graph/layout";
 import type { CommitLogEntry } from "../src/types";
 
@@ -52,6 +53,33 @@ describe("buildHunkPatch", () => {
     expect(patch).toContain("+++ b/hello.txt");
     expect(patch).toContain("@@ -1,3 +1,4 @@");
     expect(patch).toContain("+line three");
+  });
+});
+
+describe("buildUntrackedDiff", () => {
+  it("builds a diff showing the whole file as additions", () => {
+    const diff = buildUntrackedDiff("new.txt", "line one\nline two\n");
+    expect(diff).toContain("new file mode 100644");
+    expect(diff).toContain("--- /dev/null");
+    expect(diff).toContain("+++ b/new.txt");
+    expect(diff).toContain("@@ -0,0 +1,2 @@");
+    expect(diff).toContain("+line one");
+    expect(diff).toContain("+line two");
+    const hunks = parseDiff(diff);
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0].lines.map((l) => l.type)).toEqual(["addition", "addition"]);
+  });
+
+  it("normalizes CRLF line endings", () => {
+    const diff = buildUntrackedDiff("win.txt", "a\r\nb\r\n");
+    expect(diff).not.toContain("\r");
+    expect(diff).toContain("+a");
+    expect(diff).toContain("+b");
+  });
+
+  it("produces a parseable diff for empty content", () => {
+    const diff = buildUntrackedDiff("empty.txt", "");
+    expect(parseDiff(diff)).toHaveLength(1);
   });
 });
 

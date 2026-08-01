@@ -8,7 +8,9 @@ export default function DiffPanel() {
   const refreshAll = useRepoStore((s) => s.refreshAll);
 
   // Resize handling
-  const [panelWidth, setPanelWidth] = useState(380);
+  const [panelWidth, setPanelWidth] = useState(() =>
+    Math.min(700, Math.max(420, Math.round((window.innerWidth || 1400) * 0.5)))
+  );
   const isResizing = useRef(false);
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -37,6 +39,8 @@ export default function DiffPanel() {
         <DiffViewer
           filePath={selectedDiffFile.path}
           isStaged={selectedDiffFile.isStaged}
+          status={selectedDiffFile.status}
+          fromPath={selectedDiffFile.fromPath}
           commitHash={selectedDiffFile.commitHash}
           compareFrom={selectedDiffFile.fromRef}
           compareTo={selectedDiffFile.toRef}

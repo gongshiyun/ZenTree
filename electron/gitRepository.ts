@@ -97,13 +97,25 @@ export class GitRepository {
     return (await this.git(repoPath).raw(["log", "-1", "--format=%B"])).trim();
   }
 
-  async diffFile(repoPath: string, filePath: string, staged: boolean): Promise<string> {
-    const args = staged ? ["diff", "--cached", "--", filePath] : ["diff", "--", filePath];
+  async diffFile(repoPath: string, filePath: string, staged: boolean, fromPath?: string): Promise<string> {
+    // -M enables rename detection. When the file is a rename, pass both the
+    // old and new paths so git can pair them up under a single-path pathspec.
+    const paths = fromPath ? [fromPath, filePath] : [filePath];
+    const args = staged ? ["diff", "-M", "--cached", "--", ...paths] : ["diff", "-M", "--", ...paths];
     return this.git(repoPath).raw(args);
   }
 
   async commitFileDiff(repoPath: string, hash: string, filePath: string): Promise<string> {
     return this.git(repoPath).raw(["show", "--format=", hash, "--", filePath]);
+  }
+
+  /** Read the current working-tree content of a file (e.g. untracked files). */
+  async readWorkingFile(repoPath: string, filePath: string): Promise<string> {
+    const fullPath = path.join(repoPath, filePath);
+    if (!fs.existsSync(fullPath) || fs.statSync(fullPath).isDirectory()) {
+      throw new Error("File does not exist");
+    }
+    return fs.readFileSync(fullPath, "utf8");
   }
 
   /** Apply a hunk patch via a temporary file (git apply works on files, not stdin strings). */

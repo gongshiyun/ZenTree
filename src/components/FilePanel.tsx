@@ -15,6 +15,8 @@ interface FileEntry {
   status: FileStatus;
   /** Extra paths to pass for discard (e.g. both sides of a rename). */
   discardPaths?: string[];
+  /** Original path for renames, so the diff can be shown against it. */
+  fromPath?: string;
 }
 
 function statLabel(s: FileStatus): string { switch (s) { case "untracked": return "U"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; case "conflict": return "C"; default: return "M"; } }
@@ -45,7 +47,7 @@ export default function FilePanel() {
       e.push({ path: f, status: "deleted" });
     }
     for (const r of status.renamed || []) {
-      e.push({ path: r.to, label: `${r.from} \u2192 ${r.to}`, status: "renamed", discardPaths: [r.from, r.to] });
+      e.push({ path: r.to, label: `${r.from} \u2192 ${r.to}`, status: "renamed", discardPaths: [r.from, r.to], fromPath: r.from });
     }
     for (const f of status.conflicted || []) e.push({ path: f, status: "conflict" });
     return e;
@@ -64,11 +66,16 @@ export default function FilePanel() {
     return status.staged.map((f) => {
       const idx = indexOf.get(f) || "";
       let st: FileStatus = "modified";
+      let fromPath: string | undefined;
       if (idx === "A") st = "added";
       else if (idx === "D") st = "deleted";
-      else if (idx === "R") st = "renamed";
+      else if (idx === "R") {
+        st = "renamed";
+        const m = status.files.find((x) => x.index === "R" && x.path.split(" -> ")[1] === f);
+        if (m) fromPath = m.path.split(" -> ")[0];
+      }
       else if (status.created.includes(f)) st = "added";
-      return { path: f, status: st };
+      return { path: f, status: st, fromPath };
     });
   }, [status]);
 
@@ -148,7 +155,7 @@ export default function FilePanel() {
         <button className="file-action-btn" onClick={handleCherryPick} title={t("commit.cherryPickTip")}>{t("commit.cherryPick")}</button>
         <button className="file-action-btn" onClick={handleOpenOnHosting} title={t("commit.openOnHostingTip")}>{t("commit.openOnHosting")}</button>
       </div>
-    </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, commitHash: selectedCommit })}><span className="file-name">{f}</span></div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
+    </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, status: "modified", commitHash: selectedCommit })}><span className="file-name">{f}</span></div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
   }
 
   const currentFiles = activeTab === "unstaged" ? unstagedFiles : stagedFiles;
@@ -158,7 +165,7 @@ export default function FilePanel() {
     <div className={`file-tab${activeTab === "staged" ? " active" : ""}`} onClick={() => setActiveTab("staged")}>{t("files.staged")} <span className="count">{stagedFiles.length}</span></div>
   </div><div className="file-list">
     {currentFiles.map((file) => { const sl = statLabel(file.status); const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged"); const display = file.label || file.path; return (
-      <div key={activeTab + ":" + file.path} className={`file-item${isSel ? " selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged" })}>
+      <div key={activeTab + ":" + file.path} className={`file-item${isSel ? " selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged", status: file.status, fromPath: file.fromPath })}>
         <span className={`file-status ${sl}`}>{statIcon(file.status)}</span><span className="file-name" title={display}>{display}</span>
         <span className="file-actions" onClick={(e) => e.stopPropagation()}>
           {file.status === "conflict"
