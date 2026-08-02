@@ -15,6 +15,7 @@ export default function TopBar() {
   const setShowSettings = useRepoStore((s) => s.setShowSettings);
   const setShowClone = useRepoStore((s) => s.setShowClone);
   const setShowCompare = useRepoStore((s) => s.setShowCompare);
+  const setShowRepoGroups = useRepoStore((s) => s.setShowRepoGroups);
   const setLogFilters = useRepoStore((s) => s.setLogFilters);
   const remotes = useRepoStore((s) => s.remotes);
   const loading = useRepoStore((s) => s.loading);
@@ -154,6 +155,7 @@ export default function TopBar() {
         <button className="toolbar-btn" onClick={handlePush} disabled={loading} title={t("topbar.pushTip")}>{t("topbar.push")}</button>
         <button className="toolbar-btn" onClick={handleRefresh} disabled={loading} title={t("topbar.refreshTip")}>{t("topbar.refresh")}</button>
         <button className="toolbar-btn" onClick={() => setShowCompare(true)} disabled={loading} title={t("topbar.compareTip")}>{t("topbar.compare")}</button>
+        <button className="toolbar-btn" onClick={() => setShowRepoGroups(true)} disabled={loading} title={t("topbar.repoGroupsTip")}>{t("topbar.repoGroups")}</button>
         <span className="toolbar-separator" />
         <button className="toolbar-btn" onClick={handleOpenOnHosting} disabled={!hasRemote || loading} title={t("topbar.hostingTip")}>{t("topbar.hosting")}</button>
         <button className="toolbar-btn" onClick={handleGitBash} disabled={loading} title={t("topbar.bashTip")}>{t("topbar.bash")}</button>

@@ -13,6 +13,7 @@ import DiffPanel from "./components/DiffPanel";
 import CloneDialog from "./components/CloneDialog";
 import CompareDialog from "./components/CompareDialog";
 import RebaseDialog from "./components/RebaseDialog";
+import RepoGroupDialog from "./components/RepoGroupDialog";
 
 function Welcome() {
   const t = useT();
@@ -58,6 +59,7 @@ export default function App() {
   const currentRepo = useRepoStore((s) => s.currentRepo);
   const selectedDiffFile = useRepoStore((s) => s.selectedDiffFile);
   const showRebase = useRepoStore((s) => s.showRebase);
+  const showRepoGroups = useRepoStore((s) => s.showRepoGroups);
   const refreshAll = useRepoStore((s) => s.refreshAll);
   const setError = useRepoStore((s) => s.setError);
 
@@ -106,6 +108,7 @@ export default function App() {
       <CloneDialog />
       <CompareDialog />
       {showRebase && <RebaseDialog onClose={() => useRepoStore.getState().setShowRebase(null)} />}
+      {showRepoGroups && <RepoGroupDialog onClose={() => useRepoStore.getState().setShowRepoGroups(false)} />}
     </div>
   );
 }

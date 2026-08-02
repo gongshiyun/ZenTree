@@ -1198,6 +1198,196 @@
   padding: 8px 10px;
 }
 
+/* ---------- Repo group dialog ---------- */
+.repogroup-dialog { width: 860px; }
+
+.repogroup-body {
+  display: flex;
+  min-height: 420px;
+  max-height: 70vh;
+  overflow: hidden;
+}
+
+.repogroup-side {
+  width: 210px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--separator);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.repogroup-inline {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.repogroup-inline input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.repogroup-inline input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+.repogroup-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.repogroup-group-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.repogroup-group-item:hover { background: var(--bg-hover); }
+.repogroup-group-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.repogroup-group-count {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.repogroup-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.repogroup-remove:hover { background: var(--danger-bg); color: var(--danger); }
+
+.repogroup-main {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.repogroup-repo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.repogroup-repo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  font-size: 12px;
+}
+
+.repogroup-repo-item .repo-item-path {
+  flex: 1;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.repogroup-known {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.repogroup-scan {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.repogroup-scan-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.repogroup-scan-item:hover { background: var(--bg-hover); }
+.repogroup-scan-item .repo-item-path { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.repogroup-opts {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.repogroup-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.repogroup-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.repogroup-result.ok { border-color: var(--success-border); background: var(--success-bg); }
+.repogroup-result.fail { border-color: var(--danger-border); background: var(--danger-bg); }
+
+.repogroup-result-branches { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.repogroup-result-actions { color: var(--text-muted); font-size: 11px; }
+.repogroup-result-status { margin-left: auto; font-weight: 600; }
+.repogroup-result.ok .repogroup-result-status { color: var(--success); }
+.repogroup-result.fail .repogroup-result-status { color: var(--danger); }
+
+.repogroup-result-error {
+  font-size: 10.5px;
+  color: var(--danger);
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @keyframes dialogIn {
   from { opacity: 0; transform: scale(0.96) translateY(10px); }
   to { opacity: 1; transform: none; }

@@ -503,6 +503,68 @@ describe("commit template, gpg signing and diff tool config", () => {
   });
 });
 
+describe("repo group batch operations", () => {
+  it("scans a folder for git repositories", async () => {
+    const parentDir = path.join(tempRoot, `scan-dir-${Math.random().toString(36).slice(2, 8)}`);
+    fs.mkdirSync(parentDir, { recursive: true });
+    fs.mkdirSync(path.join(parentDir, "repo-a"));
+    fs.mkdirSync(path.join(parentDir, "repo-b"));
+    await initRepo(path.join(parentDir, "repo-a"));
+    await initRepo(path.join(parentDir, "repo-b"));
+    fs.mkdirSync(path.join(parentDir, "not-a-repo"));
+
+    const found = await repo.scanRepos(parentDir);
+    expect(found.map((f) => f.name).sort()).toEqual(["repo-a", "repo-b"]);
+  });
+
+  it("switches a repository to the target branch", async () => {
+    const dir = makeRepo("batch-switch");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    await commitAll(dir, "c1");
+    await repo["git"](dir).raw(["checkout", "-b", "develop"]);
+    writeFile(dir, "a.txt", "1\n2\n");
+    await commitAll(dir, "c2");
+    await repo["git"](dir).raw(["checkout", "main"]);
+
+    const res = await repo.batchCheckout(dir, "develop", { fetch: false, pull: false, stash: false });
+    expect(res.ok).toBe(true);
+    expect(res.branchAfter).toBe("develop");
+    expect(res.actions).toContain("checkout");
+  });
+
+  it("stashes and restores uncommitted changes when switching", async () => {
+    const dir = makeRepo("batch-stash");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    await commitAll(dir, "c1");
+    await repo["git"](dir).raw(["checkout", "-b", "develop"]);
+    writeFile(dir, "a.txt", "1\n2\n");
+    await commitAll(dir, "c2");
+    await repo["git"](dir).raw(["checkout", "main"]);
+    writeFile(dir, "a.txt", "1\nlocal\n");
+
+    const res = await repo.batchCheckout(dir, "develop", { fetch: false, pull: false, stash: true });
+    expect(res.ok).toBe(true);
+    expect(res.stashed).toBe(true);
+    expect(res.restored).toBe(true);
+    expect(res.branchAfter).toBe("develop");
+    expect(fs.readFileSync(path.join(dir, "a.txt"), "utf8")).toContain("local");
+  });
+
+  it("skips repositories that do not have the target branch", async () => {
+    const dir = makeRepo("batch-skip");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    await commitAll(dir, "c1");
+
+    const res = await repo.batchCheckout(dir, "no-such-branch", {});
+    expect(res.ok).toBe(false);
+    expect(res.skipped).toBe(true);
+    expect(res.error).toContain("not found");
+  });
+});
+
 describe("fileHistory", () => {
   it("returns commits touching the file, newest first", async () => {
     const dir = makeRepo("history");

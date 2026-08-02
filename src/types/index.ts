@@ -48,6 +48,8 @@ export interface GitAPI {
   setUpstream: (repoPath: string, branch: string, remote: string) => Promise<{ success: boolean; error?: string }>;
   unsetUpstream: (repoPath: string, branch: string) => Promise<{ success: boolean; error?: string }>;
   branchTracking: (repoPath: string) => Promise<{ success: boolean; data?: BranchTracking[]; error?: string }>;
+  batchCheckout: (repoPath: string, branch: string, opts?: BatchCheckoutOptions) => Promise<{ success: boolean; data?: BatchRepoResult; error?: string }>;
+  scanRepos: (dir: string) => Promise<{ success: boolean; data?: { path: string; name: string }[]; error?: string }>;
   checkoutRemote: (repoPath: string, remoteBranch: string) => Promise<{ success: boolean; error?: string }>;
   createBranch: (repoPath: string, branchName: string, checkout: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteBranch: (repoPath: string, branchName: string, force: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -153,6 +155,29 @@ export interface BranchTracking {
 export interface SubmoduleInfo {
   path: string;
   url: string;
+}
+
+export interface BatchCheckoutOptions {
+  fetch?: boolean;
+  pull?: boolean;
+  stash?: boolean;
+}
+
+export interface BatchRepoResult {
+  repo: string;
+  ok: boolean;
+  skipped?: boolean;
+  error?: string;
+  branchBefore: string;
+  branchAfter: string;
+  stashed: boolean;
+  restored: boolean;
+  actions: string[];
+}
+
+export interface RepoGroup {
+  name: string;
+  repos: string[];
 }
 
 export interface CommitFileStat {

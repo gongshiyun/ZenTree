@@ -1,6 +1,6 @@
 {
   "name": "zentree",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "A lightweight Git GUI client built with Electron, React, and Canvas",
   "main": "dist-electron/electron/main.js",
   "scripts": {

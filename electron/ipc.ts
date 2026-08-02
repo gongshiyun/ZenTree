@@ -1,5 +1,5 @@
 import { ipcMain, dialog, BrowserWindow, shell } from "electron";
-import type { LogFilters, RebaseTodoEntry } from "../src/types";
+import type { BatchCheckoutOptions, LogFilters, RebaseTodoEntry } from "../src/types";
 import type { SettingsRepository } from "./settingsRepository";
 import type { GitRepository } from "./gitRepository";
 import type { UpdateManager } from "./updateManager";
@@ -72,6 +72,9 @@ export function registerIpcHandlers({ settings, git, update, getWindow }: IpcDep
     git.setUpstream(String(repoPath), String(branch), String(remote))));
   ipcMain.handle("git:unset-upstream", safeHandler(async (repoPath: unknown, branch: unknown) => git.unsetUpstream(String(repoPath), String(branch))));
   ipcMain.handle("git:branch-tracking", safeHandler(async (repoPath: unknown) => git.branchTracking(String(repoPath))));
+  ipcMain.handle("git:batch-checkout", safeHandler(async (repoPath: unknown, branch: unknown, opts?: unknown) =>
+    git.batchCheckout(String(repoPath), String(branch), opts as BatchCheckoutOptions | undefined)));
+  ipcMain.handle("git:scan-repos", safeHandler(async (dir: unknown) => git.scanRepos(String(dir))));
   ipcMain.handle("git:checkout-remote", safeHandler(async (repoPath: unknown, remoteBranch: unknown) => git.checkoutRemote(String(repoPath), String(remoteBranch))));
   ipcMain.handle("git:create-branch", safeHandler(async (repoPath: unknown, branchName: unknown, checkout: unknown) =>
     git.createBranch(String(repoPath), String(branchName), Boolean(checkout))));

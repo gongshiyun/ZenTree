@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { RepoInfo, CommitLogEntry, GraphData, GitStatusData, CommitDetail, LogFilters, RemoteInfo, TagInfo, BranchTracking } from "../types";
+import type { RepoInfo, CommitLogEntry, GraphData, GitStatusData, CommitDetail, LogFilters, RemoteInfo, TagInfo, BranchTracking, RepoGroup } from "../types";
 import { setGlobalLocale, t } from "../i18n";
 import { buildGraphData } from "../domain/graph/layout";
 import { getThemePreset, applyTheme } from "../domain/theme/presets";
@@ -31,6 +31,8 @@ interface AppState {
   branchTracking: BranchTracking[];
   ongoing: "merge" | "rebase" | "cherry-pick" | null;
   viewRef: string | null;
+  repoGroups: RepoGroup[];
+  showRepoGroups: boolean;
 
   addRepo: (path: string, name: string) => void;
   removeRepo: (path: string) => void;
@@ -51,6 +53,10 @@ interface AppState {
   setShowCompare: (show: boolean) => void;
   setShowRebase: (base: string | null) => void;
   setViewRef: (ref: string | null) => void;
+  setShowRepoGroups: (show: boolean) => void;
+  addRepoGroup: (name: string, repos: string[]) => void;
+  removeRepoGroup: (name: string) => void;
+  updateRepoGroupRepos: (name: string, repos: string[]) => void;
   setLogFilters: (filters: LogFilters) => void;
   reloadMeta: () => Promise<void>;
   refreshOngoing: () => Promise<void>;
@@ -73,6 +79,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
   showCompare: false,
   showRebase: null,
   tags: [], remotes: [], logFilters: {}, branchTracking: [], ongoing: null, viewRef: null,
+  repoGroups: [], showRepoGroups: false,
 
   addRepo: (repoPath, name) => {
     const state = get();
@@ -125,6 +132,24 @@ export const useRepoStore = create<AppState>((set, get) => ({
   setViewRef: (ref) => {
     set({ viewRef: ref, selectedCommit: null, commitDetail: null });
     get().refreshAll(undefined, true);
+  },
+  setShowRepoGroups: (show) => set({ showRepoGroups: show }),
+  addRepoGroup: (name, repos) => {
+    const state = get();
+    if (state.repoGroups.some((g) => g.name === name)) return;
+    const groups = [...state.repoGroups, { name, repos }];
+    set({ repoGroups: groups });
+    gitApi().setSetting("repoGroups", groups);
+  },
+  removeRepoGroup: (name) => {
+    const groups = get().repoGroups.filter((g) => g.name !== name);
+    set({ repoGroups: groups });
+    gitApi().setSetting("repoGroups", groups);
+  },
+  updateRepoGroupRepos: (name, repos) => {
+    const groups = get().repoGroups.map((g) => (g.name === name ? { ...g, repos } : g));
+    set({ repoGroups: groups });
+    gitApi().setSetting("repoGroups", groups);
   },
   setLoading: (loading, message = "") => set({ loading, loadingMessage: message }),
   setError: (error) => set({ error }),
@@ -189,6 +214,10 @@ export const useRepoStore = create<AppState>((set, get) => ({
       const repos = Array.isArray(settings.repos) ? settings.repos : [];
       for (const r of repos) {
         if (r && typeof r.path === "string" && typeof r.name === "string") get().addRepo(r.path, r.name);
+      }
+      if (Array.isArray(settings.repoGroups)) {
+        const groups = settings.repoGroups.filter((g: RepoGroup) => g && typeof g.name === "string" && Array.isArray(g.repos));
+        if (groups.length > 0) set({ repoGroups: groups });
       }
       const last = settings.lastRepo;
       if (last && get().repos.some((r) => r.path === last)) {

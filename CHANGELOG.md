@@ -2,6 +2,20 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.3.5] - 2026-08-02
+
+### Features
+
+- **Repo groups** - create named groups of repositories and switch them all to the same branch in one click
+  - Add repositories manually, from the known-repo list, or by scanning a folder for Git repositories (with a native folder picker)
+  - Per-run options: fetch, pull after checkout, stash & restore uncommitted changes
+  - Per-repo results report (OK / skipped / failed) without blocking the rest of the group
+- **Folder browser** - the repo path and scan-folder fields open the native directory picker
+
+### Testing
+
+- 4 new tests (75 total): folder scan discovery, batch branch switch, stash & restore, missing-branch skip
+
 ## [1.3.4] - 2026-08-02
 
 ### Features

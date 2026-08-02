@@ -1,5 +1,5 @@
 import simpleGit, { SimpleGit } from "simple-git";
-import type { BlameLine, BranchTracking, CompareFileStat, CompareResult, FileHistoryEntry, LogFilters, PullStrategy, RebaseTodoEntry, RemoteInfo, SubmoduleInfo, TagInfo } from "../src/types";
+import type { BatchCheckoutOptions, BatchRepoResult, BlameLine, BranchTracking, CompareFileStat, CompareResult, FileHistoryEntry, LogFilters, PullStrategy, RebaseTodoEntry, RemoteInfo, SubmoduleInfo, TagInfo } from "../src/types";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -226,6 +226,100 @@ export class GitRepository {
       const out = (await this.git(repoPath).raw(["rev-parse", "--abbrev-ref", `${branch}@{upstream}`])).trim();
       return out || null;
     } catch { return null; }
+  }
+
+  /**
+   * Batch operation for a "repo group": switch one repository to a target
+   * branch with optional fetch / pull / stash-and-restore, reporting per-repo
+   * results without throwing (callers keep processing the remaining repos).
+   */
+  async batchCheckout(repoPath: string, branch: string, opts: BatchCheckoutOptions = {}): Promise<BatchRepoResult> {
+    const git = this.git(repoPath);
+    const result: BatchRepoResult = {
+      repo: repoPath, ok: true, skipped: false, error: undefined,
+      branchBefore: "", branchAfter: "", stashed: false, restored: false, actions: [],
+    };
+    try {
+      result.branchBefore = (await git.raw(["branch", "--show-current"])).trim();
+
+      if (opts.fetch) {
+        try {
+          await git.fetch();
+          result.actions.push("fetch");
+        } catch (e: any) {
+          result.error = `fetch failed: ${String(e?.message || e)}`;
+        }
+      }
+
+      const local = await git.raw(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]).catch(() => "");
+      const remote = await git.raw(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`]).catch(() => "");
+      if (!local && !remote) {
+        result.ok = false;
+        result.skipped = true;
+        result.branchAfter = result.branchBefore;
+        result.error = result.error ? `${result.error}; branch "${branch}" not found` : `branch "${branch}" not found`;
+        return result;
+      }
+
+      const st = await git.status();
+      const dirty = st.staged.length > 0 || st.modified.length > 0 || st.not_added.length > 0 || st.deleted.length > 0;
+      if (dirty && opts.stash) {
+        await git.raw(["stash", "push", "-m", `zentree-batch-${Date.now()}`]);
+        result.stashed = true;
+        result.actions.push("stash");
+      }
+
+      if (result.branchBefore !== branch) {
+        await git.checkout(branch);
+        result.actions.push("checkout");
+      }
+      result.branchAfter = (await git.raw(["branch", "--show-current"])).trim();
+
+      if (opts.pull && result.branchAfter) {
+        try {
+          await git.pull();
+          result.actions.push("pull");
+        } catch (e: any) {
+          // Checkout succeeded; a failed pull is a warning, not a failure.
+          result.error = result.error ? `${result.error}; pull failed: ${String(e?.message || e)}` : `pull failed: ${String(e?.message || e)}`;
+        }
+      }
+
+      if (result.stashed) {
+        try {
+          await git.raw(["stash", "pop"]);
+          result.restored = true;
+          result.actions.push("stash-pop");
+        } catch (e: any) {
+          result.ok = false;
+          result.error = result.error ? `${result.error}; stash restore failed: ${String(e?.message || e)}` : `stash restore failed: ${String(e?.message || e)}`;
+        }
+      }
+      return result;
+    } catch (e: any) {
+      result.ok = false;
+      result.error = String(e?.message || e);
+      return result;
+    }
+  }
+
+  /** Discover Git repositories in the immediate sub-directories of a folder. */
+  async scanRepos(dir: string): Promise<{ path: string; name: string }[]> {
+    const out: { path: string; name: string }[] = [];
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return out;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const p = path.join(dir, entry.name);
+      try {
+        if (await this.isRepo(p)) out.push({ path: p, name: entry.name });
+      } catch { /* not a repo */ }
+    }
+    return out;
   }
 
   /** Track a remote branch as the upstream of a local branch. */
