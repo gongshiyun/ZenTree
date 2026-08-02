@@ -2,6 +2,28 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.3.4] - 2026-08-02
+
+### Features
+
+- **Branch rename & upstream tracking** - rename a branch from the context menu; set / unset upstream; branches show their upstream with ahead/behind counts
+- **Targeted stash** - stash a single file from the file panel, or stash everything with a message
+- **File tree view** - browse changed files by directory (tree / flat toggle, collapsible folders)
+- **Conflict operations** - the status bar offers Abort / Continue for in-progress merge, rebase or cherry-pick
+- **Pull strategies** - choose merge, rebase or fast-forward-only from the pull menu
+- **Submodule management** - list, add, update and remove submodules from Settings
+- **Commit template & GPG signing** - edit a per-repo commit template (prefilled in the commit box) and toggle GPG signing
+- **External diff tool & word-level diff** - configure a difftool and launch it per file; changed words are highlighted inside diff lines
+- **View remote branches** - click a remote branch to show its commit tree in the graph (with a "Viewing" indicator and back button)
+
+### Fixes
+
+- **Commit view crash** - fixed a React hooks ordering bug (error #300) that blanked the UI when opening a commit's file list
+
+### Testing
+
+- 20 new tests (71 total): file tree builder, word diff, branch rename/upstream/ahead-behind, targeted stash, merge abort, rebase continue, pull strategies, submodules, commit template, GPG signing, diff tool config, log by ref
+
 ## [1.3.3] - 2026-08-02
 
 ### Features

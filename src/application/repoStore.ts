@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { RepoInfo, CommitLogEntry, GraphData, GitStatusData, CommitDetail, LogFilters, RemoteInfo, TagInfo } from "../types";
+import type { RepoInfo, CommitLogEntry, GraphData, GitStatusData, CommitDetail, LogFilters, RemoteInfo, TagInfo, BranchTracking } from "../types";
 import { setGlobalLocale, t } from "../i18n";
 import { buildGraphData } from "../domain/graph/layout";
 import { getThemePreset, applyTheme } from "../domain/theme/presets";
@@ -28,6 +28,9 @@ interface AppState {
   showCompare: boolean;
   showRebase: string | null;
   tags: TagInfo[]; remotes: RemoteInfo[]; logFilters: LogFilters;
+  branchTracking: BranchTracking[];
+  ongoing: "merge" | "rebase" | "cherry-pick" | null;
+  viewRef: string | null;
 
   addRepo: (path: string, name: string) => void;
   removeRepo: (path: string) => void;
@@ -47,8 +50,10 @@ interface AppState {
   setShowClone: (show: boolean) => void;
   setShowCompare: (show: boolean) => void;
   setShowRebase: (base: string | null) => void;
+  setViewRef: (ref: string | null) => void;
   setLogFilters: (filters: LogFilters) => void;
   reloadMeta: () => Promise<void>;
+  refreshOngoing: () => Promise<void>;
 }
 
 function graphWithRefs(entries: CommitLogEntry[], branchRefs?: Record<string, string[]>): GraphData {
@@ -67,7 +72,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
   showClone: false,
   showCompare: false,
   showRebase: null,
-  tags: [], remotes: [], logFilters: {},
+  tags: [], remotes: [], logFilters: {}, branchTracking: [], ongoing: null, viewRef: null,
 
   addRepo: (repoPath, name) => {
     const state = get();
@@ -117,6 +122,10 @@ export const useRepoStore = create<AppState>((set, get) => ({
   setShowClone: (show) => set({ showClone: show }),
   setShowCompare: (show) => set({ showCompare: show }),
   setShowRebase: (base) => set({ showRebase: base }),
+  setViewRef: (ref) => {
+    set({ viewRef: ref, selectedCommit: null, commitDetail: null });
+    get().refreshAll(undefined, true);
+  },
   setLoading: (loading, message = "") => set({ loading, loadingMessage: message }),
   setError: (error) => set({ error }),
   setLogFilters: (filters) => {
@@ -136,13 +145,22 @@ export const useRepoStore = create<AppState>((set, get) => ({
     } catch { /* keep previous values */ }
   },
 
+  refreshOngoing: async () => {
+    const repo = get().currentRepo;
+    if (!repo) return;
+    try {
+      const r = await gitApi().getOngoingOperation(repo);
+      if (r.success) set({ ongoing: r.data ?? null });
+    } catch { /* keep previous */ }
+  },
+
   loadMoreCommits: async () => {
     const state = get();
     if (!state.currentRepo || state.loadingMore || !state.hasMoreCommits) return;
     const seq = refreshSeq;
     set({ loadingMore: true });
     try {
-      const result = await gitApi().log(state.currentRepo, state.logSkip, PAGE_SIZE, get().logFilters);
+      const result = await gitApi().log(state.currentRepo, state.logSkip, PAGE_SIZE, get().logFilters, get().viewRef || undefined);
       if (seq !== refreshSeq) return;
       if (result.success && result.data && result.data.length > 0) {
         const merged = [...state.logEntries, ...result.data];
@@ -188,12 +206,14 @@ export const useRepoStore = create<AppState>((set, get) => ({
     set({ error: null, logSkip: 0, hasMoreCommits: true, loadingMore: false });
     if (!silent) set({ loading: true, loadingMessage: t("status.refreshing") });
     try {
-      const [branchResult, logResult, statusResult, tagsResult, remotesResult] = await Promise.all([
+      const [branchResult, logResult, statusResult, tagsResult, remotesResult, trackingResult, ongoingResult] = await Promise.all([
         gitApi().branches(repo),
-        gitApi().log(repo, 0, PAGE_SIZE, get().logFilters),
+        gitApi().log(repo, 0, PAGE_SIZE, get().logFilters, get().viewRef || undefined),
         gitApi().status(repo),
         gitApi().tags(repo),
         gitApi().remotes(repo),
+        gitApi().branchTracking(repo),
+        gitApi().getOngoingOperation(repo),
       ]);
       if (seq !== refreshSeq) return;
 
@@ -227,6 +247,8 @@ export const useRepoStore = create<AppState>((set, get) => ({
         set({
           tags: tagsResult.success && tagsResult.data ? tagsResult.data : [],
           remotes: remotesResult.success && remotesResult.data ? remotesResult.data : [],
+          branchTracking: trackingResult.success && trackingResult.data ? trackingResult.data : [],
+          ongoing: ongoingResult.success ? (ongoingResult.data ?? null) : get().ongoing,
         });
       } else if (branchResult.error) {
         set({ error: branchResult.error });

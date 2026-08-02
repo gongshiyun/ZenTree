@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRepoStore, THEME_PRESETS } from "../application/repoStore";
 import { useT, getGlobalLocale } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
-import type { UpdateState } from "../types";
+import type { SubmoduleInfo, UpdateState } from "../types";
 
 export default function SettingsDialog() {
   const showSettings = useRepoStore((s) => s.showSettings);
@@ -21,6 +21,40 @@ export default function SettingsDialog() {
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [showGitignore, setShowGitignore] = useState(false);
   const [gitignoreText, setGitignoreText] = useState("");
+  const [templateText, setTemplateText] = useState("");
+  const [diffToolText, setDiffToolText] = useState("");
+  const [signCommits, setSignCommits] = useState(false);
+  const [submodules, setSubmodules] = useState<SubmoduleInfo[]>([]);
+  const [submoduleUrl, setSubmoduleUrl] = useState("");
+  const [submodulePath, setSubmodulePath] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadGitTools = useCallback(async () => {
+    if (!currentRepo) return;
+    const [tpl, dt, sg, subs] = await Promise.all([
+      gitApi().getCommitTemplate(currentRepo),
+      gitApi().getDiffTool(currentRepo),
+      gitApi().getSignCommits(currentRepo),
+      gitApi().submoduleList(currentRepo),
+    ]);
+    if (tpl.success && tpl.data !== undefined) setTemplateText(tpl.data);
+    if (dt.success && dt.data !== undefined) setDiffToolText(dt.data);
+    if (sg.success && sg.data !== undefined) setSignCommits(sg.data);
+    if (subs.success && subs.data) setSubmodules(subs.data);
+  }, [currentRepo]);
+
+  useEffect(() => {
+    if (showSettings && activeTab === "git" && currentRepo) loadGitTools();
+  }, [showSettings, activeTab, currentRepo, loadGitTools]);
+
+  const runTool = useCallback(async (op: () => Promise<{ success: boolean; error?: string }>) => {
+    setBusy(true);
+    try {
+      const r = await op();
+      if (!r.success) setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setBusy(false); }
+  }, [setError, t]);
 
   useEffect(() => {
     if (!showSettings) return;
@@ -160,6 +194,47 @@ export default function SettingsDialog() {
                     <button className="settings-btn secondary" onClick={() => setShowGitignore(false)}>{t("settings.gitignoreCancel")}</button>
                   </div>
                 </>}
+                <div className="setting-divider" />
+                <div className="setting-row"><label>{t("settings.commitTemplate")}</label></div>
+                <textarea className="gitignore-editor" value={templateText} onChange={(e) => setTemplateText(e.target.value)} placeholder={t("settings.commitTemplatePlaceholder")} spellCheck={false} />
+                <div className="setting-row">
+                  <button className="settings-btn primary" disabled={busy} onClick={() => runTool(async () => { const r = await gitApi().setCommitTemplate(currentRepo!, templateText); if (r.success) setError(null); return r; })}>{t("settings.commitTemplateSave")}</button>
+                </div>
+                <div className="setting-divider" />
+                <label className="amend-check" style={{ fontSize: 12 }}>
+                  <input type="checkbox" checked={signCommits} disabled={busy}
+                    onChange={async (e) => { const v = e.target.checked; setSignCommits(v); await runTool(() => gitApi().setSignCommits(currentRepo!, v)); }} />
+                  {t("settings.gpgSign")}
+                </label>
+                <div className="setting-divider" />
+                <div className="setting-row"><label>{t("settings.diffTool")}</label>
+                  <input type="text" value={diffToolText} onChange={(e) => setDiffToolText(e.target.value)} placeholder="vimdiff" />
+                </div>
+                <div className="setting-row">
+                  <button className="settings-btn primary" disabled={busy} onClick={() => runTool(() => gitApi().setDiffTool(currentRepo!, diffToolText.trim()))}>{t("settings.diffToolSave")}</button>
+                </div>
+                <div className="setting-divider" />
+                <div className="setting-row"><label>{t("settings.submodules")}</label>
+                  <button className="settings-btn secondary" disabled={busy} onClick={async () => { await runTool(() => gitApi().submoduleUpdate(currentRepo!)); await loadGitTools(); }}>{t("settings.submoduleUpdate")}</button>
+                </div>
+                {submodules.map((s) => (
+                  <div key={s.path} className="setting-row">
+                    <span className="setting-hint" style={{ margin: 0, flex: 1 }}>{s.path} <span className="track-up">({s.url})</span></span>
+                    <button className="settings-btn secondary" disabled={busy} onClick={async () => { await runTool(() => gitApi().submoduleDeinit(currentRepo!, s.path)); await loadGitTools(); }}>{t("settings.submoduleRemove")}</button>
+                  </div>
+                ))}
+                <div className="setting-row"><label>{t("settings.submoduleUrl")}</label>
+                  <input type="text" value={submoduleUrl} onChange={(e) => setSubmoduleUrl(e.target.value)} placeholder="https://github.com/org/repo.git" />
+                </div>
+                <div className="setting-row"><label>{t("settings.submodulePath")}</label>
+                  <input type="text" value={submodulePath} onChange={(e) => setSubmodulePath(e.target.value)} placeholder="libs/mylib" />
+                </div>
+                <div className="setting-row">
+                  <button className="settings-btn primary" disabled={busy || !submoduleUrl.trim() || !submodulePath.trim()} onClick={async () => {
+                    await runTool(() => gitApi().submoduleAdd(currentRepo!, submoduleUrl.trim(), submodulePath.trim()));
+                    setSubmoduleUrl(""); setSubmodulePath(""); await loadGitTools();
+                  }}>{t("settings.submoduleAdd")}</button>
+                </div>
               </> : <p className="setting-hint">{t("settings.noRepoHint")}</p>}
             </div>}
             {activeTab === "about" && <div className="settings-section">

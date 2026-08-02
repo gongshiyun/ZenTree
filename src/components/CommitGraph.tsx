@@ -24,6 +24,8 @@ export default function CommitGraph() {
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
   const refreshAll = useRepoStore((s) => s.refreshAll);
+  const viewRef = useRepoStore((s) => s.viewRef);
+  const setViewRef = useRepoStore((s) => s.setViewRef);
 
   const [tooltip, setTooltip] = useState<{ node: GraphNode; x: number; y: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
@@ -187,6 +189,12 @@ export default function CommitGraph() {
 
   return (
     <div className="graph-container" ref={containerRef} onMouseMove={handleMouseMove}>
+      {viewRef && (
+        <div className="graph-view-ref">
+          <span className="graph-view-ref-label">{t("graph.viewingRef").replace("{0}", viewRef)}</span>
+          <button className="graph-view-ref-close" onClick={() => setViewRef(null)} title={t("graph.backToCurrent")}>&times;</button>
+        </div>
+      )}
       <div className="graph-zoom-controls">
         <button className="graph-zoom-btn" onClick={() => handleZoom(1 / 1.2)} title={t("graph.zoomOut")}>&minus;</button>
         <span className="graph-zoom-label">{zoom}%</span>

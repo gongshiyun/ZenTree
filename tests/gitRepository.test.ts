@@ -165,6 +165,25 @@ describe("commit stats", () => {
   });
 });
 
+describe("log with ref", () => {
+  it("returns commits reachable from the given ref", async () => {
+    const dir = makeRepo("log-ref");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    await commitAll(dir, "base");
+    await repo["git"](dir).raw(["checkout", "-b", "feature"]);
+    writeFile(dir, "a.txt", "1\n2\n");
+    await commitAll(dir, "feature-commit");
+    await repo["git"](dir).raw(["checkout", "main"]);
+
+    const featureLog = await repo.log(dir, 0, 10, undefined, "feature");
+    expect(featureLog[0].subject).toBe("feature-commit");
+    const mainLog = await repo.log(dir, 0, 10, undefined, "main");
+    expect(mainLog[0].subject).toBe("base");
+    expect(mainLog).toHaveLength(1);
+  });
+});
+
 describe("interactive rebase", () => {
   async function makeLinear(dir: string): Promise<string[]> {
     await initRepo(dir);
@@ -283,6 +302,204 @@ describe("remote branch operations", () => {
     await repo.pullBranch(work, "origin", "main");
     const content = fs.readFileSync(path.join(work, "a.txt"), "utf8").replace(/\r/g, "");
     expect(content).toBe("hello\nworld\n");
+  });
+});
+
+describe("branch rename & tracking", () => {
+  it("renames a local branch", async () => {
+    const dir = makeRepo("branch-rename");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    await commitAll(dir, "init");
+    await repo["git"](dir).raw(["branch", "feature"]);
+    await repo.renameBranch(dir, "feature", "renamed");
+    const branches = await repo.branches(dir);
+    expect(branches.all).toContain("renamed");
+    expect(branches.all).not.toContain("feature");
+  });
+
+  it("sets, reads and unsets upstream and computes ahead/behind", async () => {
+    const src = makeRepo("upstream-src");
+    await initRepo(src);
+    writeFile(src, "a.txt", "1\n");
+    await commitAll(src, "init");
+    await repo["git"](src).branch(["-M", "main"]);
+    const bare = makeRepo(`upstream-bare-${Math.random().toString(36).slice(2, 8)}`);
+    fs.rmdirSync(bare);
+    await repo["git"](src).raw(["clone", "--bare", src, bare]);
+    await repo["git"](src).raw(["remote", "add", "origin", bare]);
+    await repo["git"](src).raw(["push", "-u", "origin", "main"]);
+    const work = makeRepo(`upstream-work-${Math.random().toString(36).slice(2, 8)}`);
+    fs.rmdirSync(work);
+    await repo["git"](src).raw(["clone", bare, work]);
+
+    expect(await repo.getUpstream(work, "main")).toBe("origin/main");
+    writeFile(work, "b.txt", "b\n");
+    await commitAll(work, "local");
+    const tracking = await repo.branchTracking(work);
+    const main = tracking.find((b) => b.name === "main");
+    expect(main?.upstream).toBe("origin/main");
+    expect(main?.ahead).toBe(1);
+    expect(main?.behind).toBe(0);
+
+    await repo.unsetUpstream(work, "main");
+    expect(await repo.getUpstream(work, "main")).toBeNull();
+    await repo.setUpstream(work, "main", "origin");
+    expect(await repo.getUpstream(work, "main")).toBe("origin/main");
+  });
+});
+
+describe("stash with message and paths", () => {
+  it("stashes only the requested files with a message", async () => {
+    const dir = makeRepo("stash-paths");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    writeFile(dir, "b.txt", "x\n");
+    await commitAll(dir, "init");
+    writeFile(dir, "a.txt", "1\n2\n");
+    writeFile(dir, "b.txt", "x\ny\n");
+
+    await repo.stashSave(dir, "keep b only", ["b.txt"]);
+    const list = await repo.stashList(dir);
+    expect(list[0].subject).toContain("keep b only");
+    const st = await repo.status(dir);
+    expect(st.modified).toContain("a.txt");
+    expect(st.modified).not.toContain("b.txt");
+  });
+});
+
+describe("conflict abort / continue", () => {
+  async function makeConflictedBranch(dir: string): Promise<void> {
+    await initRepo(dir);
+    writeFile(dir, "f.txt", "base\n");
+    await commitAll(dir, "base");
+    await repo["git"](dir).raw(["checkout", "-b", "side"]);
+    writeFile(dir, "f.txt", "side\n");
+    await commitAll(dir, "side");
+    await repo["git"](dir).raw(["checkout", "main"]);
+    writeFile(dir, "f.txt", "main\n");
+    await commitAll(dir, "main");
+  }
+
+  it("detects and aborts a conflicted merge", async () => {
+    const dir = makeRepo("merge-abort");
+    await makeConflictedBranch(dir);
+    await expect(repo.merge(dir, "side")).rejects.toThrow();
+    expect(await repo.getOngoingOperation(dir)).toBe("merge");
+    await repo.mergeAbort(dir);
+    expect(await repo.getOngoingOperation(dir)).toBeNull();
+  });
+
+  it("continues a rebase after resolving the conflict", async () => {
+    const dir = makeRepo("rebase-continue");
+    await makeConflictedBranch(dir);
+    await repo["git"](dir).raw(["checkout", "side"]);
+    await expect(repo.rebase(dir, "main")).rejects.toThrow();
+    expect(await repo.getOngoingOperation(dir)).toBe("rebase");
+    // Resolve by taking the rebased commit's version (theirs during rebase).
+    await repo["git"](dir).raw(["checkout", "--theirs", "f.txt"]);
+    await repo["git"](dir).raw(["add", "f.txt"]);
+    await repo.rebaseContinue(dir);
+    expect(await repo.getOngoingOperation(dir)).toBeNull();
+    const log = await repo.log(dir, 0, 10);
+    expect(log[0].subject).toBe("side");
+    expect(fs.readFileSync(path.join(dir, "f.txt"), "utf8").trim()).toBe("side");
+  });
+});
+
+describe("pull strategies", () => {
+  async function makeDiverged(): Promise<{ src: string; work: string }> {
+    const src = makeRepo("pull-src");
+    await initRepo(src);
+    writeFile(src, "a.txt", "1\n");
+    await commitAll(src, "init");
+    await repo["git"](src).branch(["-M", "main"]);
+    const bare = makeRepo(`pull-bare-${Math.random().toString(36).slice(2, 8)}`);
+    fs.rmdirSync(bare);
+    await repo["git"](src).raw(["clone", "--bare", src, bare]);
+    await repo["git"](src).raw(["remote", "add", "origin", bare]);
+    await repo["git"](src).raw(["push", "-u", "origin", "main"]);
+    const work = makeRepo(`pull-work-${Math.random().toString(36).slice(2, 8)}`);
+    fs.rmdirSync(work);
+    await repo["git"](src).raw(["clone", bare, work]);
+    // diverge: local commit on work, remote commit on src
+    writeFile(work, "b.txt", "b\n");
+    await commitAll(work, "local");
+    writeFile(src, "a.txt", "1\n2\n");
+    await commitAll(src, "remote");
+    await repo["git"](src).raw(["push", "origin", "main"]);
+    return { src, work };
+  }
+
+  it("ff-only refuses to pull when branches diverge", async () => {
+    const { work } = await makeDiverged();
+    await expect(repo.pull(work, "ff-only")).rejects.toThrow();
+  });
+
+  it("rebase strategy replays local commits on top of remote", async () => {
+    const { work } = await makeDiverged();
+    await repo.pull(work, "rebase");
+    const log = await repo.log(work, 0, 10);
+    expect(log[0].subject).toBe("local");
+    expect(fs.existsSync(path.join(work, "b.txt"))).toBe(true);
+    expect(fs.readFileSync(path.join(work, "a.txt"), "utf8")).toContain("2");
+  });
+});
+
+describe("submodules", () => {
+  it("adds, lists, updates and deinitializes a submodule", async () => {
+    const sub = makeRepo("sub-source");
+    await initRepo(sub);
+    writeFile(sub, "s.txt", "s\n");
+    await commitAll(sub, "s1");
+    const bare = makeRepo(`sub-bare-${Math.random().toString(36).slice(2, 8)}`);
+    fs.rmdirSync(bare);
+    await repo["git"](sub).raw(["clone", "--bare", sub, bare]);
+
+    const parent = makeRepo("sub-parent");
+    await initRepo(parent);
+    writeFile(parent, "p.txt", "p\n");
+    await commitAll(parent, "p1");
+    await repo.submoduleAdd(parent, bare, "libs/sublib");
+
+    let list = await repo.submoduleList(parent);
+    expect(list).toHaveLength(1);
+    expect(list[0].path).toBe("libs/sublib");
+
+    await repo.submoduleUpdate(parent);
+    expect(fs.existsSync(path.join(parent, "libs", "sublib", "s.txt"))).toBe(true);
+
+    await repo.submoduleDeinit(parent, "libs/sublib");
+    list = await repo.submoduleList(parent);
+    expect(list).toHaveLength(0);
+  });
+});
+
+describe("commit template, gpg signing and diff tool config", () => {
+  it("sets and reads a commit template", async () => {
+    const dir = makeRepo("template");
+    await initRepo(dir);
+    expect(await repo.getCommitTemplate(dir)).toBe("");
+    await repo.setCommitTemplate(dir, "# Title\n\nBody\n");
+    expect(await repo.getCommitTemplate(dir)).toContain("# Title");
+  });
+
+  it("toggles gpg signing config", async () => {
+    const dir = makeRepo("gpg-config");
+    await initRepo(dir);
+    await repo.setSignCommits(dir, true);
+    expect(await repo.getSignCommits(dir)).toBe(true);
+    await repo.setSignCommits(dir, false);
+    expect(await repo.getSignCommits(dir)).toBe(false);
+  });
+
+  it("sets and reads the diff tool config", async () => {
+    const dir = makeRepo("difftool-config");
+    await initRepo(dir);
+    await repo.setDiffTool(dir, "vimdiff");
+    expect(await repo.getDiffTool(dir)).toBe("vimdiff");
+    await repo.setDiffTool(dir, "");
+    expect(await repo.getDiffTool(dir)).toBe("");
   });
 });
 

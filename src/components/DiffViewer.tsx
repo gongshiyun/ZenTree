@@ -4,6 +4,7 @@ import { useT } from "../i18n";
 import { highlightLine } from "../domain/diff/highlight";
 import { parseDiff, buildHunkPatch } from "../domain/diff/parser";
 import { buildUntrackedDiff } from "../domain/diff/untracked";
+import { diffWords, type WordToken } from "../domain/diff/worddiff";
 import { gitApi } from "../infrastructure/gitBridge";
 import type { DiffHunk, FileHistoryEntry, BlameLine } from "../types";
 
@@ -36,6 +37,25 @@ export default function DiffViewer({ filePath, isStaged, status, fromPath, onClo
   const [history, setHistory] = useState<FileHistoryEntry[]>([]);
   const [blame, setBlame] = useState<BlameLine[]>([]);
   const hunks = useMemo(() => parseDiff(diffText), [diffText]);
+  const wordPairs = useMemo(() => {
+    const map = new Map<number, { del: WordToken[]; add: WordToken[] }>();
+    for (const h of hunks) {
+      let pendingDel: number[] = [];
+      h.lines.forEach((l, idx) => {
+        if (l.type === "deletion") {
+          pendingDel.push(idx);
+        } else if (l.type === "addition" && pendingDel.length > 0) {
+          const delIdx = pendingDel.pop()!;
+          const pair = diffWords(h.lines[delIdx].content, l.content);
+          map.set(delIdx, pair);
+          map.set(idx, pair);
+        } else if (l.type !== "addition") {
+          pendingDel = [];
+        }
+      });
+    }
+    return map;
+  }, [hunks]);
   const isCompare = !!(compareFrom && compareTo);
   const isUntracked = status === "untracked";
 
@@ -98,6 +118,16 @@ export default function DiffViewer({ filePath, isStaged, status, fromPath, onClo
     finally { setLoading(false, ""); }
   }, [currentRepo, filePath, setLoading, setError, refreshAll]);
 
+  const handleExternalDiff = useCallback(async () => {
+    if (!currentRepo) return;
+    setLoading(true, t("diff.openingDiffTool"));
+    try {
+      const r = await gitApi().launchDiffTool(currentRepo, filePath);
+      if (!r.success) setError(r.error || t("diff.fetchFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, filePath, setLoading, setError, t]);
+
   const handleHistoryClick = useCallback((entry: FileHistoryEntry) => {
     setDiffCommit(entry.hash);
     setView("diff");
@@ -127,6 +157,9 @@ export default function DiffViewer({ filePath, isStaged, status, fromPath, onClo
         <span className="diff-badge">
           {isCompare ? `${compareFrom} ... ${compareTo}` : diffCommit ? t("diff.commit") : (isStaged ? t("diff.staged") : t("diff.unstaged"))}
         </span>
+        {!diffCommit && !isCompare && !readOnly && (
+          <button className="diff-hunk-btn" onClick={handleExternalDiff} title={t("diff.externalDiff")}>{t("diff.externalDiff")}</button>
+        )}
       </div>
       <div className="diff-content">
         {view === "history" && (
@@ -174,7 +207,13 @@ export default function DiffViewer({ filePath, isStaged, status, fromPath, onClo
                       <span className="diff-line-num old">{l.type!=="addition"?l.oldLineNum:""}</span>
                       <span className="diff-line-num new">{l.type!=="deletion"?l.newLineNum:""}</span>
                       <span className="diff-line-prefix">{l.type==="addition"?"+":l.type==="deletion"?"-":" "}</span>
-                      <span className="diff-line-content">{highlightLine(l.content, filePath).map((tok, ti) => tok.cls ? <span key={ti} className={`syn-${tok.cls}`}>{tok.text}</span> : <span key={ti}>{tok.text}</span>)}</span>
+                      <span className="diff-line-content">
+                        {wordPairs.has(li) && l.type !== "context"
+                          ? (l.type === "deletion"
+                            ? wordPairs.get(li)!.del.map((tok, ti) => <span key={ti} className={tok.type === "del" ? "word-del" : ""}>{tok.text}</span>)
+                            : wordPairs.get(li)!.add.map((tok, ti) => <span key={ti} className={tok.type === "add" ? "word-add" : ""}>{tok.text}</span>))
+                          : highlightLine(l.content, filePath).map((tok, ti) => tok.cls ? <span key={ti} className={`syn-${tok.cls}`}>{tok.text}</span> : <span key={ti}>{tok.text}</span>)}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -15,6 +15,7 @@ export default function Sidebar() {
   const reloadMeta = useRepoStore((s) => s.reloadMeta);
   const tags = useRepoStore((s) => s.tags);
   const remotes = useRepoStore((s) => s.remotes);
+  const branchTracking = useRepoStore((s) => s.branchTracking);
   const checkoutRemote = useRepoStore((s) => s.checkoutRemote);
   const setShowRebase = useRepoStore((s) => s.setShowRebase);
 
@@ -32,6 +33,8 @@ export default function Sidebar() {
   const [showRemoteInput, setShowRemoteInput] = useState(false);
   const [remoteName, setRemoteName] = useState("");
   const [remoteUrl, setRemoteUrl] = useState("");
+  const [stashMessage, setStashMessage] = useState("");
+  const [showStashMessage, setShowStashMessage] = useState(false);
 
   useEffect(() => { const h = () => setContextMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
   useEffect(() => { if (showNewBranch && newBranchRef.current) newBranchRef.current.focus(); }, [showNewBranch]);
@@ -47,15 +50,51 @@ export default function Sidebar() {
 
   useEffect(() => { if (showStash) loadStashList(); }, [showStash, loadStashList]);
 
-  const handleStashSave = useCallback(async () => {
+  const handleStashSave = useCallback(async (message?: string, paths?: string[]) => {
     if (!currentRepo) return;
     setLoading(true, t("stash.saving"));
     try {
-      const r = await gitApi().stashSave(currentRepo);
-      if (r.success) { await refreshAll(); await loadStashList(); }
+      const r = await gitApi().stashSave(currentRepo, message, paths);
+      if (r.success) { setStashMessage(""); setShowStashMessage(false); await refreshAll(); await loadStashList(); }
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, refreshAll, loadStashList]);
+
+  const handleRenameBranch = useCallback(async (branch: string) => {
+    if (!currentRepo) return;
+    const name = window.prompt(t("sidebar.renamePrompt"), branch);
+    if (!name || !name.trim() || name.trim() === branch) return;
+    setLoading(true, t("sidebar.renaming").replace("{0}", branch));
+    try {
+      const r = await gitApi().renameBranch(currentRepo, branch, name.trim());
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, refreshAll, t]);
+
+  const handleSetUpstream = useCallback(async (branch: string) => {
+    if (!currentRepo) return;
+    const current = branchTracking.find((x) => x.name === branch)?.upstream || "";
+    const value = window.prompt(t("sidebar.upstreamPrompt"), current || `origin/${branch}`);
+    if (!value || !value.trim()) return;
+    const parts = value.trim().split("/");
+    setLoading(true, t("sidebar.settingUpstream").replace("{0}", branch));
+    try {
+      const r = await gitApi().setUpstream(currentRepo, branch, parts[0]);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, branchTracking, setLoading, setError, refreshAll, t]);
+
+  const handleUnsetUpstream = useCallback(async (branch: string) => {
+    if (!currentRepo) return;
+    setLoading(true, t("sidebar.unsettingUpstream").replace("{0}", branch));
+    try {
+      const r = await gitApi().unsetUpstream(currentRepo, branch);
+      if (r.success) await refreshAll();
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, refreshAll, t]);
 
   const handleStashPop = useCallback(async (ref: string) => {
     if (!currentRepo) return;
@@ -228,12 +267,28 @@ export default function Sidebar() {
 
   const [sidebarWidth, setSidebarWidth] = useState(200);
   const isResizing = useRef(false);
+  const clickTimerRef = useRef<number | null>(null);
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault(); isResizing.current = true; const sx = e.clientX; const sw = sidebarWidth;
     const mm = (ev: MouseEvent) => { if (!isResizing.current) return; setSidebarWidth(Math.max(140, Math.min(400, sw + (ev.clientX - sx)))); };
     const mu = () => { isResizing.current = false; document.removeEventListener("mousemove", mm); document.removeEventListener("mouseup", mu); };
     document.addEventListener("mousemove", mm); document.addEventListener("mouseup", mu);
   }, [sidebarWidth]);
+
+  const viewRef = useRepoStore((s) => s.viewRef);
+
+  const handleRemoteClick = useCallback((b: string) => {
+    if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = window.setTimeout(() => {
+      clickTimerRef.current = null;
+      useRepoStore.getState().setViewRef(b);
+    }, 220);
+  }, []);
+
+  const handleRemoteDoubleClick = useCallback((b: string) => {
+    if (clickTimerRef.current) { window.clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
+    checkoutRemote(b);
+  }, [checkoutRemote]);
 
   return (<>
     <div className="sidebar" style={{ width: sidebarWidth }}>
@@ -251,11 +306,25 @@ export default function Sidebar() {
         </div>
       )}
       <div className="sidebar-list">
-        {branches.map((b) => (
-          <div key={b} className={`branch-item${b === currentBranch ? " current" : ""}`} onDoubleClick={() => handleCheckout(b)} onContextMenu={(e) => handleContextMenu(e, b, false)} title={b + t("sidebar.dblClick")}>
-            <span className="branch-icon">{b === currentBranch ? "\u25CF" : "\u25CB"}</span><span>{b}</span>
-          </div>
-        ))}
+        {branches.map((b) => {
+          const tr = branchTracking.find((x) => x.name === b);
+          return (
+            <div key={b} className={`branch-item${b === currentBranch ? " current" : ""}`} onDoubleClick={() => handleCheckout(b)} onContextMenu={(e) => handleContextMenu(e, b, false)} title={b + t("sidebar.dblClick")}>
+              <span className="branch-icon">{b === currentBranch ? "\u25CF" : "\u25CB"}</span><span>{b}</span>
+              {tr?.upstream && (
+                <span className="branch-tracking" title={tr.upstream}>
+                  <span className="track-up">{tr.upstream.replace(/^[^/]+\//, "")}</span>
+                  {(tr.behind > 0 || tr.ahead > 0) && (
+                    <span className="track-count">
+                      {tr.behind > 0 && <span className="track-behind">&#8595;{tr.behind}</span>}
+                      {tr.ahead > 0 && <span className="track-ahead">&#8593;{tr.ahead}</span>}
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+          );
+        })}
         {branches.length === 0 && <div className="empty-state" style={{ padding: 20 }}>{t("sidebar.noBranches")}</div>}
         <div className="sidebar-subheader" onClick={() => setShowRemotes(!showRemotes)}>
           <span className="subheader-arrow">{showRemotes ? "\u25BC" : "\u25B6"}</span> {t("sidebar.remotes")}
@@ -284,7 +353,7 @@ export default function Sidebar() {
           )}
           {remoteBranches.length > 0 && <div className="sidebar-group-label">{t("sidebar.remoteBranches")}</div>}
           {remoteBranches.map((b) => (
-            <div key={b} className="branch-item remote" onDoubleClick={() => checkoutRemote(b)} onContextMenu={(e) => handleContextMenu(e, b, true)} title={b + t("sidebar.dblClick")}>
+            <div key={b} className={`branch-item remote${viewRef === b ? " viewing" : ""}`} onClick={() => handleRemoteClick(b)} onDoubleClick={() => handleRemoteDoubleClick(b)} onContextMenu={(e) => handleContextMenu(e, b, true)} title={b + t("sidebar.dblClick")}>
               <span className="branch-icon remote-icon">{"\u21C4"}</span><span>{b.replace(/^remotes\//, "")}</span>
             </div>
           ))}
@@ -292,8 +361,16 @@ export default function Sidebar() {
       </div>
       <div className="sidebar-subheader" onClick={() => setShowStash(!showStash)} style={{ marginTop: 4 }}>
         <span className="subheader-arrow">{showStash ? "\u25BC" : "\u25B6"}</span> {t("stash.title")}
-        <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); handleStashSave(); }} title={t("stash.saveTip")}>+</button>
+        <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setShowStashMessage(!showStashMessage); }} title={t("stash.saveTip")}>+</button>
       </div>
+      {showStashMessage && (
+        <div className="new-branch-input" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <input type="text" value={stashMessage} placeholder={t("stash.messagePlaceholder")}
+            onChange={(e) => setStashMessage(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleStashSave(stashMessage); if (e.key === "Escape") { setShowStashMessage(false); setStashMessage(""); } }} />
+          <button onClick={() => handleStashSave(stashMessage)}>{t("stash.save")}</button>
+        </div>
+      )}
       {showStash && (
         <div className="sidebar-list" style={{ flex: "none", maxHeight: 140 }}>
           {stashList.map((s) => (
@@ -344,8 +421,13 @@ export default function Sidebar() {
           <div className="context-menu-divider" />
         </>
         : <><div className="context-menu-item" onClick={() => { handleCheckout(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.checkout")} {contextMenu.branch}</div>
+          <div className="context-menu-item" onClick={() => { handleRenameBranch(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.renameBranch")}</div>
           {contextMenu.branch !== currentBranch && (
             <div className="context-menu-item" onClick={() => { setShowRebase(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.interactiveRebase")}</div>
+          )}
+          <div className="context-menu-item" onClick={() => { handleSetUpstream(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.setUpstream")}</div>
+          {branchTracking.find((x) => x.name === contextMenu.branch)?.upstream && (
+            <div className="context-menu-item" onClick={() => { handleUnsetUpstream(contextMenu.branch); setContextMenu(null); }}>{t("sidebar.unsetUpstream")}</div>
           )}
           <div className="context-menu-item" onClick={() => { handlePushCurrent(); setContextMenu(null); }}>{t("sidebar.pushCurrent")}</div>
           <div className="context-menu-divider" />

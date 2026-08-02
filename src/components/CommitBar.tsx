@@ -41,6 +41,21 @@ export default function CommitBar() {
     }
   }, [amend, currentRepo, message]);
 
+  // Prefill the message box with the configured commit template when empty.
+  useEffect(() => {
+    if (!currentRepo || amend) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await gitApi().getCommitTemplate(currentRepo);
+        if (!cancelled && r.success && r.data) {
+          setMessage((prev) => (prev === "" ? r.data : prev));
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [currentRepo, amend]);
+
   const handleCommit = useCallback(async () => {
     if (!currentRepo) return;
     setLoading(true, amend ? t("commit.amending") : t("commit.committing"));

@@ -31,7 +31,7 @@ export interface UpdateState {
 export interface GitAPI {
   isRepo: (repoPath: string) => Promise<{ success: boolean; data?: boolean; error?: string }>;
   branches: (repoPath: string) => Promise<{ success: boolean; data?: { all: string[]; current: string; branches: Record<string, any> }; error?: string }>;
-  log: (repoPath: string, skip: number, maxCount: number, filters?: LogFilters) => Promise<{ success: boolean; data?: CommitLogEntry[]; error?: string }>;
+  log: (repoPath: string, skip: number, maxCount: number, filters?: LogFilters, ref?: string) => Promise<{ success: boolean; data?: CommitLogEntry[]; error?: string }>;
   status: (repoPath: string) => Promise<{ success: boolean; data?: GitStatusData; error?: string }>;
   show: (repoPath: string, hash: string) => Promise<{ success: boolean; data?: CommitDetail; error?: string }>;
   lastMessage: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
@@ -43,19 +43,24 @@ export interface GitAPI {
   discard: (repoPath: string, files: string[]) => Promise<{ success: boolean; error?: string }>;
   commit: (repoPath: string, message: string, amend: boolean) => Promise<{ success: boolean; error?: string }>;
   checkout: (repoPath: string, branch: string) => Promise<{ success: boolean; error?: string }>;
+  renameBranch: (repoPath: string, oldName: string, newName: string) => Promise<{ success: boolean; error?: string }>;
+  getUpstream: (repoPath: string, branch: string) => Promise<{ success: boolean; data?: string | null; error?: string }>;
+  setUpstream: (repoPath: string, branch: string, remote: string) => Promise<{ success: boolean; error?: string }>;
+  unsetUpstream: (repoPath: string, branch: string) => Promise<{ success: boolean; error?: string }>;
+  branchTracking: (repoPath: string) => Promise<{ success: boolean; data?: BranchTracking[]; error?: string }>;
   checkoutRemote: (repoPath: string, remoteBranch: string) => Promise<{ success: boolean; error?: string }>;
   createBranch: (repoPath: string, branchName: string, checkout: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteBranch: (repoPath: string, branchName: string, force: boolean) => Promise<{ success: boolean; error?: string }>;
   merge: (repoPath: string, branchName: string) => Promise<{ success: boolean; error?: string }>;
   rebaseInteractive: (repoPath: string, base: string, entries: RebaseTodoEntry[]) => Promise<{ success: boolean; error?: string }>;
   reset: (repoPath: string, commitHash: string, mode: "soft" | "mixed" | "hard") => Promise<{ success: boolean; error?: string }>;
-  stashSave: (repoPath: string, message?: string) => Promise<{ success: boolean; error?: string }>;
+  stashSave: (repoPath: string, message?: string, paths?: string[]) => Promise<{ success: boolean; error?: string }>;
   stashList: (repoPath: string) => Promise<{ success: boolean; data?: { ref: string; subject: string }[]; error?: string }>;
   stashPop: (repoPath: string, ref?: string) => Promise<{ success: boolean; error?: string }>;
   stashDrop: (repoPath: string, ref: string) => Promise<{ success: boolean; error?: string }>;
   fetch: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
   fetchBranch: (repoPath: string, remote: string, branch: string) => Promise<{ success: boolean; error?: string }>;
-  pull: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  pull: (repoPath: string, strategy?: PullStrategy) => Promise<{ success: boolean; error?: string }>;
   pullBranch: (repoPath: string, remote: string, branch: string) => Promise<{ success: boolean; error?: string }>;
   push: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
   pushBranch: (repoPath: string, remote: string, branch: string) => Promise<{ success: boolean; error?: string }>;
@@ -89,8 +94,14 @@ export interface GitAPI {
   compare: (repoPath: string, fromRef: string, toRef: string) => Promise<{ success: boolean; data?: CompareResult; error?: string }>;
   compareFileDiff: (repoPath: string, fromRef: string, toRef: string, filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   cherryPick: (repoPath: string, hash: string) => Promise<{ success: boolean; error?: string }>;
+  cherryPickAbort: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  cherryPickContinue: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
   rebase: (repoPath: string, upstream: string) => Promise<{ success: boolean; error?: string }>;
   rebaseAbort: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  rebaseContinue: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  mergeAbort: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  mergeContinue: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  getOngoingOperation: (repoPath: string) => Promise<{ success: boolean; data?: "merge" | "rebase" | "cherry-pick" | null; error?: string }>;
   tags: (repoPath: string) => Promise<{ success: boolean; data?: TagInfo[]; error?: string }>;
   createTag: (repoPath: string, name: string, ref: string, message?: string) => Promise<{ success: boolean; error?: string }>;
   deleteTag: (repoPath: string, name: string) => Promise<{ success: boolean; error?: string }>;
@@ -98,6 +109,17 @@ export interface GitAPI {
   addRemote: (repoPath: string, name: string, url: string) => Promise<{ success: boolean; error?: string }>;
   removeRemote: (repoPath: string, name: string) => Promise<{ success: boolean; error?: string }>;
   setRemoteUrl: (repoPath: string, name: string, url: string) => Promise<{ success: boolean; error?: string }>;
+  submoduleList: (repoPath: string) => Promise<{ success: boolean; data?: SubmoduleInfo[]; error?: string }>;
+  submoduleAdd: (repoPath: string, url: string, subPath: string) => Promise<{ success: boolean; error?: string }>;
+  submoduleUpdate: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  submoduleDeinit: (repoPath: string, subPath: string) => Promise<{ success: boolean; error?: string }>;
+  getCommitTemplate: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+  setCommitTemplate: (repoPath: string, content: string) => Promise<{ success: boolean; error?: string }>;
+  getSignCommits: (repoPath: string) => Promise<{ success: boolean; data?: boolean; error?: string }>;
+  setSignCommits: (repoPath: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getDiffTool: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+  setDiffTool: (repoPath: string, tool: string) => Promise<{ success: boolean; error?: string }>;
+  launchDiffTool: (repoPath: string, filePath?: string) => Promise<{ success: boolean; error?: string }>;
   hostingUrl: (repoPath: string, ref?: string) => Promise<{ success: boolean; data?: string | null; error?: string }>;
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
   readGitignore: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
@@ -117,6 +139,20 @@ export interface RebaseTodoEntry {
   hash: string;
   subject: string;
   rewordMessage?: string;
+}
+
+export type PullStrategy = "merge" | "rebase" | "ff-only";
+
+export interface BranchTracking {
+  name: string;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+}
+
+export interface SubmoduleInfo {
+  path: string;
+  url: string;
 }
 
 export interface CommitFileStat {

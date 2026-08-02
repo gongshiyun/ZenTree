@@ -1,5 +1,5 @@
 import simpleGit, { SimpleGit } from "simple-git";
-import type { BlameLine, CompareFileStat, CompareResult, FileHistoryEntry, LogFilters, RebaseTodoEntry, RemoteInfo, TagInfo } from "../src/types";
+import type { BlameLine, BranchTracking, CompareFileStat, CompareResult, FileHistoryEntry, LogFilters, PullStrategy, RebaseTodoEntry, RemoteInfo, SubmoduleInfo, TagInfo } from "../src/types";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -38,9 +38,9 @@ export class GitRepository {
   }
 
   /** Paginated commit log. Returns an empty list for a repository with no commits. */
-  async log(repoPath: string, skip?: number, maxCount?: number, filters?: LogFilters) {
+  async log(repoPath: string, skip?: number, maxCount?: number, filters?: LogFilters, ref?: string) {
     const git = this.git(repoPath);
-    const args = ["log", `--format=%H${LOG_SEP}%P${LOG_SEP}%an${LOG_SEP}%ae${LOG_SEP}%at${LOG_SEP}%s`];
+    const args = ["log", ref || "HEAD", `--format=%H${LOG_SEP}%P${LOG_SEP}%an${LOG_SEP}%ae${LOG_SEP}%at${LOG_SEP}%s`];
     if (skip) args.push(`--skip=${skip}`);
     if (maxCount) args.push(`--max-count=${maxCount}`);
     if (filters?.query) args.push("--grep=" + filters.query, "--regexp-ignore-case");
@@ -215,6 +215,42 @@ export class GitRepository {
     return this.git(repoPath).checkout(branch);
   }
 
+  /** Rename a local branch (current branch when oldName matches HEAD). */
+  async renameBranch(repoPath: string, oldName: string, newName: string) {
+    return this.git(repoPath).raw(["branch", "-m", oldName, newName]);
+  }
+
+  /** Upstream ref of a branch, or null when not set. */
+  async getUpstream(repoPath: string, branch: string): Promise<string | null> {
+    try {
+      const out = (await this.git(repoPath).raw(["rev-parse", "--abbrev-ref", `${branch}@{upstream}`])).trim();
+      return out || null;
+    } catch { return null; }
+  }
+
+  /** Track a remote branch as the upstream of a local branch. */
+  async setUpstream(repoPath: string, branch: string, remote: string) {
+    return this.git(repoPath).raw(["branch", `--set-upstream-to=${remote}/${branch}`, branch]);
+  }
+
+  /** Remove the upstream tracking of a branch. */
+  async unsetUpstream(repoPath: string, branch: string) {
+    return this.git(repoPath).raw(["branch", "--unset-upstream", branch]);
+  }
+
+  /** Upstream + ahead/behind for every local branch. */
+  async branchTracking(repoPath: string): Promise<BranchTracking[]> {
+    const all = (await this.branches(repoPath)).all.filter((b: string) => !b.startsWith("remotes/"));
+    const out: BranchTracking[] = [];
+    for (const name of all) {
+      const upstream = await this.getUpstream(repoPath, name);
+      if (!upstream) { out.push({ name, upstream: null, ahead: 0, behind: 0 }); continue; }
+      const counts = (await this.git(repoPath).raw(["rev-list", "--left-right", "--count", `${name}...${upstream}`])).trim().split(/\s+/);
+      out.push({ name, upstream, ahead: parseInt(counts[0] || "0", 10), behind: parseInt(counts[1] || "0", 10) });
+    }
+    return out;
+  }
+
   async checkoutRemote(repoPath: string, remoteBranch: string) {
     return this.git(repoPath).raw(["checkout", "--track", remoteBranch]);
   }
@@ -237,9 +273,10 @@ export class GitRepository {
     return this.git(repoPath).reset([`--${mode}`, commitHash]);
   }
 
-  async stashSave(repoPath: string, message?: string) {
+  async stashSave(repoPath: string, message?: string, paths?: string[]) {
     const args = ["stash", "push"];
     if (message) args.push("-m", message);
+    if (paths && paths.length > 0) args.push("--", ...paths);
     return this.git(repoPath).raw(args);
   }
 
@@ -270,8 +307,53 @@ export class GitRepository {
     return this.git(repoPath).raw(["fetch", remote, branch]);
   }
 
-  async pull(repoPath: string) {
+  async pull(repoPath: string, strategy: PullStrategy = "merge") {
+    if (strategy === "rebase") return this.git(repoPath).raw(["pull", "--rebase"]);
+    if (strategy === "ff-only") return this.git(repoPath).raw(["pull", "--ff-only"]);
     return this.git(repoPath).pull();
+  }
+
+  /** Detect an in-progress merge / rebase / cherry-pick. */
+  async getOngoingOperation(repoPath: string): Promise<"merge" | "rebase" | "cherry-pick" | null> {
+    const gitDir = path.resolve(repoPath, (await this.git(repoPath).raw(["rev-parse", "--git-dir"])).trim());
+    const has = (name: string) => {
+      try { return fs.existsSync(path.join(gitDir, name)); } catch { return false; }
+    };
+    if (has("rebase-merge") || has("rebase-apply")) return "rebase";
+    if (has("MERGE_HEAD")) return "merge";
+    if (has("CHERRY_PICK_HEAD")) return "cherry-pick";
+    return null;
+  }
+
+  /** Run a git command that may open an editor with a no-op editor installed. */
+  private runWithNoopEditor(repoPath: string, args: string[], label: string): Promise<void> {
+    const noop = path.join(os.tmpdir(), `zentree-noop-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`);
+    fs.writeFileSync(noop, "#!/bin/sh\nexit 0\n", "utf8");
+    const gitPath = this.getGitPath() || "git";
+    return new Promise<void>((resolve, reject) => {
+      childProcess.execFile(gitPath, args, {
+        cwd: repoPath,
+        env: { ...process.env, GIT_EDITOR: noop.replace(/\\/g, "/") },
+      }, (err) => {
+        try { fs.unlinkSync(noop); } catch { /* ignore */ }
+        if (err) reject(new Error(`${label}: ${err.message}`));
+        else resolve();
+      });
+    });
+  }
+
+  /** Continue an in-progress rebase (accepts default commit messages). */
+  async rebaseContinue(repoPath: string): Promise<void> {
+    await this.runWithNoopEditor(repoPath, ["rebase", "--continue"], "Rebase continue failed");
+  }
+
+  async mergeAbort(repoPath: string) {
+    return this.git(repoPath).raw(["merge", "--abort"]);
+  }
+
+  /** Continue an in-progress merge (accepts the default merge message). */
+  async mergeContinue(repoPath: string): Promise<void> {
+    await this.runWithNoopEditor(repoPath, ["merge", "--continue"], "Merge continue failed");
   }
 
   /** Pull a specific branch from a remote. */
@@ -544,6 +626,104 @@ export class GitRepository {
   /** Apply one or more commits onto the current HEAD. */
   async cherryPick(repoPath: string, hash: string): Promise<string> {
     return this.git(repoPath).raw(["cherry-pick", hash]);
+  }
+
+  async cherryPickAbort(repoPath: string) {
+    return this.git(repoPath).raw(["cherry-pick", "--abort"]);
+  }
+
+  async cherryPickContinue(repoPath: string): Promise<void> {
+    await this.runWithNoopEditor(repoPath, ["cherry-pick", "--continue"], "Cherry-pick continue failed");
+  }
+
+  /** List submodules from .gitmodules. */
+  async submoduleList(repoPath: string): Promise<SubmoduleInfo[]> {
+    const git = this.git(repoPath);
+    try {
+      const [paths, urls] = await Promise.all([
+        git.raw(["config", "--file", ".gitmodules", "--get-regexp", "^submodule\\..*\\.path$"]),
+        git.raw(["config", "--file", ".gitmodules", "--get-regexp", "^submodule\\..*\\.url$"]),
+      ]);
+      const pathMap = new Map<string, string>();
+      for (const line of paths.split("\n").filter(Boolean)) {
+        const m = line.match(/^submodule\.(.+)\.path (.+)$/);
+        if (m) pathMap.set(m[1], m[2]);
+      }
+      const out: SubmoduleInfo[] = [];
+      for (const line of urls.split("\n").filter(Boolean)) {
+        const m = line.match(/^submodule\.(.+)\.url (.+)$/);
+        if (m && pathMap.has(m[1])) out.push({ path: pathMap.get(m[1]) as string, url: m[2] });
+      }
+      return out;
+    } catch { return []; }
+  }
+
+  async submoduleAdd(repoPath: string, url: string, subPath: string) {
+    return this.runGit(repoPath, ["submodule", "add", url, subPath]);
+  }
+
+  async submoduleUpdate(repoPath: string) {
+    return this.runGit(repoPath, ["submodule", "update", "--init", "--recursive"]);
+  }
+
+  /** Run a git command with file:// protocol allowed (for local-path submodules). */
+  private runGit(repoPath: string, args: string[]): Promise<string> {
+    const gitPath = this.getGitPath() || "git";
+    return new Promise<string>((resolve, reject) => {
+      childProcess.execFile(gitPath, args, {
+        cwd: repoPath,
+        env: { ...process.env, GIT_ALLOW_PROTOCOL: "file" },
+      }, (err, stdout, stderr) => {
+        if (err) reject(new Error(stderr || err.message));
+        else resolve(stdout || "ok");
+      });
+    });
+  }
+
+  async submoduleDeinit(repoPath: string, subPath: string) {
+    await this.git(repoPath).raw(["submodule", "deinit", "-f", subPath]);
+    await this.git(repoPath).raw(["rm", "-f", subPath]);
+  }
+
+  /** Absolute path of the repository's git dir (handles worktrees). */
+  private async gitDir(repoPath: string): Promise<string> {
+    return path.resolve(repoPath, (await this.git(repoPath).raw(["rev-parse", "--git-dir"])).trim());
+  }
+
+  async getCommitTemplate(repoPath: string): Promise<string> {
+    try {
+      const p = path.join(await this.gitDir(repoPath), "zentree-commit-template");
+      return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
+    } catch { return ""; }
+  }
+
+  async setCommitTemplate(repoPath: string, content: string): Promise<void> {
+    const p = path.join(await this.gitDir(repoPath), "zentree-commit-template");
+    fs.writeFileSync(p, content, "utf8");
+  }
+
+  async getSignCommits(repoPath: string): Promise<boolean> {
+    try {
+      return (await this.git(repoPath).raw(["config", "--get", "commit.gpgsign"])).trim() === "true";
+    } catch { return false; }
+  }
+
+  async setSignCommits(repoPath: string, enabled: boolean) {
+    return this.git(repoPath).raw(["config", "commit.gpgsign", enabled ? "true" : "false"]);
+  }
+
+  async getDiffTool(repoPath: string): Promise<string> {
+    try { return (await this.git(repoPath).raw(["config", "--get", "diff.tool"])).trim(); } catch { return ""; }
+  }
+
+  async setDiffTool(repoPath: string, tool: string) {
+    return this.git(repoPath).raw(["config", "diff.tool", tool]);
+  }
+
+  async launchDiffTool(repoPath: string, filePath?: string) {
+    const args = ["difftool", "--no-prompt"];
+    if (filePath) args.push("--", filePath);
+    return this.git(repoPath).raw(args);
   }
 
   async tags(repoPath: string): Promise<TagInfo[]> {

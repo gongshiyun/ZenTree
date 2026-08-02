@@ -2,6 +2,8 @@ import { useMemo, useCallback, useState } from "react";
 import { useRepoStore } from "../application/repoStore";
 import { gitApi } from "../infrastructure/gitBridge";
 import { useT } from "../i18n";
+import { buildFileTree } from "../domain/files/tree";
+import type { FileTreeNode } from "../domain/files/tree";
 
 type FileTab = "unstaged" | "staged";
 
@@ -25,6 +27,8 @@ function statIcon(s: FileStatus): string { switch (s) { case "untracked": return
 export default function FilePanel() {
   const t = useT();
   const [activeTab, setActiveTab] = useState<FileTab>("unstaged");
+  const [showTree, setShowTree] = useState(true);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const status = useRepoStore((s) => s.status);
   const currentRepo = useRepoStore((s) => s.currentRepo);
   const setLoading = useRepoStore((s) => s.setLoading);
@@ -106,6 +110,11 @@ export default function FilePanel() {
     runOp(() => gitApi().discard(currentRepo, paths), t("status.discarding").replace("{0}", label), t("error.discardFailed"));
   }, [currentRepo, runOp, t]);
 
+  const handleStashFile = useCallback((file: FileEntry) => {
+    if (!currentRepo) return;
+    runOp(() => gitApi().stashSave(currentRepo, undefined, [file.path]), t("status.stashing").replace("{0}", file.path), t("error.opFailed"));
+  }, [currentRepo, runOp, t]);
+
   const handleStageAll = useCallback(() => {
     if (!currentRepo) return;
     runOp(() => gitApi().stageAll(currentRepo), t("status.staging").replace("{0}", t("files.all")), t("error.stageFailed"));
@@ -156,6 +165,18 @@ export default function FilePanel() {
     else setError(r.error || t("files.noRemote"));
   }, [currentRepo, selectedCommit, setError]);
 
+  const currentFiles = activeTab === "unstaged" ? unstagedFiles : stagedFiles;
+  const tree = useMemo(() => buildFileTree(currentFiles.map((f) => f.path)), [currentFiles]);
+  const fileByPath = useMemo(() => new Map(currentFiles.map((f) => [f.path, f])), [currentFiles]);
+
+  const toggleDir = useCallback((path: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path); else next.add(path);
+      return next;
+    });
+  }, []);
+
   if (selectedCommit && commitDetail) {
     return (<div className="file-panel"><div className="file-panel-header">
       <div className="file-tab active">{t("files.filesIn")} {selectedCommit.substring(0, 7)}</div>
@@ -168,12 +189,52 @@ export default function FilePanel() {
     </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; const st = commitDetail.stats?.find((s) => s.path === f); return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, status: "modified", commitHash: selectedCommit })}><span className="file-name" title={f}>{f}</span>{st && !st.binary && (<span className="file-stat"><span className="stat-add">+{st.additions}</span><span className="stat-del">-{st.deletions}</span></span>)}</div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
   }
 
-  const currentFiles = activeTab === "unstaged" ? unstagedFiles : stagedFiles;
+  const renderFileRow = (file: FileEntry) => {
+    const sl = statLabel(file.status);
+    const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged");
+    const display = file.label || file.path;
+    return (
+      <div className={`file-item${isSel ? " selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged", status: file.status, fromPath: file.fromPath })}>
+        <span className={`file-status ${sl}`}>{statIcon(file.status)}</span><span className="file-name" title={display}>{display}</span>
+        <span className="file-actions" onClick={(e) => e.stopPropagation()}>
+          {file.status === "conflict"
+            ? <button className="file-action-btn" onClick={() => handleResolveConflict(file)}>{t("files.resolve")}</button>
+            : <button className="file-action-btn" onClick={() => handleStashFile(file)} title={t("files.stashTip")}>{t("files.stash")}</button>}
+          {file.status === "conflict"
+            ? null
+            : (activeTab === "unstaged" ? <button className="file-action-btn" onClick={() => handleStage(file)}>{t("files.stage")}</button> : <button className="file-action-btn" onClick={() => handleUnstage(file)}>{t("files.unstage")}</button>)}
+          {file.status !== "conflict" && <button className="file-action-btn danger" onClick={() => handleDiscard(file)}>{t("files.discard")}</button>}
+        </span>
+      </div>
+    );
+  };
+
+  const renderTree = (nodes: FileTreeNode[], depth: number): React.ReactNode => (
+    nodes.map((node) => {
+      if (node.type === "dir") {
+        const isCollapsed = collapsed.has(node.path);
+        return (
+          <div key={node.path}>
+            <div className="tree-dir" style={{ paddingLeft: 8 + depth * 14 }} onClick={() => toggleDir(node.path)}>
+              <span className="tree-arrow">{isCollapsed ? "\u25B6" : "\u25BC"}</span>
+              <span className="tree-dir-icon">&#128193;</span>
+              <span className="tree-dir-name">{node.name}</span>
+            </div>
+            {!isCollapsed && node.children && renderTree(node.children, depth + 1)}
+          </div>
+        );
+      }
+      const file = fileByPath.get(node.path);
+      if (!file) return null;
+      return <div key={node.path} style={{ paddingLeft: depth * 14 }}>{renderFileRow(file)}</div>;
+    })
+  );
 
   return (<div className="file-panel"><div className="file-panel-header">
     <div className={`file-tab${activeTab === "unstaged" ? " active" : ""}`} onClick={() => setActiveTab("unstaged")}>{t("files.unstaged")} <span className="count">{unstagedFiles.length}</span></div>
     <div className={`file-tab${activeTab === "staged" ? " active" : ""}`} onClick={() => setActiveTab("staged")}>{t("files.staged")} <span className="count">{stagedFiles.length}</span></div>
     <span style={{ flex: 1 }} />
+    <button className="file-action-btn" onClick={() => setShowTree(!showTree)} title={showTree ? t("files.flatView") : t("files.treeView")}>{showTree ? "\u2630" : "\u25C4"}</button>
     {activeTab === "unstaged" && unstagedFiles.length > 0 && (
       <button className="file-action-btn" onClick={handleStageAll} title={t("files.stageAllTip")}>{t("files.stageAll")}</button>
     )}
@@ -181,17 +242,7 @@ export default function FilePanel() {
       <button className="file-action-btn" onClick={handleUnstageAll} title={t("files.unstageAllTip")}>{t("files.unstageAll")}</button>
     )}
   </div><div className="file-list">
-    {currentFiles.map((file) => { const sl = statLabel(file.status); const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged"); const display = file.label || file.path; return (
-      <div key={activeTab + ":" + file.path} className={`file-item${isSel ? " selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged", status: file.status, fromPath: file.fromPath })}>
-        <span className={`file-status ${sl}`}>{statIcon(file.status)}</span><span className="file-name" title={display}>{display}</span>
-        <span className="file-actions" onClick={(e) => e.stopPropagation()}>
-          {file.status === "conflict"
-            ? <button className="file-action-btn" onClick={() => handleResolveConflict(file)}>{t("files.resolve")}</button>
-            : (activeTab === "unstaged" ? <button className="file-action-btn" onClick={() => handleStage(file)}>{t("files.stage")}</button> : <button className="file-action-btn" onClick={() => handleUnstage(file)}>{t("files.unstage")}</button>)}
-          {file.status !== "conflict" && <button className="file-action-btn danger" onClick={() => handleDiscard(file)}>{t("files.discard")}</button>}
-        </span>
-      </div>
-    ); })}
+    {showTree ? renderTree(tree, 0) : currentFiles.map((file) => <div key={activeTab + ":" + file.path}>{renderFileRow(file)}</div>)}
     {currentFiles.length === 0 && <div className="empty-state">{activeTab === "unstaged" ? t("files.noUnstaged") : t("files.noStaged")}</div>}
   </div></div>);
 }

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { parseDiff, buildHunkPatch } from "../src/domain/diff/parser";
 import { highlightLine } from "../src/domain/diff/highlight";
 import { buildUntrackedDiff } from "../src/domain/diff/untracked";
+import { diffWords } from "../src/domain/diff/worddiff";
+import { buildFileTree } from "../src/domain/files/tree";
 import { buildGraphData } from "../src/domain/graph/layout";
 import type { CommitLogEntry } from "../src/types";
 
@@ -80,6 +82,68 @@ describe("buildUntrackedDiff", () => {
   it("produces a parseable diff for empty content", () => {
     const diff = buildUntrackedDiff("empty.txt", "");
     expect(parseDiff(diff)).toHaveLength(1);
+  });
+});
+
+describe("buildFileTree", () => {
+  it("groups files into directories with dirs first", () => {
+    const tree = buildFileTree(["src/a.ts", "README.md", "src/b.ts"]);
+    expect(tree).toHaveLength(2);
+    expect(tree[0].type).toBe("dir");
+    expect(tree[0].name).toBe("src");
+    expect(tree[0].path).toBe("src");
+    expect(tree[0].children?.map((c) => c.name)).toEqual(["a.ts", "b.ts"]);
+    expect(tree[1]).toMatchObject({ name: "README.md", type: "file", path: "README.md" });
+  });
+
+  it("sorts directories before files and alphabetically", () => {
+    const tree = buildFileTree(["z.txt", "m/dir.txt", "a.txt"]);
+    expect(tree.map((n) => n.name)).toEqual(["m", "a.txt", "z.txt"]);
+  });
+
+  it("handles nested paths and windows separators", () => {
+    const tree = buildFileTree(["a\\b\\c.txt", "a\\b.txt"]);
+    expect(tree).toHaveLength(1);
+    const a = tree[0];
+    expect(a.name).toBe("a");
+    expect(a.children?.map((n) => n.name)).toEqual(["b", "b.txt"]);
+    const b = a.children![0];
+    expect(b.children?.map((n) => n.name)).toEqual(["c.txt"]);
+    expect(b.children![0].path).toBe("a/b/c.txt");
+  });
+
+  it("returns empty for no paths", () => {
+    expect(buildFileTree([])).toEqual([]);
+  });
+});
+
+describe("diffWords", () => {
+  it("marks only the changed words", () => {
+    const { del, add } = diffWords("const x = 1;", "const y = 1;");
+    const delWords = del.filter((t) => t.type === "del").map((t) => t.text.trim());
+    const addWords = add.filter((t) => t.type === "add").map((t) => t.text.trim());
+    expect(delWords).toContain("x");
+    expect(addWords).toContain("y");
+    expect(addWords).not.toContain("const");
+  });
+
+  it("returns all-same tokens for identical lines", () => {
+    const { del, add } = diffWords("same text here", "same text here");
+    expect(del.every((t) => t.type === "same")).toBe(true);
+    expect(add.every((t) => t.type === "same")).toBe(true);
+  });
+
+  it("detects pure additions and removals", () => {
+    const added = diffWords("a b", "a b c");
+    expect(added.add.some((t) => t.type === "add" && t.text.trim() === "c")).toBe(true);
+    const removed = diffWords("a b c", "a b");
+    expect(removed.del.some((t) => t.type === "del" && t.text.trim() === "c")).toBe(true);
+  });
+
+  it("handles empty inputs", () => {
+    const { del, add } = diffWords("", "hello");
+    expect(del).toHaveLength(0);
+    expect(add.some((t) => t.type === "add")).toBe(true);
   });
 });
 

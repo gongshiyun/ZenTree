@@ -22,16 +22,24 @@ export default function TopBar() {
   const setError = useRepoStore((s) => s.setError);
   const [searchText, setSearchText] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showPullMenu, setShowPullMenu] = useState(false);
   const [fQuery, setFQuery] = useState("");
   const [fAuthor, setFAuthor] = useState("");
   const [fSince, setFSince] = useState("");
   const selectorRef = useRef<HTMLDivElement>(null);
+  const pullRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!showDropdown) return;
     const h = (e: MouseEvent) => { if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) { setShowDropdown(false); setSearchText(""); } };
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, [showDropdown]);
+
+  useEffect(() => {
+    if (!showPullMenu) return;
+    const h = (e: MouseEvent) => { if (pullRef.current && !pullRef.current.contains(e.target as Node)) setShowPullMenu(false); };
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
+  }, [showPullMenu]);
 
   // Debounced commit-log filters
   useEffect(() => {
@@ -78,6 +86,10 @@ export default function TopBar() {
   const handleFetch = () => runAsync(() => gitApi().fetch(currentRepo!), t("topbar.fetching"));
   const handlePull = () => runAsync(() => gitApi().pull(currentRepo!), t("topbar.pulling"));
   const handlePush = () => runAsync(() => gitApi().push(currentRepo!), t("topbar.pushing"));
+  const handlePullStrategy = (strategy: "merge" | "rebase" | "ff-only") => {
+    setShowPullMenu(false);
+    runAsync(() => gitApi().pull(currentRepo!, strategy), t("topbar.pulling"));
+  };
   const handleRefresh = () => useRepoStore.getState().refreshAll();
 
   const handleOpenOnHosting = useCallback(async () => {
@@ -128,7 +140,17 @@ export default function TopBar() {
       </div>
       {currentRepo && (<div className="toolbar-group no-drag">
         <button className="toolbar-btn" onClick={handleFetch} disabled={loading} title={t("topbar.fetchTip")}>{t("topbar.fetch")}</button>
-        <button className="toolbar-btn" onClick={handlePull} disabled={loading} title={t("topbar.pullTip")}>{t("topbar.pull")}</button>
+        <div className="pull-wrap no-drag" ref={pullRef}>
+          <button className="toolbar-btn" onClick={handlePull} disabled={loading} title={t("topbar.pullTip")}>{t("topbar.pull")}</button>
+          <button className="toolbar-btn pull-caret" onClick={() => setShowPullMenu(!showPullMenu)} disabled={loading} title={t("topbar.pullOptions")}>&#9662;</button>
+          {showPullMenu && (
+            <div className="pull-menu">
+              <div className="pull-menu-item" onClick={() => handlePullStrategy("merge")}>{t("topbar.pullMerge")}</div>
+              <div className="pull-menu-item" onClick={() => handlePullStrategy("rebase")}>{t("topbar.pullRebase")}</div>
+              <div className="pull-menu-item" onClick={() => handlePullStrategy("ff-only")}>{t("topbar.pullFF")}</div>
+            </div>
+          )}
+        </div>
         <button className="toolbar-btn" onClick={handlePush} disabled={loading} title={t("topbar.pushTip")}>{t("topbar.push")}</button>
         <button className="toolbar-btn" onClick={handleRefresh} disabled={loading} title={t("topbar.refreshTip")}>{t("topbar.refresh")}</button>
         <button className="toolbar-btn" onClick={() => setShowCompare(true)} disabled={loading} title={t("topbar.compareTip")}>{t("topbar.compare")}</button>
