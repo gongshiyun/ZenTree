@@ -60,6 +60,7 @@ export interface GitAPI {
   stashList: (repoPath: string) => Promise<{ success: boolean; data?: { ref: string; subject: string }[]; error?: string }>;
   stashPop: (repoPath: string, ref?: string) => Promise<{ success: boolean; error?: string }>;
   stashDrop: (repoPath: string, ref: string) => Promise<{ success: boolean; error?: string }>;
+  stashDiff: (repoPath: string, ref: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   fetch: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
   fetchBranch: (repoPath: string, remote: string, branch: string) => Promise<{ success: boolean; error?: string }>;
   pull: (repoPath: string, strategy?: PullStrategy) => Promise<{ success: boolean; error?: string }>;
@@ -70,9 +71,12 @@ export interface GitAPI {
   pruneRemote: (repoPath: string, remote: string) => Promise<{ success: boolean; error?: string }>;
   openDirectory: () => Promise<string | null>;
   openGitBash: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
-  diffFile: (repoPath: string, filePath: string, staged: boolean) => Promise<{ success: boolean; data?: string; error?: string }>;
+  diffFile: (repoPath: string, filePath: string, staged: boolean, fromPath?: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   commitFileDiff: (repoPath: string, hash: string, filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   readWorkingFile: (repoPath: string, filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+  checkoutFile: (repoPath: string, ref: string, filePath: string) => Promise<{ success: boolean; error?: string }>;
+  showStage: (repoPath: string, stage: 1 | 2 | 3, filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+  writeWorkingFile: (repoPath: string, filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
   stageHunk: (repoPath: string, patchContent: string) => Promise<{ success: boolean; error?: string }>;
   unstageHunk: (repoPath: string, patchContent: string) => Promise<{ success: boolean; error?: string }>;
   revertHunk: (repoPath: string, patchContent: string) => Promise<{ success: boolean; error?: string }>;
@@ -127,6 +131,9 @@ export interface GitAPI {
   readGitignore: (repoPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
   writeGitignore: (repoPath: string, content: string) => Promise<{ success: boolean; error?: string }>;
   mergetool: (repoPath: string, filePath?: string) => Promise<{ success: boolean; error?: string }>;
+  watchRepo: (repoPath: string) => Promise<{ success: boolean; error?: string }>;
+  unwatchRepo: () => Promise<{ success: boolean; error?: string }>;
+  onRepoChanged: (cb: (repoPath: string) => void) => () => void;
 }
 
 export interface LogFilters {

@@ -13,9 +13,21 @@ interface Camera {
   scale: number;
 }
 
+/**
+ * Canvas graph engine with two stacked layers:
+ * - base: background, edges, nodes, texts and branch labels (redrawn on data
+ *   / camera / theme changes);
+ * - overlay: hover ring, selection ring and search highlight rings (redrawn
+ *   on interaction-state changes, O(visible highlights) per frame).
+ *
+ * All pointer events are attached to the top overlay canvas; the base canvas
+ * does not intercept them.
+ */
 export class GraphRenderer {
-  private canvas: HTMLCanvasElement;
+  private baseCanvas: HTMLCanvasElement;
+  private overlayCanvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private overlayCtx: CanvasRenderingContext2D;
   private data: GraphData = { nodes: [], edges: [], maxLane: 0 };
   private camera: Camera = { offsetX: 0, offsetY: 0, scale: 1.0 };
   private dpr: number;
@@ -29,7 +41,12 @@ export class GraphRenderer {
   private theme: "dark" | "light" = "dark";
   private cssVars: { bg: string; textPrimary: string; textSecondary: string; textMuted: string; accent: string; warning: string } = { bg: "#1a1b26", textPrimary: "#cdd6f4", textSecondary: "#a6adc8", textMuted: "#6c7086", accent: "#89b4fa", warning: "#f9e2af" };
   private rafId: number | null = null;
+  private overlayRafId: number | null = null;
   private highlightHashes: Set<string> = new Set();
+
+  /** Rendering caches, cleared on every setData (data-driven, no staleness). */
+  private textWidthCache = new Map<string, number>();
+  private dateStrCache = new Map<string, string>();
 
   // Callbacks
   private onHover: ((node: GraphNode | null) => void) | null = null;
@@ -37,11 +54,15 @@ export class GraphRenderer {
   private onContextMenu: ((node: GraphNode, x: number, y: number) => void) | null = null;
   private onNearBottom: (() => void) | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
-    const ctx = canvas.getContext("2d");
+  constructor(base: HTMLCanvasElement, overlay: HTMLCanvasElement) {
+    this.baseCanvas = base;
+    this.overlayCanvas = overlay;
+    const ctx = base.getContext("2d");
     if (!ctx) throw new Error("Failed to get 2D context");
     this.ctx = ctx;
+    const overlayCtx = overlay.getContext("2d");
+    if (!overlayCtx) throw new Error("Failed to get 2D context");
+    this.overlayCtx = overlayCtx;
     this.dpr = window.devicePixelRatio || 1;
 
     this.setupEvents();
@@ -50,7 +71,9 @@ export class GraphRenderer {
 
   setTheme(theme: "dark" | "light") {
     this.theme = theme;
+    // CSS variables feed both layers; repaint everything.
     this.scheduleRender();
+    this.scheduleOverlayRender();
   }
 
   setCallbacks(callbacks: {
@@ -68,21 +91,25 @@ export class GraphRenderer {
   setData(data: GraphData) {
     const firstLoad = this.data.nodes.length === 0 && data.nodes.length > 0;
     this.data = data;
+    // Render caches are data-driven: drop them on every data change.
+    this.textWidthCache.clear();
+    this.dateStrCache.clear();
     if (firstLoad) {
       this.camera.offsetX = LOCK_OFFSET_X;
       this.camera.offsetY = 0;
     }
     this.scheduleRender();
+    this.scheduleOverlayRender();
   }
 
   setSelected(hash: string | null) {
     this.selectedHash = hash;
-    this.scheduleRender();
+    this.scheduleOverlayRender();
   }
 
   setHighlights(hashes: Set<string>) {
     this.highlightHashes = hashes;
-    this.scheduleRender();
+    this.scheduleOverlayRender();
   }
 
   scrollToNode(hash: string) {
@@ -91,6 +118,7 @@ export class GraphRenderer {
     this.camera.offsetY = this.height / 2 - node.y * this.camera.scale;
     this.selectedHash = hash;
     this.scheduleRender();
+    this.scheduleOverlayRender();
   }
 
   /** Zoom by a factor, anchored at the vertical center (graph stays pinned left). */
@@ -100,6 +128,7 @@ export class GraphRenderer {
     this.camera.scale = newScale;
     this.camera.offsetY = this.height / 2 - anchorY * newScale;
     this.scheduleRender();
+    this.scheduleOverlayRender();
   }
 
   /** Reset zoom to 100% and scroll back to the top. */
@@ -107,6 +136,7 @@ export class GraphRenderer {
     this.camera.scale = 1;
     this.camera.offsetY = 0;
     this.scheduleRender();
+    this.scheduleOverlayRender();
   }
 
   getScale(): number {
@@ -114,13 +144,17 @@ export class GraphRenderer {
   }
 
   handleResize() {
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.baseCanvas.getBoundingClientRect();
     this.width = rect.width;
     this.height = rect.height;
-    this.canvas.width = rect.width * this.dpr;
-    this.canvas.height = rect.height * this.dpr;
+    this.baseCanvas.width = rect.width * this.dpr;
+    this.baseCanvas.height = rect.height * this.dpr;
+    this.overlayCanvas.width = rect.width * this.dpr;
+    this.overlayCanvas.height = rect.height * this.dpr;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.overlayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.scheduleRender();
+    this.scheduleOverlayRender();
   }
 
   /** Read theme colors from CSS variables so the canvas follows the active theme. */
@@ -145,12 +179,21 @@ export class GraphRenderer {
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
   }
 
-  /** Schedule a render on the next animation frame (coalesces multiple requests). */
+  /** Schedule a base-layer render on the next animation frame (coalesces requests). */
   private scheduleRender() {
     if (this.rafId !== null) return;
     this.rafId = requestAnimationFrame(() => {
       this.rafId = null;
       this.render();
+    });
+  }
+
+  /** Schedule an overlay-layer render (interaction states only). */
+  private scheduleOverlayRender() {
+    if (this.overlayRafId !== null) return;
+    this.overlayRafId = requestAnimationFrame(() => {
+      this.overlayRafId = null;
+      this.renderOverlay();
     });
   }
 
@@ -205,6 +248,49 @@ export class GraphRenderer {
         this.onNearBottom();
       }
     }
+  }
+
+  /** Redraw only the interaction layer: hover ring, selection ring, highlight rings. */
+  private renderOverlay() {
+    const { overlayCtx, width, height, camera, data } = this;
+    overlayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    overlayCtx.clearRect(0, 0, width, height);
+
+    const scale = Math.max(0.1, Math.min(5, camera.scale));
+    const sy = camera.offsetY + PADDING_TOP;
+    const viewTop = -sy / scale;
+    const viewBottom = (height - sy) / scale;
+    const margin = 100;
+    const cullTop = viewTop - margin;
+    const cullBottom = viewBottom + margin;
+
+    overlayCtx.save();
+    overlayCtx.translate(camera.offsetX + PADDING_LEFT, sy);
+    overlayCtx.scale(scale, scale);
+
+    for (const node of data.nodes) {
+      if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
+      const isSelected = this.selectedHash === node.hash;
+      const isHovered = this.hoveredNode?.hash === node.hash;
+      const isHighlighted = this.highlightHashes.has(node.hash);
+      if (!isSelected && !isHovered && !isHighlighted) continue;
+      const r = isSelected ? NODE_RADIUS + 2 : isHovered ? NODE_RADIUS + 1 : NODE_RADIUS;
+
+      if (isHighlighted && !isSelected) {
+        overlayCtx.beginPath();
+        overlayCtx.arc(node.x, node.y, r + 5, 0, Math.PI * 2);
+        overlayCtx.fillStyle = this.withAlpha(this.cssVars.warning, 0.35);
+        overlayCtx.fill();
+      }
+      if (isSelected || isHovered) {
+        overlayCtx.beginPath();
+        overlayCtx.arc(node.x, node.y, r + 3, 0, Math.PI * 2);
+        overlayCtx.fillStyle = isSelected ? this.withAlpha(this.cssVars.accent, 0.3) : this.withAlpha(this.cssVars.textSecondary, 0.2);
+        overlayCtx.fill();
+      }
+    }
+
+    overlayCtx.restore();
   }
 
 
@@ -273,6 +359,33 @@ export class GraphRenderer {
     }
   }
 
+  /** Format a commit timestamp once per node hash (cache keyed on setData lifecycle). */
+  private dateStrFor(ts: number, hash: string): string {
+    let s = this.dateStrCache.get(hash);
+    if (!s) {
+      const d = new Date(ts * 1000);
+      s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      this.dateStrCache.set(hash, s);
+    }
+    return s;
+  }
+
+  /** Measure text width with a bounded cache (evicts the oldest half when full). */
+  private cachedMeasure(text: string, font: string): number {
+    const key = font + "\u0000" + text;
+    let w = this.textWidthCache.get(key);
+    if (w === undefined) {
+      this.ctx.font = font;
+      w = this.ctx.measureText(text).width;
+      if (this.textWidthCache.size > 2000) {
+        const it = this.textWidthCache.keys();
+        for (let i = 0; i < 1000; i++) this.textWidthCache.delete(it.next().value!);
+      }
+      this.textWidthCache.set(key, w);
+    }
+    return w;
+  }
+
   private drawNodes(cullTop: number, cullBottom: number, viewLeft: number, viewRight: number, isDark: boolean) {
     const { ctx, data } = this;
 
@@ -280,30 +393,9 @@ export class GraphRenderer {
       if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
       if (node.x + NODE_RADIUS < viewLeft || node.x - NODE_RADIUS > viewRight) continue;
 
-      const isSelected = this.selectedHash === node.hash;
-      const isHovered = this.hoveredNode?.hash === node.hash;
-      const isHighlighted = this.highlightHashes.has(node.hash);
-      const r = isSelected ? NODE_RADIUS + 2 : isHovered ? NODE_RADIUS + 1 : NODE_RADIUS;
-
-      // Search highlight ring
-      if (isHighlighted && !isSelected) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r + 5, 0, Math.PI * 2);
-        ctx.fillStyle = this.withAlpha(this.cssVars.warning, 0.35);
-        ctx.fill();
-      }
-
-      // Glow or selection ring
-      if (isSelected || isHovered) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r + 3, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected ? this.withAlpha(this.cssVars.accent, 0.3) : this.withAlpha(this.cssVars.textSecondary, 0.2);
-        ctx.fill();
-      }
-
-      // Main node circle
+      // Main node circle (interaction rings live on the overlay layer)
       ctx.beginPath();
-      ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+      ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = node.color;
       ctx.fill();
 
@@ -320,17 +412,15 @@ export class GraphRenderer {
       ctx.font = "12.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.textBaseline = "middle";
       ctx.fillText(displayText, textX, node.y);
-      const subjW = ctx.measureText(displayText).width;
+      const subjW = this.cachedMeasure(displayText, ctx.font);
       ctx.fillStyle = this.cssVars.textSecondary;
       ctx.font = "11.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.fillText(node.author, textX + subjW + 8, node.y);
       // Date column
-      const authorW = ctx.measureText(node.author).width;
-      const d = new Date(node.timestamp * 1000);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      const authorW = this.cachedMeasure(node.author, ctx.font);
       ctx.fillStyle = this.cssVars.textMuted;
       ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(dateStr, textX + subjW + authorW + 20, node.y);
+      ctx.fillText(this.dateStrFor(node.timestamp, node.hash), textX + subjW + authorW + 20, node.y);
     }
   }
 
@@ -382,12 +472,13 @@ export class GraphRenderer {
   }
 
   private setupEvents() {
-    this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
-    this.canvas.addEventListener("mousedown", this.handleMouseDown);
-    this.canvas.addEventListener("mousemove", this.handleMouseMove);
-    this.canvas.addEventListener("mouseup", this.handleMouseUp);
-    this.canvas.addEventListener("mouseleave", this.handleMouseLeave);
-    this.canvas.addEventListener("contextmenu", this.handleContextMenu);
+    // The overlay canvas sits on top: it receives all pointer events.
+    this.overlayCanvas.addEventListener("wheel", this.handleWheel, { passive: false });
+    this.overlayCanvas.addEventListener("mousedown", this.handleMouseDown);
+    this.overlayCanvas.addEventListener("mousemove", this.handleMouseMove);
+    this.overlayCanvas.addEventListener("mouseup", this.handleMouseUp);
+    this.overlayCanvas.addEventListener("mouseleave", this.handleMouseLeave);
+    this.overlayCanvas.addEventListener("contextmenu", this.handleContextMenu);
   }
 
   private handleWheel = (e: WheelEvent) => {
@@ -401,6 +492,7 @@ export class GraphRenderer {
       this.camera.offsetY -= e.deltaY;
       this.camera.offsetY = Math.min(120, Math.max(this.minOffsetY(), this.camera.offsetY));
       this.scheduleRender();
+      this.scheduleOverlayRender();
     }
   };
 
@@ -427,9 +519,9 @@ export class GraphRenderer {
     const node = this.hitTest(e.offsetX, e.offsetY);
     if (node !== this.hoveredNode) {
       this.hoveredNode = node;
-      this.canvas.style.cursor = node ? "pointer" : "default";
+      this.overlayCanvas.style.cursor = node ? "pointer" : "default";
       this.onHover?.(node);
-      this.scheduleRender();
+      this.scheduleOverlayRender();
     }
   };
 
@@ -441,7 +533,7 @@ export class GraphRenderer {
     if (node) {
       this.selectedHash = node.hash;
       this.onClick?.(node);
-      this.scheduleRender();
+      this.scheduleOverlayRender();
     }
   };
 
@@ -450,7 +542,7 @@ export class GraphRenderer {
     if (this.hoveredNode) {
       this.hoveredNode = null;
       this.onHover?.(null);
-      this.scheduleRender();
+      this.scheduleOverlayRender();
     }
   };
 
@@ -464,11 +556,12 @@ export class GraphRenderer {
 
   destroy() {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
-    this.canvas.removeEventListener("wheel", this.handleWheel);
-    this.canvas.removeEventListener("mousedown", this.handleMouseDown);
-    this.canvas.removeEventListener("mousemove", this.handleMouseMove);
-    this.canvas.removeEventListener("mouseup", this.handleMouseUp);
-    this.canvas.removeEventListener("mouseleave", this.handleMouseLeave);
-    this.canvas.removeEventListener("contextmenu", this.handleContextMenu);
+    if (this.overlayRafId !== null) cancelAnimationFrame(this.overlayRafId);
+    this.overlayCanvas.removeEventListener("wheel", this.handleWheel);
+    this.overlayCanvas.removeEventListener("mousedown", this.handleMouseDown);
+    this.overlayCanvas.removeEventListener("mousemove", this.handleMouseMove);
+    this.overlayCanvas.removeEventListener("mouseup", this.handleMouseUp);
+    this.overlayCanvas.removeEventListener("mouseleave", this.handleMouseLeave);
+    this.overlayCanvas.removeEventListener("contextmenu", this.handleContextMenu);
   }
 }

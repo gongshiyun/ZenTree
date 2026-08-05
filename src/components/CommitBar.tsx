@@ -49,7 +49,8 @@ export default function CommitBar() {
       try {
         const r = await gitApi().getCommitTemplate(currentRepo);
         if (!cancelled && r.success && r.data) {
-          setMessage((prev) => (prev === "" ? r.data : prev));
+          const template = r.data;
+          setMessage((prev) => (prev === "" ? template : prev));
         }
       } catch { /* ignore */ }
     })();

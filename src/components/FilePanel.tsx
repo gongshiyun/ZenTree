@@ -3,6 +3,7 @@ import { useRepoStore } from "../application/repoStore";
 import { gitApi } from "../infrastructure/gitBridge";
 import { useT } from "../i18n";
 import { buildFileTree } from "../domain/files/tree";
+import MergePanel from "./MergePanel";
 import type { FileTreeNode } from "../domain/files/tree";
 
 type FileTab = "unstaged" | "staged";
@@ -38,6 +39,11 @@ export default function FilePanel() {
   const selectedCommit = useRepoStore((s) => s.selectedCommit);
   const selectedDiffFile = useRepoStore((s) => s.selectedDiffFile);
   const setSelectedDiffFile = useRepoStore((s) => s.setSelectedDiffFile);
+  const selectedFiles = useRepoStore((s) => s.selectedFiles);
+  const setSelectedFiles = useRepoStore((s) => s.setSelectedFiles);
+
+  const [fileMenu, setFileMenu] = useState<{ x: number; y: number; file: FileEntry } | null>(null);
+  const [mergeFile, setMergeFile] = useState<string | null>(null);
 
   const unstagedFiles = useMemo((): FileEntry[] => {
     if (!status) return [];
@@ -126,9 +132,9 @@ export default function FilePanel() {
   }, [currentRepo, runOp, t]);
 
   const handleResolveConflict = useCallback((file: FileEntry) => {
-    if (!currentRepo) return;
-    runOp(() => gitApi().mergetool(currentRepo, file.path), t("files.resolving").replace("{0}", file.path), t("error.opFailed"));
-  }, [currentRepo, runOp, t]);
+    // Built-in three-way panel first; binary/oversized files fall back to mergetool inside it.
+    setMergeFile(file.path);
+  }, []);
 
   const handleRevertCommit = useCallback(async () => {
     if (!currentRepo || !selectedCommit) return;
@@ -153,6 +159,37 @@ export default function FilePanel() {
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false, ""); }
   }, [currentRepo, selectedCommit, setLoading, setError, refreshAll, t]);
+
+  const handleCheckoutFileVersion = useCallback((file: FileEntry, ref: string) => {
+    if (!currentRepo) return;
+    if (!window.confirm(t("files.confirmCheckoutFile").replace("{0}", file.path).replace("{1}", ref.substring(0, 7)))) return;
+    runOp(() => gitApi().checkoutFile(currentRepo, ref, file.path), t("files.checkingOut").replace("{0}", file.path), t("error.opFailed"));
+  }, [currentRepo, runOp, t]);
+
+  const handleFileMenu = useCallback((e: React.MouseEvent, file: FileEntry) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileMenu({ x: e.clientX, y: e.clientY, file });
+  }, []);
+
+  const toggleSelectFile = useCallback((e: React.MouseEvent, file: FileEntry) => {
+    // Ctrl/Cmd+click toggles multi-selection (Delete discards the selection).
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const path = file.discardPaths?.[0] ?? file.path;
+      setSelectedFiles(selectedFiles.includes(path)
+        ? selectedFiles.filter((p) => p !== path)
+        : [...selectedFiles, path]);
+    }
+  }, [selectedFiles, setSelectedFiles]);
+
+  const handleDiscardSelected = useCallback(() => {
+    if (!currentRepo || selectedFiles.length === 0) return;
+    if (!window.confirm(t("files.confirmDiscardSelected").replace("{0}", String(selectedFiles.length)))) return;
+    runOp(() => gitApi().discard(currentRepo, selectedFiles), t("status.discarding").replace("{0}", t("files.selected")), t("error.discardFailed"));
+    setSelectedFiles([]);
+  }, [currentRepo, selectedFiles, runOp, setSelectedFiles, t]);
 
   const handleCopyHash = useCallback(() => {
     if (selectedCommit) navigator.clipboard.writeText(selectedCommit);
@@ -186,15 +223,16 @@ export default function FilePanel() {
         <button className="file-action-btn" onClick={handleCherryPick} title={t("commit.cherryPickTip")}>{t("commit.cherryPick")}</button>
         <button className="file-action-btn" onClick={handleOpenOnHosting} title={t("commit.openOnHostingTip")}>{t("commit.openOnHosting")}</button>
       </div>
-    </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; const st = commitDetail.stats?.find((s) => s.path === f); return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, status: "modified", commitHash: selectedCommit })}><span className="file-name" title={f}>{f}</span>{st && !st.binary && (<span className="file-stat"><span className="stat-add">+{st.additions}</span><span className="stat-del">-{st.deletions}</span></span>)}</div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
+    </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; const st = commitDetail.stats?.find((s) => s.path === f); return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, status: "modified", commitHash: selectedCommit })} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setFileMenu({ x: e.clientX, y: e.clientY, file: { path: f, status: "modified" } }); }}><span className="file-name" title={f}>{f}</span>{st && !st.binary && (<span className="file-stat"><span className="stat-add">+{st.additions}</span><span className="stat-del">-{st.deletions}</span></span>)}</div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
   }
 
   const renderFileRow = (file: FileEntry) => {
     const sl = statLabel(file.status);
     const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged");
+    const isSelMulti = selectedFiles.includes(file.discardPaths?.[0] ?? file.path);
     const display = file.label || file.path;
     return (
-      <div className={`file-item${isSel ? " selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={() => setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged", status: file.status, fromPath: file.fromPath })}>
+      <div className={`file-item${isSel ? " selected" : ""}${isSelMulti ? " multi-selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={(e) => { toggleSelectFile(e, file); if (!e.defaultPrevented) setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged", status: file.status, fromPath: file.fromPath }); }} onContextMenu={(e) => handleFileMenu(e, file)} title={t("files.multiSelectHint")}>
         <span className={`file-status ${sl}`}>{statIcon(file.status)}</span><span className="file-name" title={display}>{display}</span>
         <span className="file-actions" onClick={(e) => e.stopPropagation()}>
           {file.status === "conflict"
@@ -244,5 +282,18 @@ export default function FilePanel() {
   </div><div className="file-list">
     {showTree ? renderTree(tree, 0) : currentFiles.map((file) => <div key={activeTab + ":" + file.path}>{renderFileRow(file)}</div>)}
     {currentFiles.length === 0 && <div className="empty-state">{activeTab === "unstaged" ? t("files.noUnstaged") : t("files.noStaged")}</div>}
-  </div></div>);
+  </div>
+  {fileMenu && (
+    <div className="context-menu" style={{ left: fileMenu.x, top: fileMenu.y }}>
+      {!selectedCommit && (
+        <div className="context-menu-item" onClick={() => { handleDiscard(fileMenu.file); setFileMenu(null); }}>{t("files.restoreHead")}</div>
+      )}
+      {selectedCommit && (
+        <div className="context-menu-item" onClick={() => { handleCheckoutFileVersion(fileMenu.file, selectedCommit); setFileMenu(null); }}>{t("files.checkoutThisVersion")}</div>
+      )}
+      <div className="context-menu-item" onClick={async () => { await navigator.clipboard.writeText(fileMenu.file.path); setFileMenu(null); }}>{t("files.copyPath")}</div>
+    </div>
+  )}
+  {mergeFile && <MergePanel filePath={mergeFile} onClose={() => setMergeFile(null)} />}
+  </div>);
 }

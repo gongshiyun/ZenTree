@@ -3,15 +3,22 @@ import { useRepoStore } from "../application/repoStore";
 import { GraphRenderer } from "../renderer/canvasRenderer";
 import { useT } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
+import RefNameDialog from "./RefNameDialog";
 import type { GraphNode } from "../types";
 
 function formatDate(ts: number): string {
   return new Date(ts * 1000).toLocaleString();
 }
 
+type NodeMenuAction =
+  | "create-branch" | "create-tag" | "checkout" | "compare"
+  | "cherry-pick" | "revert"
+  | "reset-soft" | "reset-mixed" | "reset-hard" | "copy-hash";
+
 export default function CommitGraph() {
   const t = useT();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const baseCanvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GraphRenderer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -24,11 +31,15 @@ export default function CommitGraph() {
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
   const refreshAll = useRepoStore((s) => s.refreshAll);
+  const reloadMeta = useRepoStore((s) => s.reloadMeta);
   const viewRef = useRepoStore((s) => s.viewRef);
   const setViewRef = useRepoStore((s) => s.setViewRef);
+  const setCompareBase = useRepoStore((s) => s.setCompareBase);
+  const setShowCompare = useRepoStore((s) => s.setShowCompare);
 
   const [tooltip, setTooltip] = useState<{ node: GraphNode; x: number; y: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
+  const [refDialog, setRefDialog] = useState<{ kind: "branch" | "tag"; hash: string } | null>(null);
   const [searchText, setSearchText] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [matchIndex, setMatchIndex] = useState(0);
@@ -77,16 +88,17 @@ export default function CommitGraph() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Initialize renderer
+  // Initialize renderer on the stacked base/overlay canvases
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const base = baseCanvasRef.current;
+    const overlay = overlayCanvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container) return;
+    if (!base || !overlay || !container) return;
 
     if (rendererRef.current) rendererRef.current.destroy();
 
     try {
-      const renderer = new GraphRenderer(canvas);
+      const renderer = new GraphRenderer(base, overlay);
       renderer.setTheme(isDark ? "dark" : "light");
       renderer.setData(graphData);
       renderer.setSelected(selectedCommit);
@@ -163,19 +175,84 @@ export default function CommitGraph() {
     }
   }, [tooltip]);
 
-  const handleReset = useCallback(async (mode: "soft" | "mixed" | "hard") => {
-    if (!ctxMenu || !currentRepo) return;
-    const hash = ctxMenu.node.hash;
-    const label = mode === "hard" ? t("graph.confirmResetHard") : t("graph.confirmReset").replace("{0}", mode);
-    if (!window.confirm(label)) { setCtxMenu(null); return; }
-    setCtxMenu(null);
-    setLoading(true, t("graph.resetting").replace("{0}", mode));
+  const runNodeOp = useCallback(async (op: () => Promise<{ success: boolean; error?: string }>, label: string) => {
+    if (!currentRepo) return;
+    setLoading(true, label);
     try {
-      const r = await gitApi().reset(currentRepo, hash, mode);
+      const r = await op();
       if (r.success) await refreshAll();
       else setError(r.error || t("error.opFailed"));
-    } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
-  }, [ctxMenu, currentRepo, setLoading, setError, refreshAll]);
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [currentRepo, setLoading, setError, refreshAll, t]);
+
+  const handleNodeAction = useCallback(async (action: NodeMenuAction) => {
+    if (!ctxMenu || !currentRepo) return;
+    const hash = ctxMenu.node.hash;
+    const short = hash.substring(0, 7);
+    setCtxMenu(null);
+    switch (action) {
+      case "create-branch":
+        setRefDialog({ kind: "branch", hash });
+        break;
+      case "create-tag":
+        setRefDialog({ kind: "tag", hash });
+        break;
+      case "checkout": {
+        if (!window.confirm(t("graph.confirmCheckout").replace("{0}", short))) return;
+        // batch-checkout auto-stashes/restores a dirty working tree (ADR #7)
+        await runNodeOp(() => gitApi().batchCheckout(currentRepo, hash, { stash: true }), t("status.checkingOut").replace("{0}", short));
+        break;
+      }
+      case "compare":
+        setCompareBase(hash);
+        setShowCompare(true);
+        break;
+      case "cherry-pick": {
+        if (!window.confirm(t("commit.confirmCherryPick").replace("{0}", short))) return;
+        await runNodeOp(() => gitApi().cherryPick(currentRepo, hash), t("commit.cherryPicking"));
+        break;
+      }
+      case "revert": {
+        if (!window.confirm(t("commit.confirmRevert").replace("{0}", short))) return;
+        await runNodeOp(() => gitApi().revertCommit(currentRepo, hash), t("commit.reverting"));
+        break;
+      }
+      case "reset-soft":
+      case "reset-mixed":
+      case "reset-hard": {
+        const mode = action.replace("reset-", "");
+        const label = mode === "hard" ? t("graph.confirmResetHard") : t("graph.confirmReset").replace("{0}", mode);
+        if (!window.confirm(label)) return;
+        setLoading(true, t("graph.resetting").replace("{0}", mode));
+        try {
+          const r = await gitApi().reset(currentRepo, hash, mode as "soft" | "mixed" | "hard");
+          if (r.success) await refreshAll();
+          else setError(r.error || t("error.opFailed"));
+        } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
+        break;
+      }
+      case "copy-hash":
+        await navigator.clipboard.writeText(hash);
+        break;
+    }
+  }, [ctxMenu, currentRepo, t, runNodeOp, setCompareBase, setShowCompare, setLoading, setError, refreshAll]);
+
+  const handleRefDialogSubmit = useCallback(async (name: string) => {
+    if (!refDialog || !currentRepo) return;
+    const { kind, hash } = refDialog;
+    setRefDialog(null);
+    const label = kind === "branch" ? t("sidebar.creatingBranch").replace("{0}", name) : t("tags.creating").replace("{0}", name);
+    setLoading(true, label);
+    try {
+      const r = kind === "branch"
+        ? await gitApi().createBranch(currentRepo, name, false)
+        : await gitApi().createTag(currentRepo, name, hash);
+      if (r.success) { await refreshAll(); await reloadMeta(); }
+      else setError(r.error || t("error.opFailed"));
+    } catch (err: any) { setError(err.message); }
+    finally { setLoading(false, ""); }
+  }, [refDialog, currentRepo, t, setLoading, setError, refreshAll, reloadMeta]);
 
   const handleZoom = useCallback((factor: number) => {
     rendererRef.current?.zoomBy(factor);
@@ -218,7 +295,8 @@ export default function CommitGraph() {
           <button className="graph-search-close" onClick={() => { setShowSearch(false); setSearchText(""); }}>&times;</button>
         </div>
       )}
-      <canvas ref={canvasRef} />
+      <canvas ref={baseCanvasRef} className="graph-canvas graph-canvas-base" />
+      <canvas ref={overlayCanvasRef} className="graph-canvas graph-canvas-overlay" />
       {tooltip && (
         <div
           className="graph-tooltip"
@@ -237,12 +315,30 @@ export default function CommitGraph() {
       )}
       {ctxMenu && (
         <div className="context-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
-          <div className="context-menu-item" onClick={() => handleReset("soft")}>{t("graph.resetSoft")}</div>
-          <div className="context-menu-item" onClick={() => handleReset("mixed")}>{t("graph.resetMixed")}</div>
-          <div className="context-menu-item danger" onClick={() => handleReset("hard")}>{t("graph.resetHard")}</div>
+          <div className="context-menu-item" onClick={() => handleNodeAction("create-branch")}>{t("graph.createBranchHere")}</div>
+          <div className="context-menu-item" onClick={() => handleNodeAction("create-tag")}>{t("graph.createTagHere")}</div>
           <div className="context-menu-divider" />
-          <div className="context-menu-item" onClick={async () => { await navigator.clipboard.writeText(ctxMenu.node.hash); setCtxMenu(null); }}>{t("graph.copyHash")}</div>
+          <div className="context-menu-item" onClick={() => handleNodeAction("checkout")}>{t("graph.checkoutHere")}</div>
+          <div className="context-menu-item" onClick={() => handleNodeAction("compare")}>{t("graph.compareFromHere")}</div>
+          <div className="context-menu-divider" />
+          <div className="context-menu-item" onClick={() => handleNodeAction("cherry-pick")}>{t("graph.cherryPick")}</div>
+          <div className="context-menu-item" onClick={() => handleNodeAction("revert")}>{t("graph.revertCommit")}</div>
+          <div className="context-menu-divider" />
+          <div className="context-menu-item" onClick={() => handleNodeAction("reset-soft")}>{t("graph.resetSoft")}</div>
+          <div className="context-menu-item" onClick={() => handleNodeAction("reset-mixed")}>{t("graph.resetMixed")}</div>
+          <div className="context-menu-item danger" onClick={() => handleNodeAction("reset-hard")}>{t("graph.resetHard")}</div>
+          <div className="context-menu-divider" />
+          <div className="context-menu-item" onClick={() => handleNodeAction("copy-hash")}>{t("graph.copyHash")}</div>
         </div>
+      )}
+      {refDialog && (
+        <RefNameDialog
+          title={t(refDialog.kind === "branch" ? "graph.createBranchHere" : "graph.createTagHere")}
+          placeholder={t("sidebar.branchNamePlaceholder")}
+          confirmLabel={t(refDialog.kind === "branch" ? "sidebar.create" : "tags.create")}
+          onSubmit={handleRefDialogSubmit}
+          onClose={() => setRefDialog(null)}
+        />
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-﻿import { useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { useRepoStore } from "./application/repoStore";
 import { useT } from "./i18n";
 import { gitApi } from "./infrastructure/gitBridge";
@@ -14,6 +14,7 @@ import CloneDialog from "./components/CloneDialog";
 import CompareDialog from "./components/CompareDialog";
 import RebaseDialog from "./components/RebaseDialog";
 import RepoGroupDialog from "./components/RepoGroupDialog";
+import CommandPalette from "./components/CommandPalette";
 
 function Welcome() {
   const t = useT();
@@ -56,6 +57,7 @@ function Welcome() {
 }
 
 export default function App() {
+  const t = useT();
   const currentRepo = useRepoStore((s) => s.currentRepo);
   const selectedDiffFile = useRepoStore((s) => s.selectedDiffFile);
   const showRebase = useRepoStore((s) => s.showRebase);
@@ -71,17 +73,49 @@ export default function App() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === "F5") { e.preventDefault(); if (currentRepo) refreshAll(); }
     if (e.key === "Escape") setError(null);
-  }, [currentRepo, refreshAll, setError]);
+    // Shortcuts below must not fire while typing in an input.
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
+      e.preventDefault();
+      if (currentRepo) { gitApi().stageAll(currentRepo).then(() => refreshAll()); }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "U") {
+      e.preventDefault();
+      if (currentRepo) { gitApi().unstageAll(currentRepo).then(() => refreshAll()); }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      useRepoStore.getState().setShowCommandPalette(!useRepoStore.getState().showCommandPalette);
+    }
+    if (e.key === "Delete") {
+      const store = useRepoStore.getState();
+      if (store.currentRepo && store.selectedFiles.length > 0) {
+        e.preventDefault();
+        if (window.confirm(t("files.confirmDiscardSelected").replace("{0}", String(store.selectedFiles.length)))) {
+          gitApi().discard(store.currentRepo, store.selectedFiles).then((r) => {
+            store.setSelectedFiles([]);
+            if (r.success) refreshAll();
+            else setError(r.error || "");
+          });
+        }
+      }
+    }
+  }, [currentRepo, refreshAll, setError, t]);
 
-  useEffect(() => { window.addEventListener("keydown", handleKeyDown); return () => window.removeEventListener("keydown", handleKeyDown); }, [handleKeyDown]);
+  // Incremental refresh: watch events drive silent short-circuited refreshes.
+  useEffect(() => {
+    const dispose = gitApi().onRepoChanged?.(() => { useRepoStore.getState().silentDiffRefresh(); });
+    return () => { dispose?.(); };
+  }, []);
 
-  // Quiet auto-refresh: every 30s and on window focus, detect external changes.
+  // Quiet auto-refresh fallback: every 30s and on window focus, detect external changes.
   useEffect(() => {
     const timer = setInterval(() => {
-      if (useRepoStore.getState().currentRepo) useRepoStore.getState().refreshAll(undefined, true);
+      if (useRepoStore.getState().currentRepo) useRepoStore.getState().silentDiffRefresh();
     }, 30000);
     const onFocus = () => {
-      if (useRepoStore.getState().currentRepo) useRepoStore.getState().refreshAll(undefined, true);
+      if (useRepoStore.getState().currentRepo) useRepoStore.getState().silentDiffRefresh();
     };
     window.addEventListener("focus", onFocus);
     return () => { clearInterval(timer); window.removeEventListener("focus", onFocus); };
@@ -107,6 +141,7 @@ export default function App() {
       <SettingsDialog />
       <CloneDialog />
       <CompareDialog />
+      <CommandPalette />
       {showRebase && <RebaseDialog onClose={() => useRepoStore.getState().setShowRebase(null)} />}
       {showRepoGroups && <RepoGroupDialog onClose={() => useRepoStore.getState().setShowRepoGroups(false)} />}
     </div>

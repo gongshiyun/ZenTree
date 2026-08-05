@@ -139,7 +139,46 @@ export class GitRepository {
     if (!fs.existsSync(fullPath) || fs.statSync(fullPath).isDirectory()) {
       throw new Error("File does not exist");
     }
+    const size = fs.statSync(fullPath).size;
+    if (size > 512 * 1024) throw new Error("File is too large to display (max 512KB)");
+    const fd = fs.openSync(fullPath, "r");
+    try {
+      const head = Buffer.alloc(8192);
+      const read = fs.readSync(fd, head, 0, 8192, 0);
+      if (head.subarray(0, read).includes(0)) throw new Error("Binary files are not supported");
+    } finally {
+      fs.closeSync(fd);
+    }
     return fs.readFileSync(fullPath, "utf8");
+  }
+
+  /** Restore a single file (index + working tree) to the given ref. */
+  async checkoutFile(repoPath: string, ref: string, filePath: string): Promise<boolean> {
+    // Note: filePath is passed to git verbatim (no path.join), so no path
+    // traversal can enter through this argument.
+    await this.git(repoPath).raw(["checkout", ref, "--", filePath]);
+    return true;
+  }
+
+  /** Read a file from the index stage during a conflict (1=base, 2=ours, 3=theirs). */
+  async showStage(repoPath: string, stage: 1 | 2 | 3, filePath: string): Promise<string> {
+    return this.git(repoPath).raw(["show", `:${stage}:${filePath}`]);
+  }
+
+  /** Write text content back to the working tree with traversal protection and EOL preservation. */
+  async writeWorkingFile(repoPath: string, filePath: string, content: string): Promise<boolean> {
+    const root = path.resolve(repoPath);
+    const fullPath = path.resolve(repoPath, filePath);
+    if (filePath.split(/[\\/]/).includes("..") || !fullPath.startsWith(root + path.sep)) {
+      throw new Error("Invalid file path");
+    }
+    let output = content;
+    if (fs.existsSync(fullPath)) {
+      const raw = fs.readFileSync(fullPath, "utf8");
+      if (raw.includes("\r\n")) output = content.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
+    }
+    fs.writeFileSync(fullPath, output, "utf8");
+    return true;
   }
 
   /** Apply a hunk patch via a temporary file (git apply works on files, not stdin strings). */
@@ -253,7 +292,9 @@ export class GitRepository {
 
       const local = await git.raw(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]).catch(() => "");
       const remote = await git.raw(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`]).catch(() => "");
-      if (!local && !remote) {
+      // A commit hash target (graph "checkout this commit") skips the ref lookup.
+      const isHash = /^[0-9a-f]{7,40}$/i.test(branch);
+      if (!isHash && !local && !remote) {
         result.ok = false;
         result.skipped = true;
         result.branchAfter = result.branchBefore;
@@ -390,6 +431,11 @@ export class GitRepository {
 
   async stashDrop(repoPath: string, ref: string) {
     return this.git(repoPath).raw(["stash", "drop", ref]);
+  }
+
+  /** Diff of a stash entry against its base (tracked changes only). */
+  async stashDiff(repoPath: string, ref: string): Promise<string> {
+    return this.git(repoPath).raw(["diff", `${ref}^`, ref, "--"]);
   }
 
   async fetch(repoPath: string) {

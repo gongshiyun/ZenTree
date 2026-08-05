@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useRepoStore } from "../application/repoStore";
 import { useT } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
@@ -13,18 +13,35 @@ export default function CompareDialog() {
   const remoteBranches = useRepoStore((s) => s.remoteBranches);
   const tags = useRepoStore((s) => s.tags);
   const currentBranch = useRepoStore((s) => s.currentBranch);
+  const compareBase = useRepoStore((s) => s.compareBase);
+  const setCompareBase = useRepoStore((s) => s.setCompareBase);
   const setSelectedDiffFile = useRepoStore((s) => s.setSelectedDiffFile);
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
 
   const refs = useMemo(() => {
     const list = ["HEAD", ...branches, ...remoteBranches, ...tags.map((tg) => tg.name)];
+    // A compare-from-here commit hash stays selectable while the dialog is open.
+    if (compareBase && !list.includes(compareBase)) list.push(compareBase);
     return list.filter((v, i) => list.indexOf(v) === i);
-  }, [branches, remoteBranches, tags]);
+  }, [branches, remoteBranches, tags, compareBase]);
 
   const [fromRef, setFromRef] = useState("HEAD");
   const [toRef, setToRef] = useState("");
   const [result, setResult] = useState<CompareResult | null>(null);
+
+  // Graph "compare from here": prefill the from end and clear the marker.
+  useEffect(() => {
+    if (showCompare && compareBase) {
+      setFromRef(compareBase);
+      setCompareBase(null);
+    }
+  }, [showCompare, compareBase, setCompareBase]);
+
+  const handleClose = useCallback(() => {
+    setShowCompare(false);
+    setCompareBase(null);
+  }, [setShowCompare, setCompareBase]);
 
   const handleCompare = useCallback(async () => {
     if (!currentRepo || !fromRef || !toRef) return;
@@ -46,11 +63,11 @@ export default function CompareDialog() {
   if (!showCompare) return null;
 
   return (
-    <div className="settings-overlay" onClick={() => setShowCompare(false)}>
+    <div className="settings-overlay" onClick={handleClose}>
       <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
           <h2>{t("compare.title")}</h2>
-          <button className="settings-close" onClick={() => setShowCompare(false)}>
+          <button className="settings-close" onClick={handleClose}>
             <svg width="14" height="14" viewBox="0 0 14 14"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" strokeWidth="1.5"/></svg>
           </button>
         </div>
@@ -93,7 +110,7 @@ export default function CompareDialog() {
           </div>
         </div>
         <div className="settings-footer">
-          <button className="settings-btn secondary" onClick={() => setShowCompare(false)}>{t("clone.cancel")}</button>
+          <button className="settings-btn secondary" onClick={handleClose}>{t("clone.cancel")}</button>
         </div>
       </div>
     </div>

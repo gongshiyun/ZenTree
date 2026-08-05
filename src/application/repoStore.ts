@@ -3,6 +3,7 @@ import type { RepoInfo, CommitLogEntry, GraphData, GitStatusData, CommitDetail, 
 import { setGlobalLocale, t } from "../i18n";
 import { buildGraphData } from "../domain/graph/layout";
 import { getThemePreset, applyTheme } from "../domain/theme/presets";
+import { statusFingerprint } from "../domain/files/fingerprint";
 import { gitApi } from "../infrastructure/gitBridge";
 
 export { THEME_PRESETS } from "../domain/theme/presets";
@@ -11,7 +12,7 @@ const PAGE_SIZE = 200;
 /** Monotonic token that invalidates in-flight refreshes after a newer one starts. */
 let refreshSeq = 0;
 
-interface SelectedDiffFile { path: string; isStaged: boolean; status?: string; fromPath?: string; commitHash?: string; fromRef?: string; toRef?: string; }
+interface SelectedDiffFile { path: string; isStaged: boolean; status?: string; fromPath?: string; commitHash?: string; fromRef?: string; toRef?: string; rawDiff?: string; }
 
 interface AppState {
   repos: RepoInfo[]; currentRepo: string | null;
@@ -33,6 +34,10 @@ interface AppState {
   viewRef: string | null;
   repoGroups: RepoGroup[];
   showRepoGroups: boolean;
+  compareBase: string | null;
+  selectedFiles: string[];
+  lastStatusFingerprint: string;
+  showCommandPalette: boolean;
 
   addRepo: (path: string, name: string) => void;
   removeRepo: (path: string) => void;
@@ -60,6 +65,11 @@ interface AppState {
   setLogFilters: (filters: LogFilters) => void;
   reloadMeta: () => Promise<void>;
   refreshOngoing: () => Promise<void>;
+  setCompareBase: (hash: string | null) => void;
+  setSelectedFiles: (files: string[]) => void;
+  checkoutBranch: (branch: string) => Promise<void>;
+  silentDiffRefresh: () => Promise<void>;
+  setShowCommandPalette: (show: boolean) => void;
 }
 
 function graphWithRefs(entries: CommitLogEntry[], branchRefs?: Record<string, string[]>): GraphData {
@@ -80,6 +90,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
   showRebase: null,
   tags: [], remotes: [], logFilters: {}, branchTracking: [], ongoing: null, viewRef: null,
   repoGroups: [], showRepoGroups: false,
+  compareBase: null, selectedFiles: [], lastStatusFingerprint: "", showCommandPalette: false,
 
   addRepo: (repoPath, name) => {
     const state = get();
@@ -96,8 +107,11 @@ export const useRepoStore = create<AppState>((set, get) => ({
     gitApi().setSetting("repos", repos);
   },
   setCurrentRepo: (repoPath) => {
-    set({ currentRepo: repoPath, selectedCommit: null, commitDetail: null, selectedDiffFile: null, status: null });
+    set({ currentRepo: repoPath, selectedCommit: null, commitDetail: null, selectedDiffFile: null, status: null, selectedFiles: [], lastStatusFingerprint: "" });
     gitApi().setSetting("lastRepo", repoPath);
+    // Hook the incremental watcher: starting a new watch stops the previous one.
+    if (repoPath) gitApi().watchRepo(repoPath).catch(() => {});
+    else gitApi().unwatchRepo().catch(() => {});
   },
   setSelectedDiffFile: (file) => set({ selectedDiffFile: file }),
   selectCommit: (hash) => set({ selectedCommit: hash, commitDetail: null }),
@@ -134,6 +148,32 @@ export const useRepoStore = create<AppState>((set, get) => ({
     get().refreshAll(undefined, true);
   },
   setShowRepoGroups: (show) => set({ showRepoGroups: show }),
+  setCompareBase: (hash) => set({ compareBase: hash }),
+  setSelectedFiles: (files) => set({ selectedFiles: files }),
+  setShowCommandPalette: (show) => set({ showCommandPalette: show }),
+  checkoutBranch: async (branch: string) => {
+    const state = get();
+    if (!state.currentRepo || branch === state.currentBranch) return;
+    set({ loading: true, loadingMessage: t("status.checkingOut").replace("{0}", branch) });
+    try {
+      const result = await gitApi().checkout(state.currentRepo, branch);
+      if (result.success) await get().refreshAll();
+      else set({ error: result.error || t("error.checkoutFailed") });
+    } catch (err: any) { set({ error: err.message || t("error.checkoutFailed") }); }
+    finally { set({ loading: false, loadingMessage: "" }); }
+  },
+  silentDiffRefresh: async () => {
+    const state = get();
+    const repo = state.currentRepo;
+    if (!repo || state.loading || state.ongoing) return;
+    // Two cheap calls in parallel: status + single-commit log (HEAD hash).
+    const [r, head] = await Promise.all([gitApi().status(repo), gitApi().log(repo, 0, 1)]);
+    if (!r.success) return;
+    const fp = statusFingerprint(r.data) + "@" + (head.success ? head.data?.[0]?.hash ?? "" : "");
+    if (fp === state.lastStatusFingerprint) return;
+    set({ lastStatusFingerprint: fp });
+    await get().refreshAll(repo, true);
+  },
   addRepoGroup: (name, repos) => {
     const state = get();
     if (state.repoGroups.some((g) => g.name === name)) return;
@@ -279,6 +319,10 @@ export const useRepoStore = create<AppState>((set, get) => ({
           branchTracking: trackingResult.success && trackingResult.data ? trackingResult.data : [],
           ongoing: ongoingResult.success ? (ongoingResult.data ?? null) : get().ongoing,
         });
+        // Keep the silent-refresh fingerprint in sync so the first watch event
+        // after a manual refresh does not trigger a redundant full refresh.
+        const headHash = logResult.success && logResult.data && logResult.data.length > 0 ? logResult.data[0].hash : undefined;
+        set({ lastStatusFingerprint: statusFingerprint(statusResult.data) + "@" + (headHash ?? "") });
       } else if (branchResult.error) {
         set({ error: branchResult.error });
       }

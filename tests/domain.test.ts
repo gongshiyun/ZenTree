@@ -4,8 +4,10 @@ import { highlightLine } from "../src/domain/diff/highlight";
 import { buildUntrackedDiff } from "../src/domain/diff/untracked";
 import { diffWords } from "../src/domain/diff/worddiff";
 import { buildFileTree } from "../src/domain/files/tree";
+import { statusFingerprint } from "../src/domain/files/fingerprint";
+import { parseConflictMarkers } from "../src/domain/diff/conflictMarker";
 import { buildGraphData } from "../src/domain/graph/layout";
-import type { CommitLogEntry } from "../src/types";
+import type { CommitLogEntry, GitStatusData } from "../src/types";
 
 const sampleDiff = `diff --git a/hello.txt b/hello.txt
 index 1234567..89abcde 100644
@@ -157,6 +159,87 @@ describe("highlightLine", () => {
   it("handles plain text without crashing", () => {
     const tokens = highlightLine("just some plain words", "README.md");
     expect(Array.isArray(tokens)).toBe(true);
+  });
+});
+
+describe("statusFingerprint", () => {
+  const base: GitStatusData = {
+    staged: [], modified: [], created: [], deleted: [], renamed: [],
+    not_added: [], conflicted: [], files: [], current: "main",
+  };
+
+  it("is stable for identical status snapshots", () => {
+    expect(statusFingerprint(base)).toBe(statusFingerprint({ ...base }));
+  });
+
+  it("changes when any working-tree dimension changes", () => {
+    expect(statusFingerprint({ ...base, modified: ["a.txt"] })).not.toBe(statusFingerprint(base));
+    expect(statusFingerprint({ ...base, current: "dev" })).not.toBe(statusFingerprint(base));
+    expect(statusFingerprint({ ...base, staged: ["b.txt"] })).not.toBe(statusFingerprint(base));
+    expect(statusFingerprint({ ...base, conflicted: ["c.txt"] })).not.toBe(statusFingerprint(base));
+    expect(statusFingerprint({ ...base, renamed: [{ from: "a", to: "b" }] })).not.toBe(statusFingerprint(base));
+  });
+
+  it("ignores list ordering", () => {
+    const a = statusFingerprint({ ...base, modified: ["b", "a"] });
+    const b = statusFingerprint({ ...base, modified: ["a", "b"] });
+    expect(a).toBe(b);
+  });
+
+  it("handles undefined status", () => {
+    expect(statusFingerprint(undefined)).toBe("none");
+  });
+});
+
+describe("parseConflictMarkers", () => {
+  it("parses a single merge-style conflict block", () => {
+    const content = "line1\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nline2\n";
+    const { blocks, hasConflicts } = parseConflictMarkers(content);
+    expect(hasConflicts).toBe(true);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].before).toEqual(["line1"]);
+    expect(blocks[0].ours).toEqual(["ours"]);
+    expect(blocks[0].theirs).toEqual(["theirs"]);
+    expect(blocks[0].base).toBeUndefined();
+  });
+
+  it("parses diff3-style blocks with a base section", () => {
+    const content = "<<<<<<< HEAD\nours\n||||||| base\nbasever\n=======\ntheirs\n>>>>>>> feature\n";
+    const { blocks, hasConflicts } = parseConflictMarkers(content);
+    expect(hasConflicts).toBe(true);
+    expect(blocks[0].ours).toEqual(["ours"]);
+    expect(blocks[0].base).toEqual(["basever"]);
+    expect(blocks[0].theirs).toEqual(["theirs"]);
+  });
+
+  it("reports no conflicts for marker-free content", () => {
+    expect(parseConflictMarkers("plain text\nno markers\n").hasConflicts).toBe(false);
+  });
+
+  it("does not treat long separator lines as markers", () => {
+    const content = "<<<<<<<<<<< not a marker\n>>>>>>>>>>> also not\n";
+    expect(parseConflictMarkers(content).hasConflicts).toBe(false);
+  });
+
+  it("parses multiple blocks and keeps trailing content", () => {
+    const content = [
+      "head",
+      "<<<<<<< HEAD", "o1", "=======", "t1", ">>>>>>> a",
+      "middle",
+      "<<<<<<< HEAD", "o2", "=======", "t2", ">>>>>>> b",
+      "tail",
+    ].join("\n");
+    const { blocks } = parseConflictMarkers(content);
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].before).toEqual(["head"]);
+    expect(blocks[1].before).toEqual(["middle"]);
+  });
+
+  it("stops scanning on an unterminated conflict block", () => {
+    const content = "<<<<<<< HEAD\nours\nno closing marker\n";
+    const { blocks, hasConflicts } = parseConflictMarkers(content);
+    expect(hasConflicts).toBe(true);
+    expect(blocks).toHaveLength(1);
   });
 });
 

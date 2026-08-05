@@ -44,6 +44,118 @@ afterAll(() => {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+describe("checkoutFile", () => {
+  it("restores a single file to a historical commit (index + working tree)", async () => {
+    const dir = makeRepo("checkout-file");
+    await initRepo(dir);
+    writeFile(dir, "f.txt", "v1\n");
+    const v1 = await commitAll(dir, "v1");
+    writeFile(dir, "f.txt", "v2\n");
+    const v2 = await commitAll(dir, "v2");
+    expect(v1).not.toBe(v2);
+
+    writeFile(dir, "f.txt", "local edit\n");
+    await repo.checkoutFile(dir, v1, "f.txt");
+    // core.autocrlf may normalize the working tree to CRLF on Windows.
+    expect(fs.readFileSync(path.join(dir, "f.txt"), "utf8").replace(/\r\n/g, "\n")).toBe("v1\n");
+    // HEAD is still at v2, so the restored file shows up as a pending change
+    // (the checkout updated both the index and the working tree).
+    const st = await repo.status(dir);
+    expect(st.staged).toContain("f.txt");
+  });
+});
+
+describe("conflict stages (showStage / writeWorkingFile)", () => {
+  async function makeConflict(dir: string) {
+    writeFile(dir, "c.txt", "line1\nbase\nline3\n");
+    await commitAll(dir, "base");
+    await repo["git"](dir).raw(["checkout", "-b", "ours"]);
+    writeFile(dir, "c.txt", "line1\nours\nline3\n");
+    await commitAll(dir, "ours");
+    await repo["git"](dir).raw(["checkout", "main"]);
+    writeFile(dir, "c.txt", "line1\ntheirs\nline3\n");
+    await commitAll(dir, "theirs");
+    await expect(repo["git"](dir).merge(["ours"])).rejects.toThrow(); // conflicting merge
+  }
+
+  it("reads stage 1/2/3 versions during a conflict", async () => {
+    const dir = makeRepo("show-stage");
+    await initRepo(dir);
+    await makeConflict(dir);
+    // Stage 2 = HEAD version (main, "theirs" content); stage 3 = merged-in branch ("ours").
+    const base = await repo.showStage(dir, 1, "c.txt");
+    const head = await repo.showStage(dir, 2, "c.txt");
+    const incoming = await repo.showStage(dir, 3, "c.txt");
+    expect(base).toContain("base");
+    expect(head).toContain("theirs");
+    expect(incoming).toContain("ours");
+  });
+
+  it("writes a resolution back and keeps line endings consistent", async () => {
+    const dir = makeRepo("write-working");
+    await initRepo(dir);
+    // CRLF working file: the resolution must be written back as CRLF.
+    writeFile(dir, "crlf.txt", "a\r\nb\r\n");
+    await commitAll(dir, "crlf");
+    await repo.writeWorkingFile(dir, "crlf.txt", "x\ny\n");
+    const raw = fs.readFileSync(path.join(dir, "crlf.txt"), "utf8");
+    expect(raw).toBe("x\r\ny\r\n");
+  });
+
+  it("rejects path traversal attempts", async () => {
+    const dir = makeRepo("write-traversal");
+    await initRepo(dir);
+    await expect(repo.writeWorkingFile(dir, "../escape.txt", "x")).rejects.toThrow(/Invalid file path/);
+    await expect(repo.writeWorkingFile(dir, "sub/../escape.txt", "x")).rejects.toThrow(/Invalid file path/);
+  });
+
+  it("rejects binary and oversized files on read", async () => {
+    const dir = makeRepo("read-binary");
+    await initRepo(dir);
+    writeFile(dir, "bin.dat", "\u0000\u0001binary\n");
+    await expect(repo.readWorkingFile(dir, "bin.dat")).rejects.toThrow(/Binary files/);
+    writeFile(dir, "big.txt", "x".repeat(600 * 1024));
+    await expect(repo.readWorkingFile(dir, "big.txt")).rejects.toThrow(/too large/);
+  });
+});
+
+describe("stashDiff", () => {
+  it("diffs a stash entry against its base", async () => {
+    const dir = makeRepo("stash-diff");
+    await initRepo(dir);
+    writeFile(dir, "s.txt", "v1\n");
+    await commitAll(dir, "v1");
+    writeFile(dir, "s.txt", "v2\n");
+    await repo["git"](dir).raw(["stash", "push", "-m", "wip"]);
+    const diff = await repo.stashDiff(dir, "stash@{0}");
+    expect(diff).toContain("s.txt");
+    expect(diff).toContain("-v1");
+    expect(diff).toContain("+v2");
+  });
+});
+
+describe("batchCheckout with a commit hash", () => {
+  it("checks out a detached commit, stashing and restoring dirty changes", async () => {
+    const dir = makeRepo("batch-hash");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "v1\n");
+    writeFile(dir, "c.txt", "same\n"); // untouched by v2, so the stash pop applies cleanly
+    const v1 = await commitAll(dir, "v1");
+    writeFile(dir, "a.txt", "v2\n");
+    const v2 = await commitAll(dir, "v2");
+
+    writeFile(dir, "c.txt", "dirty\n"); // tracked modification on a neutral file
+    const result = await repo.batchCheckout(dir, v1, { stash: true });
+    expect(result.ok).toBe(true);
+    expect(result.stashed).toBe(true);
+    expect(result.restored).toBe(true);
+    expect(fs.readFileSync(path.join(dir, "c.txt"), "utf8").replace(/\r\n/g, "\n")).toBe("dirty\n");
+    expect(fs.readFileSync(path.join(dir, "a.txt"), "utf8").replace(/\r\n/g, "\n")).toBe("v1\n");
+    expect(await repo["git"](dir).raw(["rev-parse", "HEAD"])).toContain(v1);
+    void v2;
+  });
+});
+
 describe("clone", () => {
   it("clones a remote repository with its commits and branch", async () => {
     const src = makeRepo("clone-src");

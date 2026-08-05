@@ -34,6 +34,7 @@ const api: GitAPI = {
   stashList: (repoPath: string) => ipcRenderer.invoke("git:stash-list", repoPath),
   stashPop: (repoPath: string, ref?: string) => ipcRenderer.invoke("git:stash-pop", repoPath, ref),
   stashDrop: (repoPath: string, ref: string) => ipcRenderer.invoke("git:stash-drop", repoPath, ref),
+  stashDiff: (repoPath: string, ref: string) => ipcRenderer.invoke("git:stash-diff", repoPath, ref),
   fetch: (repoPath: string) => ipcRenderer.invoke("git:fetch", repoPath),
   fetchBranch: (repoPath: string, remote: string, branch: string) => ipcRenderer.invoke("git:fetch-branch", repoPath, remote, branch),
   pull: (repoPath: string, strategy?) => ipcRenderer.invoke("git:pull", repoPath, strategy),
@@ -44,9 +45,12 @@ const api: GitAPI = {
   pruneRemote: (repoPath: string, remote: string) => ipcRenderer.invoke("git:prune-remote", repoPath, remote),
   openDirectory: () => ipcRenderer.invoke("dialog:open-directory"),
   openGitBash: (repoPath: string) => ipcRenderer.invoke("shell:open-git-bash", repoPath),
-  diffFile: (repoPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke("git:diff-file", repoPath, filePath, staged),
+  diffFile: (repoPath: string, filePath: string, staged: boolean, fromPath?: string) => ipcRenderer.invoke("git:diff-file", repoPath, filePath, staged, fromPath),
   commitFileDiff: (repoPath: string, hash: string, filePath: string) => ipcRenderer.invoke("git:commit-file-diff", repoPath, hash, filePath),
   readWorkingFile: (repoPath: string, filePath: string) => ipcRenderer.invoke("git:read-file", repoPath, filePath),
+  checkoutFile: (repoPath: string, ref: string, filePath: string) => ipcRenderer.invoke("git:checkout-file", repoPath, ref, filePath),
+  showStage: (repoPath: string, stage: number, filePath: string) => ipcRenderer.invoke("git:show-stage", repoPath, stage, filePath),
+  writeWorkingFile: (repoPath: string, filePath: string, content: string) => ipcRenderer.invoke("git:write-file", repoPath, filePath, content),
   stageHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:stage-hunk", repoPath, patchContent),
   unstageHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:unstage-hunk", repoPath, patchContent),
   revertHunk: (repoPath: string, patchContent: string) => ipcRenderer.invoke("git:revert-hunk", repoPath, patchContent),
@@ -105,6 +109,13 @@ const api: GitAPI = {
   readGitignore: (repoPath) => ipcRenderer.invoke("git:read-gitignore", repoPath),
   writeGitignore: (repoPath, content) => ipcRenderer.invoke("git:write-gitignore", repoPath, content),
   mergetool: (repoPath, filePath) => ipcRenderer.invoke("git:mergetool", repoPath, filePath),
+  watchRepo: (repoPath: string) => ipcRenderer.invoke("repo:watch", repoPath),
+  unwatchRepo: () => ipcRenderer.invoke("repo:unwatch"),
+  onRepoChanged: (cb: (repoPath: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, repoPath: string) => cb(repoPath);
+    ipcRenderer.on("repo:changed", listener);
+    return () => { ipcRenderer.removeListener("repo:changed", listener); };
+  },
 };
 
 contextBridge.exposeInMainWorld("gitAPI", api);

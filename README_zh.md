@@ -1,4 +1,4 @@
-﻿# ZenTree
+# ZenTree
 
 轻量级、现代化的 Git 图形化客户端，基于 Electron + React + TypeScript 构建。对标 SourceTree 的核心交互，但更轻量流畅。
 
@@ -62,6 +62,11 @@
 
 ## 开发
 
+### 环境前置
+
+- **Node.js** 18+ 与 npm
+- **Git** — 系统 `PATH` 中须存在可用的 `git` 二进制（应用运行与测试套件均依赖）
+
 ```bash
 # 克隆仓库
 git clone https://github.com/your-org/ZenTree.git
@@ -73,12 +78,26 @@ npm install
 # 启动开发服务器（Vite 热更新 + Electron）
 npm run dev
 
+# 运行完整提交前检查（类型检查 + 测试）
+npm run check
+
 # 生产构建
 npm run build
 
 # 打包为 Windows 安装程序
 npm run pack
 ```
+
+### 测试
+
+`npm test` 运行 Vitest 测试套件。其中大部分是**依赖真实 `git` 二进制的集成测试**：每个用例会在系统临时目录下创建相互隔离的一次性仓库（`zentree-test-*` / `zentree-ipc-test-*`），结束后自动清理。运行前请确认 `git --version` 可正常执行——若 `PATH` 中缺少 git，测试将失败。
+
+| 测试文件 | 覆盖范围 | 是否依赖真实 git |
+|---|---|---|
+| `tests/domain.test.ts` | 纯领域逻辑（diff 解析/高亮、文件树、图谱布局） | 否 |
+| `tests/repoStore.test.ts` | 应用层 store 核心状态迁移（IPC 桥已 mock） | 否 |
+| `tests/ipc.test.ts` | IPC 通道，含破坏性操作（discard / reset / 删除分支） | 是——隔离临时仓库 |
+| `tests/gitRepository.test.ts` | `GitRepository` 适配器端到端 | 是——隔离临时仓库 |
 
 ## 项目结构
 

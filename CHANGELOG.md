@@ -1,6 +1,30 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to ZenTree are documented in this file.
+
+## [1.3.6] - 2026-08-06
+
+### Features
+
+- **Graph context menu** - right-click a commit for create branch/tag at commit, checkout commit (auto stash & restore), compare from commit, cherry-pick, revert, reset (soft/mixed/hard) and copy hash
+- **Command palette** - `Ctrl+K` to search and run repositories, branches and commands
+- **Built-in three-way merge panel** - resolve conflicts in-app (take ours / take theirs / keep both), with external mergetool fallback for binary or oversized files
+- **Stash preview** - click a stash entry to preview its diff
+- **File-level checkout** - restore a single file to any commit from the commit file list
+- **Incremental refresh** - an `fs.watch` on git metadata drives silent short-circuited refreshes (status fingerprint + HEAD hash) instead of blind 30s polling
+- **New shortcuts** - `Ctrl+Shift+S` / `Ctrl+Shift+U` (stage / unstage all), `Ctrl+click` multi-select + `Delete` (discard selected), shortcut reference in Settings
+
+### Performance
+
+- **Dual-canvas graph renderer** - interaction rings (hover / selection / search highlight) render on a separate overlay layer; text-measure and date-format caches cut per-frame work
+
+### Build
+
+- Fixed Windows packaging: upgraded rcedit to v2.0.0 and added delayed retries so the app icon and version resources are written reliably
+
+### Testing
+
+- 173 -> 216 tests: status fingerprint, conflict-marker parser, checkoutFile / showStage / writeWorkingFile / stashDiff, repo watcher (real `fs.watch`), dual-canvas renderer, command palette, merge panel and graph context menu
 
 ## [1.3.5] - 2026-08-02
 

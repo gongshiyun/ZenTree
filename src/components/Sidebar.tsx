@@ -1,7 +1,8 @@
-﻿import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { useRepoStore } from "../application/repoStore";
 import { useT } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
+import RefNameDialog from "./RefNameDialog";
 
 export default function Sidebar() {
   const t = useT();
@@ -18,6 +19,7 @@ export default function Sidebar() {
   const branchTracking = useRepoStore((s) => s.branchTracking);
   const checkoutRemote = useRepoStore((s) => s.checkoutRemote);
   const setShowRebase = useRepoStore((s) => s.setShowRebase);
+  const setSelectedDiffFile = useRepoStore((s) => s.setSelectedDiffFile);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; branch: string; isRemote: boolean } | null>(null);
   const [showRemotes, setShowRemotes] = useState(true);
@@ -35,6 +37,7 @@ export default function Sidebar() {
   const [remoteUrl, setRemoteUrl] = useState("");
   const [stashMessage, setStashMessage] = useState("");
   const [showStashMessage, setShowStashMessage] = useState(false);
+  const [previewError, setPreviewError] = useState("");
 
   useEffect(() => { const h = () => setContextMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
   useEffect(() => { if (showNewBranch && newBranchRef.current) newBranchRef.current.focus(); }, [showNewBranch]);
@@ -117,6 +120,20 @@ export default function Sidebar() {
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, loadStashList]);
 
+  const handleStashPreview = useCallback(async (ref: string, subject: string) => {
+    if (!currentRepo) return;
+    setPreviewError("");
+    try {
+      const r = await gitApi().stashDiff(currentRepo, ref);
+      if (r.success && r.data !== undefined) {
+        // Preview reuses the diff panel via rawDiff (tracked changes only).
+        setSelectedDiffFile({ path: `${subject} (${ref})`, isStaged: false, status: "modified", rawDiff: r.data });
+      } else {
+        setPreviewError(r.error || t("stash.diffFailed"));
+      }
+    } catch (err: any) { setPreviewError(err.message || t("stash.diffFailed")); }
+  }, [currentRepo, setSelectedDiffFile, t]);
+
   const handleCheckout = useCallback(async (branch: string) => {
     if (!currentRepo || branch === currentBranch) return;
     setLoading(true, t("status.checkingOut").replace("{0}", branch));
@@ -124,15 +141,15 @@ export default function Sidebar() {
     catch (err: any) { setError(err.message || t("error.checkoutFailed")); } finally { setLoading(false, ""); }
   }, [currentRepo, currentBranch, setLoading, setError, refreshAll]);
 
-  const handleCreateBranch = useCallback(async () => {
-    if (!currentRepo || !newBranchName.trim()) return;
-    setLoading(true, t("sidebar.creatingBranch").replace("{0}", newBranchName.trim()));
+  const handleCreateBranch = useCallback(async (name: string) => {
+    if (!currentRepo || !name) return;
+    setLoading(true, t("sidebar.creatingBranch").replace("{0}", name));
     try {
-      const r = await gitApi().createBranch(currentRepo, newBranchName.trim(), true);
+      const r = await gitApi().createBranch(currentRepo, name, true);
       if (r.success) { setShowNewBranch(false); setNewBranchName(""); await refreshAll(); }
       else setError(r.error || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
-  }, [currentRepo, newBranchName, setLoading, setError, refreshAll]);
+  }, [currentRepo, setLoading, setError, refreshAll, t]);
 
   const handleDeleteBranch = useCallback(async (branch: string) => {
     if (!currentRepo) return;
@@ -297,13 +314,13 @@ export default function Sidebar() {
         <button className="sidebar-add-btn" onClick={() => setShowNewBranch(true)} title={t("sidebar.newBranch")}>+</button>
       </div>
       {showNewBranch && (
-        <div className="new-branch-input">
-          <input ref={newBranchRef} type="text" value={newBranchName} placeholder={t("sidebar.branchNamePlaceholder")}
-            onChange={(e) => setNewBranchName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleCreateBranch(); if (e.key === "Escape") { setShowNewBranch(false); setNewBranchName(""); } }}
-          />
-          <button onClick={handleCreateBranch} disabled={!newBranchName.trim()}>{t("sidebar.create")}</button>
-        </div>
+        <RefNameDialog
+          title={t("sidebar.newBranch")}
+          placeholder={t("sidebar.branchNamePlaceholder")}
+          confirmLabel={t("sidebar.create")}
+          onSubmit={handleCreateBranch}
+          onClose={() => { setShowNewBranch(false); setNewBranchName(""); }}
+        />
       )}
       <div className="sidebar-list">
         {branches.map((b) => {
@@ -376,7 +393,7 @@ export default function Sidebar() {
           {stashList.map((s) => (
             <div key={s.ref} className="branch-item stash-item">
               <span className="branch-icon">{"\u25A3"}</span>
-              <span className="stash-subject" title={s.subject}>{s.subject}</span>
+              <span className="stash-subject" title={t("stash.previewTip")} onClick={() => handleStashPreview(s.ref, s.subject)}>{s.subject}</span>
               <span className="file-actions">
                 <button className="file-action-btn" onClick={() => handleStashPop(s.ref)}>{t("stash.pop")}</button>
                 <button className="file-action-btn danger" onClick={() => handleStashDrop(s.ref, s.subject)}>{t("stash.drop")}</button>
@@ -384,6 +401,7 @@ export default function Sidebar() {
             </div>
           ))}
           {stashList.length === 0 && <div className="empty-state" style={{ padding: 10 }}>{t("stash.empty")}</div>}
+          {previewError && <div className="empty-state" style={{ padding: 10, color: "var(--danger)" }}>{previewError}</div>}
         </div>
       )}
       <div className="sidebar-subheader" onClick={() => setShowTags(!showTags)} style={{ marginTop: 4 }}>

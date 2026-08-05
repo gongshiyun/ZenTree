@@ -1,4 +1,4 @@
-﻿# ZenTree
+# ZenTree
 
 A lightweight, modern Git GUI client built with Electron + React + TypeScript. Designed to deliver the core interaction of SourceTree with a faster, cleaner experience.
 
@@ -62,6 +62,11 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## Development
 
+### Prerequisites
+
+- **Node.js** 18+ and npm
+- **Git** — a working `git` binary must be available in `PATH` (required by both the app at runtime and the test suite)
+
 ```bash
 # Clone
 git clone https://github.com/your-org/ZenTree.git
@@ -73,12 +78,26 @@ npm install
 # Start dev server (Vite HMR + Electron)
 npm run dev
 
+# Run full pre-commit check (typecheck + tests)
+npm run check
+
 # Build for production
 npm run build
 
 # Package as Windows installer
 npm run pack
 ```
+
+### Testing
+
+`npm test` runs the Vitest suite. Most suites are **integration tests that shell out to a real `git` binary**: each test creates an isolated throw-away repository under the OS temp directory (`zentree-test-*` / `zentree-ipc-test-*`) and removes it afterwards. Verify `git --version` works in your shell before running the suite — tests will fail if git is missing from `PATH`.
+
+| Suite | Scope | Real git required |
+|---|---|---|
+| `tests/domain.test.ts` | Pure domain logic (diff parsing/highlight, file tree, graph layout) | No |
+| `tests/repoStore.test.ts` | Application store state transitions (IPC bridge mocked) | No |
+| `tests/ipc.test.ts` | IPC channels incl. destructive ops (discard / reset / delete-branch) | Yes — isolated temp repos |
+| `tests/gitRepository.test.ts` | `GitRepository` adapter end-to-end | Yes — isolated temp repos |
 
 ## Project Structure
 

@@ -18,11 +18,13 @@ interface Props {
   readOnly?: boolean;
   compareFrom?: string;
   compareTo?: string;
+  /** Pre-fetched diff text (e.g. stash preview); skips the IPC fetch. */
+  rawDiff?: string;
 }
 
 type ViewMode = "diff" | "history" | "blame";
 
-export default function DiffViewer({ filePath, isStaged, status, fromPath, onClose, commitHash, readOnly, compareFrom, compareTo }: Props) {
+export default function DiffViewer({ filePath, isStaged, status, fromPath, onClose, commitHash, readOnly, compareFrom, compareTo, rawDiff }: Props) {
   const currentRepo = useRepoStore((s) => s.currentRepo);
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
@@ -66,9 +68,15 @@ export default function DiffViewer({ filePath, isStaged, status, fromPath, onClo
     setBlame([]);
   }, [filePath, commitHash]);
 
-  // Fetch the active diff
+  // Fetch the active diff (rawDiff bypasses IPC entirely)
   useEffect(() => {
     if (!currentRepo) return;
+    if (rawDiff !== undefined) {
+      setDiffText(rawDiff);
+      setFetching(false);
+      setFetchError("");
+      return;
+    }
     setFetching(true); setFetchError("");
     (async () => {
       let r;
@@ -80,7 +88,7 @@ export default function DiffViewer({ filePath, isStaged, status, fromPath, onClo
       else setFetchError(r.error || t("diff.fetchFailed"));
       setFetching(false);
     })();
-  }, [currentRepo, filePath, isStaged, status, fromPath, refreshKey, diffCommit, isCompare, compareFrom, compareTo]);
+  }, [currentRepo, filePath, isStaged, status, fromPath, refreshKey, diffCommit, isCompare, compareFrom, compareTo, rawDiff]);
 
   // Load history / blame data when those tabs are opened
   useEffect(() => {
@@ -140,7 +148,7 @@ export default function DiffViewer({ filePath, isStaged, status, fromPath, onClo
 
   const fileName = filePath.replace(/\\/g, "/");
 
-  const showTabs = !isCompare;
+  const showTabs = !isCompare && rawDiff === undefined;
 
   return (
     <div className="diff-viewer">

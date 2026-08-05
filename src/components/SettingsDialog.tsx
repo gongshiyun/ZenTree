@@ -16,7 +16,7 @@ export default function SettingsDialog() {
   const [gitPath, setGitPath] = useState("git");
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
-  const [activeTab, setActiveTab] = useState<"general" | "appearance" | "git" | "about">("general");
+    const [activeTab, setActiveTab] = useState<"general" | "appearance" | "git" | "shortcuts" | "about">("general");
   const [language, setLanguageLocal] = useState(getGlobalLocale());
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [showGitignore, setShowGitignore] = useState(false);
@@ -150,6 +150,7 @@ export default function SettingsDialog() {
             <button className={`settings-tab${activeTab === "general" ? " active" : ""}`} onClick={() => setActiveTab("general")}>{t("settings.general")}</button>
             <button className={`settings-tab${activeTab === "appearance" ? " active" : ""}`} onClick={() => setActiveTab("appearance")}>{t("settings.appearance")}</button>
             <button className={`settings-tab${activeTab === "git" ? " active" : ""}`} onClick={() => setActiveTab("git")}>{t("settings.gitConfig")}</button>
+            <button className={`settings-tab${activeTab === "shortcuts" ? " active" : ""}`} onClick={() => setActiveTab("shortcuts")}>{t("settings.shortcuts")}</button>
             <button className={`settings-tab${activeTab === "about" ? " active" : ""}`} onClick={() => setActiveTab("about")}>{t("settings.about")}</button>
           </div>
           <div className="settings-content">
@@ -237,6 +238,23 @@ export default function SettingsDialog() {
                 </div>
               </> : <p className="setting-hint">{t("settings.noRepoHint")}</p>}
             </div>}
+            {activeTab === "shortcuts" && <div className="settings-section">
+                          <label className="section-label">{t("settings.shortcuts")}</label>
+                          <div className="shortcut-list">
+                            {[
+                              ["F5", t("settings.shortcut.refresh")],
+                              ["Ctrl+Enter", t("settings.shortcut.commit")],
+                              ["Ctrl+F", t("settings.shortcut.search")],
+                              ["Ctrl+K", t("settings.shortcut.palette")],
+                              ["Ctrl+Shift+S", t("settings.shortcut.stageAll")],
+                              ["Ctrl+Shift+U", t("settings.shortcut.unstageAll")],
+                              ["Delete", t("settings.shortcut.discard")],
+                              ["Esc", t("settings.shortcut.dismiss")],
+                            ].map(([keys, desc]) => (
+                              <div key={keys} className="shortcut-row"><kbd className="shortcut-keys">{keys}</kbd><span>{desc}</span></div>
+                            ))}
+                          </div>
+                        </div>}
             {activeTab === "about" && <div className="settings-section">
               <div className="setting-row"><label>{t("settings.version")}</label>
                 <span className="setting-hint" style={{ margin: 0 }}>{updateState?.currentVersion ? `ZenTree v${updateState.currentVersion}` : "ZenTree"}</span>
