@@ -322,3 +322,115 @@ describe("DatePicker", () => {
     expect(cells.length % 7).toBe(0);
   });
 });
+
+describe("CommitGraph actions", () => {
+  let restoreStub: () => void;
+
+  beforeEach(() => {
+    restoreStub = installCanvasStub();
+  });
+
+  afterEach(() => {
+    restoreStub();
+  });
+
+  function commit(hash: string, parents: string[]): CommitLogEntry {
+    return { hash, shortHash: hash.slice(0, 7), parents, author: "A", email: "a@b.c", timestamp: 1700000000, subject: `subject ${hash}` };
+  }
+
+  function openMenu(container: HTMLElement) {
+    const overlay = container.querySelector(".graph-canvas-overlay")!;
+    const ev = new MouseEvent("contextmenu", { bubbles: true, clientX: 500, clientY: 300 });
+    Object.defineProperty(ev, "offsetX", { value: 58 });
+    Object.defineProperty(ev, "offsetY", { value: 31 });
+    fireEvent(overlay, ev);
+    return [...container.querySelectorAll<HTMLElement>(".context-menu-item")];
+  }
+
+  function setup() {
+    useRepoStore.setState({
+      currentRepo: "/r",
+      graphData: buildGraphData([commit("c0", ["c1"]), commit("c1", [])]),
+      selectedCommit: null,
+      viewRef: null,
+      compareBase: null,
+      showCompare: false,
+    });
+  }
+
+  it("checks out a commit via batchCheckout after confirmation", async () => {
+    const api = fakeGitApi({ batchCheckout: () => Promise.resolve({ success: true, data: {} }) });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    setup();
+    const { container } = render(<CommitGraph />);
+    const items = openMenu(container);
+    fireEvent.click(items.find((i) => i.textContent === "Checkout this commit")!);
+    await waitFor(() => {
+      expect(confirm).toHaveBeenCalled();
+      expect(api.calls.some(([name]) => name === "batchCheckout")).toBe(true);
+    });
+    confirm.mockRestore();
+  });
+
+  it("opens the compare dialog from the compare menu item", () => {
+    fakeGitApi();
+    setup();
+    const { container } = render(<CommitGraph />);
+    const items = openMenu(container);
+    fireEvent.click(items.find((i) => i.textContent === "Compare from here...")!);
+    expect(useRepoStore.getState().compareBase).toBe("c0");
+    expect(useRepoStore.getState().showCompare).toBe(true);
+  });
+
+  it("runs a hard reset after confirmation", async () => {
+    const api = fakeGitApi({ reset: () => Promise.resolve({ success: true }) });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    setup();
+    const { container } = render(<CommitGraph />);
+    const items = openMenu(container);
+    fireEvent.click(items.find((i) => i.textContent === "Reset (hard) to here")!);
+    await waitFor(() => expect(api.calls.some(([name, args]) => name === "reset" && args[2] === "hard")).toBe(true));
+  });
+
+  it("creates a branch at a commit through the ref dialog", async () => {
+    const api = fakeGitApi({ createBranch: () => Promise.resolve({ success: true }) });
+    setup();
+    const { container } = render(<CommitGraph />);
+    const items = openMenu(container);
+    fireEvent.click(items.find((i) => i.textContent === "Create branch here...")!);
+    const input = container.querySelector(".ref-name-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "feature" } });
+    fireEvent.click([...container.querySelectorAll("button")].find((b) => b.textContent === "Create")!);
+    await waitFor(() => expect(api.calls.some(([name, args]) => name === "createBranch" && args[1] === "feature" && args[2] === false)).toBe(true));
+  });
+
+  it("closes the view-ref banner and clears the view ref", () => {
+    fakeGitApi();
+    setup();
+    useRepoStore.setState({ viewRef: "feature" });
+    const { container } = render(<CommitGraph />);
+    expect(container.querySelector(".graph-view-ref")).toBeTruthy();
+    fireEvent.click(container.querySelector(".graph-view-ref-close")!);
+    expect(useRepoStore.getState().viewRef).toBeNull();
+  });
+
+  it("searches commits with Ctrl+F and updates the match count", () => {
+    fakeGitApi();
+    setup();
+    const { container } = render(<CommitGraph />);
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    const input = container.querySelector(".graph-search-bar input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "c0" } });
+    expect(container.querySelector(".graph-search-count")?.textContent).toBe("1");
+  });
+
+  it("zooms in and resets through the graph zoom controls", () => {
+    fakeGitApi();
+    setup();
+    const { container } = render(<CommitGraph />);
+    fireEvent.click([...container.querySelectorAll(".graph-zoom-btn")].find((b) => b.textContent === "+")!);
+    expect(container.querySelector(".graph-zoom-label")?.textContent).toBe("120%");
+    fireEvent.click([...container.querySelectorAll(".graph-zoom-btn")].find((b) => b.textContent === "1:1")!);
+    expect(container.querySelector(".graph-zoom-label")?.textContent).toBe("100%");
+  });
+});

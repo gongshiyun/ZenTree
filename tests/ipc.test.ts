@@ -242,3 +242,43 @@ describe("new P1 channels", () => {
     expect(unwatch.success).toBe(true);
   });
 });
+
+describe("IPC channel registration", () => {
+  it("registers the complete channel surface consumed by the renderer", () => {
+    const expected = [
+      "window:minimize", "window:maximize", "window:close", "window:is-maximized",
+      "settings:get-all", "settings:set",
+      "git:is-repo", "git:branches", "git:log", "git:status", "git:show",
+      "git:last-message", "git:log-range",
+      "git:stage", "git:unstage", "git:stage-all", "git:unstage-all",
+      "git:discard", "git:commit",
+      "git:checkout", "git:rename-branch", "git:get-upstream", "git:set-upstream",
+      "git:unset-upstream", "git:branch-tracking", "git:batch-checkout",
+      "git:scan-repos", "git:checkout-remote", "git:create-branch",
+      "git:delete-branch", "git:merge", "git:rebase-interactive", "git:reset",
+      "git:stash-save", "git:stash-list", "git:stash-pop", "git:stash-drop", "git:stash-diff",
+      "git:fetch", "git:fetch-branch", "git:pull", "git:pull-branch",
+      "git:push", "git:push-branch", "git:delete-remote-branch", "git:prune-remote",
+      "git:diff-file", "git:commit-file-diff", "git:read-file", "git:checkout-file",
+      "git:show-stage", "git:write-file", "git:stage-hunk", "git:unstage-hunk", "git:revert-hunk",
+      "git:get-config", "git:set-config",
+      "update:get-state", "update:check", "update:download", "update:install",
+      "git:clone", "git:file-history", "git:blame", "git:revert",
+      "git:compare", "git:compare-file-diff", "git:cherry-pick",
+      "git:cherry-pick-abort", "git:cherry-pick-continue", "git:rebase",
+      "git:rebase-abort", "git:rebase-continue", "git:merge-abort", "git:merge-continue",
+      "git:get-ongoing", "git:tags", "git:create-tag", "git:delete-tag",
+      "git:remotes", "git:add-remote", "git:remove-remote", "git:set-remote-url",
+      "git:submodule-list", "git:submodule-add", "git:submodule-update", "git:submodule-deinit",
+      "git:get-commit-template", "git:set-commit-template",
+      "git:get-sign-commits", "git:set-sign-commits",
+      "git:get-diff-tool", "git:set-diff-tool", "git:launch-diff-tool",
+      "git:hosting-url", "git:read-gitignore", "git:write-gitignore", "git:mergetool",
+      "repo:watch", "repo:unwatch",
+      "shell:open-git-bash", "shell:open-external", "dialog:open-directory",
+    ];
+    for (const channel of expected) {
+      expect(handlers.has(channel), `channel "${channel}" should be registered`).toBe(true);
+    }
+  });
+});

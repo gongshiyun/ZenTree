@@ -103,6 +103,12 @@ export default function App() {
     }
   }, [currentRepo, refreshAll, setError, t]);
 
+  // Wire the application-level keyboard shortcuts to the window.
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
   // Incremental refresh: watch events drive silent short-circuited refreshes.
   useEffect(() => {
     const dispose = gitApi().onRepoChanged?.(() => { useRepoStore.getState().silentDiffRefresh(); });

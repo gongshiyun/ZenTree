@@ -117,4 +117,19 @@ describe("preload bridge", () => {
     dispose();
     expect(mocked.onListeners["repo:changed"]).toHaveLength(0);
   });
+
+  it("exposes every invoke-based method so that it forwards to an IPC channel", () => {
+    mocked.invokeCalls.length = 0;
+    const invokeMethods = Object.keys(api).filter(
+      (name) => typeof api[name] === "function" && name !== "onUpdateEvent" && name !== "onRepoChanged",
+    );
+    for (const name of invokeMethods) {
+      expect(() => api[name](), `api.${name} should be callable`).not.toThrow();
+    }
+    expect(mocked.invokeCalls).toHaveLength(invokeMethods.length);
+    // Every channel is namespaced and non-empty.
+    for (const [channel] of mocked.invokeCalls) {
+      expect(channel).toMatch(/^(git|settings|window|update|dialog|shell|repo):/);
+    }
+  });
 });

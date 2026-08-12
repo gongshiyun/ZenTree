@@ -1013,6 +1013,18 @@ describe("hostingUrl", () => {
   it("appends /tree/<branch> for branch refs", () => {
     expect(parseHostingUrl("https://github.com/owner/repo.git", "develop")).toBe("https://github.com/owner/repo/tree/develop");
   });
+  it("appends /commits/<hash> and /src/<branch> for Bitbucket", () => {
+    expect(parseHostingUrl("https://bitbucket.org/owner/repo.git", "a1b2c3d")).toBe("https://bitbucket.org/owner/repo/commits/a1b2c3d");
+    expect(parseHostingUrl("https://bitbucket.org/owner/repo.git", "develop")).toBe("https://bitbucket.org/owner/repo/src/develop");
+  });
+  it("handles Bitbucket ssh URLs", () => {
+    expect(parseHostingUrl("git@bitbucket.org:owner/repo.git")).toBe("https://bitbucket.org/owner/repo");
+  });
+  it("url-encodes branch names with special characters", () => {
+    expect(parseHostingUrl("https://github.com/owner/repo.git", "feature/with spaces")).toBe(
+      "https://github.com/owner/repo/tree/feature%2Fwith%20spaces",
+    );
+  });
   it("returns null for unsupported URLs", () => {
     expect(parseHostingUrl("file:///c:/repo")).toBeNull();
     expect(parseHostingUrl("")).toBeNull();

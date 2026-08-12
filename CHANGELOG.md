@@ -2,6 +2,18 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.3.7] - 2026-08-13
+
+### Fixed
+
+- Bitbucket hosting links now use the correct `/commits/<hash>` and `/src/<branch>` paths
+- Application-level keyboard shortcuts (`F5`, `Esc`, `Ctrl+K`, `Ctrl+Shift+S/U`, `Delete`) were defined but never attached; they are now wired to the window
+
+### Testing
+
+- 216 -> 335 tests: comprehensive syntax-highlight and diff-parser edge cases, Sidebar/TopBar/RepoGroup/Settings/FilePanel/DiffViewer/CommitGraph interactions, App keyboard shortcuts, and full IPC/preload surface + channel-registration checks
+- Added `@vitest/coverage-v8`; statement coverage raised to ~77%, line coverage to ~83%
+
 ## [1.3.6] - 2026-08-06
 
 ### Features

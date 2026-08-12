@@ -952,8 +952,12 @@ export function parseHostingUrl(remoteUrl: string, ref?: string): string | null 
   const host = hostMatch[1];
   if (!ref) return url;
   if (/^[0-9a-f]{7,40}$/i.test(ref)) {
-    return /gitlab\./.test(host) ? `${url}/-/commit/${ref}` : `${url}/commit/${ref}`;
+    if (/gitlab\./.test(host)) return `${url}/-/commit/${ref}`;
+    if (/bitbucket\./.test(host)) return `${url}/commits/${ref}`;
+    return `${url}/commit/${ref}`;
   }
   const branch = encodeURIComponent(ref);
-  return /gitlab\./.test(host) ? `${url}/-/tree/${branch}` : `${url}/tree/${branch}`;
+  if (/gitlab\./.test(host)) return `${url}/-/tree/${branch}`;
+  if (/bitbucket\./.test(host)) return `${url}/src/${branch}`;
+  return `${url}/tree/${branch}`;
 }
