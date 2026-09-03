@@ -42,11 +42,9 @@ export default function CommandPalette() {
   const commands = useMemo((): CommandItem[] => {
     const items: CommandItem[] = [];
     for (const r of repos) {
-      items.push({ id: "repo:" + r.path, label: r.name, hint: r.path, run: () => {
-        const store = useRepoStore.getState();
-        store.setCurrentRepo(r.path);
-        store.refreshAll(r.path);
-      } });
+      // Switching repository from the palette also makes it a tab, so the two
+      // pickers never disagree about what is currently open.
+      items.push({ id: "repo:" + r.path, label: r.name, hint: r.path, run: () => { useRepoStore.getState().openTab(r.path); } });
     }
     for (const b of branches) {
       if (b === currentBranch) continue;

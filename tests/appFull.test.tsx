@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, fireEvent, cleanup, waitFor, screen } from "@testing-library/react";
 import App from "../src/App";
 import { useRepoStore } from "../src/application/repoStore";
-import { setGlobalLocale } from "../src/i18n";
+import { setGlobalLocale, t } from "../src/i18n";
 import { installCanvasStub } from "./helpers/canvasStub";
 
 type Calls = [string, unknown[]][];
@@ -56,6 +56,13 @@ beforeEach(() => {
     status: null,
     selectedFiles: [],
     showCommandPalette: false,
+    showTabPicker: false,
+    customTabs: [],
+    groupView: null,
+    repoCache: {},
+    refreshSeqByRepo: {},
+    repoGroups: [],
+    showRepoGroups: false,
     error: null,
     loading: false,
   });
@@ -73,6 +80,7 @@ describe("App full layout and keyboard shortcuts", () => {
     installApi(baseOverrides());
     const { container } = render(<App />);
     expect(container.querySelector(".top-bar")).toBeTruthy();
+    expect(container.querySelector(".tab-bar")).toBeTruthy();
     expect(container.querySelector(".sidebar")).toBeTruthy();
     expect(container.querySelector(".commit-bar")).toBeTruthy();
   });
@@ -116,5 +124,68 @@ describe("App full layout and keyboard shortcuts", () => {
     fireEvent.keyDown(window, { key: "Delete" });
     await waitFor(() => expect(calls.some(([name]) => name === "discard")).toBe(true));
     confirm.mockRestore();
+  });
+});
+
+describe("repository tabs", () => {
+  const twoTabs = { customTabs: ["/r", "/r2"], repos: [{ path: "/r", name: "r" }, { path: "/r2", name: "r2" }] };
+  const tabNames = (container: HTMLElement) => [...container.querySelectorAll(".repo-tab-name")].map((el) => el.textContent);
+
+  it("renders one tab per repository and switches on click", () => {
+    installApi(baseOverrides());
+    useRepoStore.setState(twoTabs);
+    const { container } = render(<App />);
+    expect(tabNames(container)).toEqual(["r", "r2"]);
+    fireEvent.click(container.querySelectorAll(".repo-tab")[1]);
+    expect(useRepoStore.getState().currentRepo).toBe("/r2");
+  });
+
+  it("toggles the tab picker with Ctrl+P", () => {
+    installApi(baseOverrides());
+    const { container } = render(<App />);
+    fireEvent.keyDown(window, { key: "p", ctrlKey: true });
+    expect(useRepoStore.getState().showTabPicker).toBe(true);
+    expect(container.querySelector(".tab-picker")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "p", ctrlKey: true });
+    expect(useRepoStore.getState().showTabPicker).toBe(false);
+  });
+
+  it("cycles tabs with Ctrl+Tab and Ctrl+Shift+Tab", () => {
+    installApi(baseOverrides());
+    useRepoStore.setState(twoTabs);
+    render(<App />);
+    fireEvent.keyDown(window, { key: "Tab", ctrlKey: true });
+    expect(useRepoStore.getState().currentRepo).toBe("/r2");
+    fireEvent.keyDown(window, { key: "Tab", ctrlKey: true, shiftKey: true });
+    expect(useRepoStore.getState().currentRepo).toBe("/r");
+  });
+
+  it("closes the current tab with Ctrl+Shift+W", () => {
+    installApi(baseOverrides());
+    useRepoStore.setState(twoTabs);
+    render(<App />);
+    fireEvent.keyDown(window, { key: "W", ctrlKey: true, shiftKey: true });
+    expect(useRepoStore.getState().customTabs).toEqual(["/r2"]);
+    expect(useRepoStore.getState().currentRepo).toBe("/r2");
+  });
+
+  it("shows a repo group as tabs and returns to the custom set", () => {
+    installApi(baseOverrides());
+    useRepoStore.setState({
+      customTabs: ["/r"],
+      repoGroups: [{ name: "team", repos: ["/g1", "/g2"] }],
+      showRepoGroups: true,
+    });
+    const { container } = render(<App />);
+    fireEvent.click(screen.getByText(t("repoGroups.openAsTabs")));
+    expect(useRepoStore.getState().groupView).toEqual({ name: "team", tabs: ["/g1", "/g2"] });
+    expect(useRepoStore.getState().showRepoGroups).toBe(false);
+    // Members were never added to the known list, so their labels come from the paths.
+    expect(tabNames(container)).toEqual(["g1", "g2"]);
+
+    fireEvent.click(screen.getByTitle(t("tabs.exitGroupTip")));
+    expect(useRepoStore.getState().groupView).toBeNull();
+    expect(useRepoStore.getState().currentRepo).toBe("/r");
+    expect(tabNames(container)).toEqual(["r"]);
   });
 });

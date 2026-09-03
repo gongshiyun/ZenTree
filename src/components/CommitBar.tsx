@@ -23,6 +23,10 @@ export default function CommitBar() {
   const stagedCount = status ? (status.staged?.length || 0) + (status.created?.length || 0) : 0;
   const canCommit = stagedCount > 0 || amend;
 
+  // Runs on the amend toggle and on repository switch only. `message` must not
+  // be a dependency: the else-branch clears the box, so listing it wiped every
+  // keystroke. Clearing on a repository switch is intended — a draft written for
+  // one tab must never be committed into another.
   useEffect(() => {
     if (!currentRepo) return;
     if (amend) {
@@ -39,7 +43,7 @@ export default function CommitBar() {
       userMessageRef.current = "";
       setLastCommitMsg("");
     }
-  }, [amend, currentRepo, message]);
+  }, [amend, currentRepo]);
 
   // Prefill the message box with the configured commit template when empty.
   useEffect(() => {

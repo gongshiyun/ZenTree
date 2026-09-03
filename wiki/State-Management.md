@@ -13,6 +13,13 @@ interface AppState {
   currentRepo: string | null;     // Active repo path
   repoError: string | null;
 
+  // Tabs
+  customTabs: string[];           // The user's own tab set (repo paths), persisted as "tabs"
+  groupView: GroupTabView | null; // A repo group shown as tabs; in-memory only
+  showTabPicker: boolean;         // Ctrl+P overlay
+  repoCache: Record<string, RepoSnapshot>;  // Per-repo data, painted on switch
+  refreshSeqByRepo: Record<string, number>; // Per-repo in-flight refresh token
+
   // Branch state
   branches: string[];             // Local branches
   remoteBranches: string[];       // Remote branches (remotes/...)
@@ -61,6 +68,37 @@ interface AppState {
 | `setThemePreset(name)` | Apply theme CSS vars + persist setting |
 | `checkoutRemote(branch)` | Checkout remote branch with tracking |
 | `refreshAll(repoPath?)` | Full refresh: branches + log + status |
+| `openTab(path)` | Make a repository a tab (if it is not one) and activate it |
+| `closeTab(path)` | Remove a tab and activate its neighbour |
+| `activateTab(path)` | Switch to an existing tab, painting the cache first |
+| `cycleTab(delta)` | Move to the next/previous tab, wrapping around |
+| `reorderTabs(from, to)` | Move a tab within the visible tab set |
+| `enterGroupView(name)` | Replace the tab set with a snapshot of a group's members |
+| `exitGroupView()` | Return to `customTabs` |
+
+## Repository Tabs
+
+Tabs are **decoupled from the repository list**: a tab is a bare path, and its label is derived at render time (`RepoInfo.name` when the repository is known, otherwise the path's last segment via `repoDisplayName`). That is what lets repo-group members — which are stored as raw paths and need not be known repositories — appear as tabs.
+
+Two tab sets exist, and exactly one is visible:
+
+```
+visibleTabs = groupView ? groupView.tabs : customTabs
+```
+
+- `customTabs` is persisted to the `tabs` setting on every change and restored on startup.
+- `groupView` is a **snapshot** taken when the group is opened: editing the group afterwards does not move the tab bar, and opening/closing/reordering tabs while a group is showing is discarded on exit. Group view is one level deep — there is no nesting.
+
+`activateTab(path)` is the single switch point:
+
+1. `setCurrentRepo(path)` — clears selection state, persists `lastRepo`, re-hooks the singleton file watcher;
+2. clears per-repository navigation state (`viewRef`, and every data slice) so the previous repository never stays on screen;
+3. restores `repoCache[path]` when present — the UI paints before git answers;
+4. `refreshAll(path, silent = hasCache)` — a silent refresh when something is already painted.
+
+Selection state (`selectedCommit`, `commitDetail`, `selectedDiffFile`, `selectedFiles`) is deliberately **not** cached: it is cleared on every switch, because caching it would mean caching diff contents too.
+
+`refreshAll` writes its result into `repoCache[repo]` and only touches the visible slices while `repo` is the active tab, so refreshing a background repository can never overwrite what is on screen. Its race token is per repository (`refreshSeqByRepo`): a slow answer for tab A still lands in A's cache after the user moved to tab B, instead of being dropped or misapplied.
 
 ## Graph Data Construction
 

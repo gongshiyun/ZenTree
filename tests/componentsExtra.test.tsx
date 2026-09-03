@@ -65,6 +65,10 @@ function resetStore(patch: Record<string, unknown> = {}) {
     ongoing: null,
     viewRef: null,
     compareBase: null,
+    customTabs: [],
+    groupView: null,
+    showTabPicker: false,
+    repoCache: {},
     ...patch,
   });
 }
@@ -144,6 +148,35 @@ describe("CommitBar", () => {
     await waitFor(() => {
       expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe("previous commit\n");
     });
+  });
+
+  it("keeps what the user types in the message box", () => {
+    installApi();
+    resetStore({
+      currentRepo: "/r",
+      status: { staged: ["a.txt"], created: [], modified: [], deleted: [], renamed: [], not_added: [], conflicted: [], files: [], current: "main" },
+    });
+    const { container } = render(<CommitBar />);
+    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "hello" } });
+    expect(textarea.value).toBe("hello");
+    fireEvent.change(textarea, { target: { value: "hello world" } });
+    expect(textarea.value).toBe("hello world");
+  });
+
+  it("clears the draft when switching to another repository", async () => {
+    installApi();
+    resetStore({
+      currentRepo: "/r",
+      status: { staged: ["a.txt"], created: [], modified: [], deleted: [], renamed: [], not_added: [], conflicted: [], files: [], current: "main" },
+    });
+    const { container } = render(<CommitBar />);
+    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "draft for /r" } });
+    expect(textarea.value).toBe("draft for /r");
+    // A draft written for one tab must never be committed into another.
+    useRepoStore.setState({ currentRepo: "/r2" });
+    await waitFor(() => expect(textarea.value).toBe(""));
   });
 });
 
@@ -276,14 +309,15 @@ describe("TopBar", () => {
     expect(useRepoStore.getState().themePreset).toBe("catppuccin-latte");
   });
 
-  it("opens the repo dropdown and switches repositories", () => {
+  it("names the active repository and offers the add menu next to it", () => {
     installApi();
-    resetStore({ repos: [{ path: "/r/a", name: "Alpha" }], currentRepo: null });
+    resetStore({ repos: [{ path: "/r/a", name: "Alpha" }], currentRepo: "/r/a" });
     const { container } = render(<TopBar />);
-    fireEvent.click(container.querySelector(".repo-selector-trigger")!);
-    expect(container.querySelector(".repo-dropdown")).toBeTruthy();
-    fireEvent.click(container.querySelector(".repo-dropdown-item")!);
-    expect(useRepoStore.getState().currentRepo).toBe("/r/a");
+    // Repository switching moved to the tab strip, so the trigger is read-only.
+    expect(container.querySelector(".repo-selector-trigger")?.textContent).toBe("Alpha");
+    fireEvent.click(screen.getByTitle(t("topbar.addRepo")));
+    expect(container.querySelector(".repo-add-menu")).toBeTruthy();
+    expect(container.querySelectorAll(".repo-dropdown-item")).toHaveLength(2);
   });
 });
 

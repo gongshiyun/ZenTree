@@ -15,10 +15,13 @@ A lightweight, modern Git GUI client built with Electron + React + TypeScript. D
 - **Frameless Window** — Custom title bar with window controls, blends with the app theme
 - **Amend Commit** — Auto-fills the last commit message when toggled
 - **Git Bash Launcher** — Open Git Bash in the current repo directory with one click
-- **Repository Search** — Filter your saved repositories in the dropdown
+- **Repository Tabs** — One tab per repository below the top bar: click to switch, `×`/middle-click to close, drag to reorder; the tab set is restored on startup
+- **Tab Picker** — `Ctrl+P` searches open tabs and saved repositories, `Ctrl+Tab` cycles them
+- **Repo Group Tabs** — Show every repository of a repo group as the tab set, then return to your own tabs
+- **Instant Tab Switching** — Per-repository data cache paints the last known state immediately and refreshes silently in the background
 - **Remote Branches** — Display and checkout remote branches with tracking
 - **Lazy Loading** — Commit log paginated at 200 per batch, infinite scroll
-- **Keyboard Shortcuts** — `F5` refresh, `Ctrl+Enter` commit, `Esc` dismiss errors
+- **Keyboard Shortcuts** — `F5` refresh, `Ctrl+Enter` commit, `Ctrl+K` command palette, `Ctrl+P` tab picker, `Ctrl+Shift+W` close tab, `Esc` dismiss errors
 - **Drag & Drop** — Drop a folder onto the welcome screen to add a repository
 - **Auto Update** — Checks GitHub Releases for new versions, downloads and installs them from Settings > About
 - **Clone Repository** — Clone remote repos by URL with optional branch

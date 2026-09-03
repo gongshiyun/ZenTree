@@ -10,6 +10,7 @@ export default function RepoGroupDialog({ onClose }: { onClose: () => void }) {
   const addRepoGroup = useRepoStore((s) => s.addRepoGroup);
   const removeRepoGroup = useRepoStore((s) => s.removeRepoGroup);
   const updateRepoGroupRepos = useRepoStore((s) => s.updateRepoGroupRepos);
+  const enterGroupView = useRepoStore((s) => s.enterGroupView);
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
   const repos = useRepoStore((s) => s.repos);
@@ -96,6 +97,14 @@ export default function RepoGroupDialog({ onClose }: { onClose: () => void }) {
     setBusy(false);
   }, [group, branch, opts]);
 
+  // Replaces the whole tab set with this group's members; the dialog closes so
+  // the result is immediately visible, and the tab bar offers the way back.
+  const handleOpenAsTabs = useCallback(() => {
+    if (!group || group.repos.length === 0) return;
+    enterGroupView(group.name);
+    onClose();
+  }, [group, enterGroupView, onClose]);
+
   return (
     <div className="settings-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="settings-dialog repogroup-dialog">
@@ -130,6 +139,10 @@ export default function RepoGroupDialog({ onClose }: { onClose: () => void }) {
               <>
                 <div className="settings-section">
                   <div className="setting-row"><label>{t("repoGroups.repos")} ({group.repos.length})</label></div>
+                  <div className="repogroup-inline">
+                    <button className="settings-btn secondary" onClick={handleOpenAsTabs} disabled={group.repos.length === 0}>{t("repoGroups.openAsTabs")}</button>
+                    <span className="setting-hint">{t("repoGroups.openAsTabsHint")}</span>
+                  </div>
                   <div className="repogroup-repo-list">
                     {group.repos.map((r) => (
                       <div key={r} className="repogroup-repo-item">

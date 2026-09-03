@@ -46,8 +46,8 @@ export default function CloneDialog() {
       if (r.success) {
         const store = useRepoStore.getState();
         store.addRepo(destPath, folder.trim());
-        store.setCurrentRepo(destPath);
-        await store.refreshAll(destPath);
+        // A freshly cloned repository becomes a tab like any other opened one.
+        await store.openTab(destPath);
         setShowClone(false);
         setUrl(""); setDir(""); setFolder(""); setBranch("");
       } else {

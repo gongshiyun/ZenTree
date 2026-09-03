@@ -15,17 +15,18 @@ import CompareDialog from "./components/CompareDialog";
 import RebaseDialog from "./components/RebaseDialog";
 import RepoGroupDialog from "./components/RepoGroupDialog";
 import CommandPalette from "./components/CommandPalette";
+import TabBar from "./components/TabBar";
+import TabPicker from "./components/TabPicker";
+import { repoDisplayName } from "./domain/tabs/displayName";
 
 function Welcome() {
   const t = useT();
   const handleOpen = async () => {
     const path = await gitApi().openDirectory();
     if (path) {
-      const nm = path.split(/[/\\]/).pop() || path;
       const store = useRepoStore.getState();
-      store.addRepo(path, nm);
-      store.setCurrentRepo(path);
-      store.refreshAll(path);
+      store.addRepo(path, repoDisplayName(path));
+      store.openTab(path);
     }
   };
   const handleDrop = async (e: React.DragEvent) => {
@@ -36,11 +37,9 @@ function Welcome() {
     if (!dp) return;
     const r = await gitApi().isRepo(dp);
     if (r.success && r.data) {
-      const nm = dp.split(/[/\\]/).pop() || dp;
       const store = useRepoStore.getState();
-      store.addRepo(dp, nm);
-      store.setCurrentRepo(dp);
-      store.refreshAll(dp);
+      store.addRepo(dp, repoDisplayName(dp));
+      store.openTab(dp);
     } else {
       useRepoStore.getState().setError(`"${dp}" ${t("app.invalidRepo")}`);
     }
@@ -88,6 +87,23 @@ export default function App() {
       e.preventDefault();
       useRepoStore.getState().setShowCommandPalette(!useRepoStore.getState().showCommandPalette);
     }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "p") {
+      e.preventDefault();
+      const store = useRepoStore.getState();
+      store.setShowTabPicker(!store.showTabPicker);
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Tab") {
+      e.preventDefault();
+      useRepoStore.getState().cycleTab(e.shiftKey ? -1 : 1);
+    }
+    // Close tab on Ctrl+Shift+W, not the expected Ctrl+W: Electron's default
+    // application menu binds Ctrl+W to window close in the main process, and a
+    // renderer preventDefault cannot win that race — the app would quit.
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "w") {
+      e.preventDefault();
+      const store = useRepoStore.getState();
+      if (store.currentRepo) store.closeTab(store.currentRepo);
+    }
     if (e.key === "Delete") {
       const store = useRepoStore.getState();
       if (store.currentRepo && store.selectedFiles.length > 0) {
@@ -130,6 +146,7 @@ export default function App() {
   return (
     <div className="app-layout">
       <TopBar />
+      <TabBar />
       {currentRepo ? (
         <>
           <div className="main-content">
@@ -148,6 +165,7 @@ export default function App() {
       <CloneDialog />
       <CompareDialog />
       <CommandPalette />
+      <TabPicker />
       {showRebase && <RebaseDialog onClose={() => useRepoStore.getState().setShowRebase(null)} />}
       {showRepoGroups && <RepoGroupDialog onClose={() => useRepoStore.getState().setShowRepoGroups(false)} />}
     </div>

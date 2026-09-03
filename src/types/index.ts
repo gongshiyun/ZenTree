@@ -187,6 +187,37 @@ export interface RepoGroup {
   repos: string[];
 }
 
+/**
+ * A repo group opened as a tab set. `tabs` is a snapshot of the group's members
+ * taken on entry, so later edits to the group only apply the next time it is opened.
+ * Never persisted: leaving group view discards it.
+ */
+export interface GroupTabView {
+  name: string;
+  tabs: string[];
+}
+
+/**
+ * Everything the UI knows about one repository, cached per repository path so a
+ * tab switch can paint instantly while a background refresh replaces the data.
+ * Selection state is deliberately excluded: it is cleared on every switch.
+ */
+export interface RepoSnapshot {
+  branches: string[];
+  remoteBranches: string[];
+  currentBranch: string;
+  logEntries: CommitLogEntry[];
+  graphData: GraphData;
+  logSkip: number;
+  hasMoreCommits: boolean;
+  tags: TagInfo[];
+  remotes: RemoteInfo[];
+  branchTracking: BranchTracking[];
+  ongoing: "merge" | "rebase" | "cherry-pick" | null;
+  status: GitStatusData | null;
+  fetchedAt: number;
+}
+
 export interface CommitFileStat {
   path: string;
   additions: number;

@@ -38,6 +38,11 @@ function resetStore(patch: Record<string, unknown> = {}) {
     language: "en",
     loading: false,
     error: null,
+    showClone: false,
+    customTabs: [],
+    groupView: null,
+    showTabPicker: false,
+    repoCache: {},
     ...patch,
   });
 }
@@ -54,27 +59,38 @@ afterEach(() => {
 });
 
 describe("TopBar", () => {
-  it("filters the repo dropdown and switches repositories", () => {
+  it("names the active repository read-only, without a searchable repo list", () => {
     installApi();
-    resetStore({ repos: [{ path: "/r/alpha", name: "Alpha" }, { path: "/r/beta", name: "Beta" }] });
+    resetStore({ repos: [{ path: "/r/alpha", name: "Alpha" }, { path: "/r/beta", name: "Beta" }], currentRepo: "/r/beta" });
     const { container } = render(<TopBar />);
+    expect(container.querySelector(".repo-selector-trigger")?.textContent).toBe("Beta");
+    // Switching repositories is the tab strip's and the Ctrl+P picker's job now.
     fireEvent.click(container.querySelector(".repo-selector-trigger")!);
-    const search = container.querySelector(".repo-search-box input") as HTMLInputElement;
-    fireEvent.change(search, { target: { value: "beta" } });
-    expect([...container.querySelectorAll(".repo-dropdown-item")].map((i) => i.textContent?.includes("Beta"))).toEqual([true]);
-    fireEvent.click(container.querySelector(".repo-dropdown-item")!);
-    expect(useRepoStore.getState().currentRepo).toBe("/r/beta");
+    expect(container.querySelector(".repo-dropdown")).toBeNull();
   });
 
-  it("adds a valid repository chosen from the native picker", async () => {
+  it("offers adding a local repository or cloning from the add menu", () => {
+    installApi();
+    resetStore();
+    const { container } = render(<TopBar />);
+    fireEvent.click(screen.getByTitle(t("topbar.addRepo")));
+    const items = [...container.querySelectorAll(".repo-dropdown-item")];
+    expect(items.map((i) => i.textContent)).toEqual([t("topbar.addLocalRepo"), t("topbar.clone")]);
+    fireEvent.click(items[1]);
+    expect(useRepoStore.getState().showClone).toBe(true);
+  });
+
+  it("adds a valid repository chosen from the native picker as a tab", async () => {
     installApi({
       openDirectory: () => Promise.resolve("/r/new"),
       isRepo: () => Promise.resolve({ success: true, data: true }),
     });
     resetStore();
-    render(<TopBar />);
+    const { container } = render(<TopBar />);
     fireEvent.click(screen.getByTitle(t("topbar.addRepo")));
+    fireEvent.click(container.querySelector(".repo-dropdown-item")!);
     await waitFor(() => expect(useRepoStore.getState().currentRepo).toBe("/r/new"));
+    expect(useRepoStore.getState().customTabs).toEqual(["/r/new"]);
   });
 
   it("rejects an invalid repository path", async () => {
@@ -83,9 +99,11 @@ describe("TopBar", () => {
       isRepo: () => Promise.resolve({ success: true, data: false }),
     });
     resetStore();
-    render(<TopBar />);
+    const { container } = render(<TopBar />);
     fireEvent.click(screen.getByTitle(t("topbar.addRepo")));
+    fireEvent.click(container.querySelector(".repo-dropdown-item")!);
     await waitFor(() => expect(useRepoStore.getState().error).toContain(t("app.invalidRepo")));
+    expect(useRepoStore.getState().customTabs).toEqual([]);
   });
 
   it("fetches the current repository", async () => {

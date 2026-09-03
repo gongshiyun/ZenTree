@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { CommitLogEntry, GitStatusData } from "../src/types";
+import type { CommitLogEntry, GitStatusData, RepoSnapshot } from "../src/types";
 
 /**
  * Unit tests for the application store (src/application/repoStore.ts).
@@ -16,7 +16,7 @@ function makeApi() {
   return {
     setSetting: vi.fn(),
     getSettings: vi.fn(async () => null),
-    branches: vi.fn(async () => ({ success: true, data: { current: "main", all: ["main"], branches: {} } })),
+    branches: vi.fn(async (_repo: string) => ({ success: true, data: { current: "main", all: ["main"], branches: {} } })),
     log: vi.fn(async () => ({ success: true, data: [] as CommitLogEntry[] })),
     status: vi.fn(async () => ({ success: true, data: emptyStatus })),
     tags: vi.fn(async () => ({ success: true, data: [] })),
@@ -43,6 +43,21 @@ const initialState = useRepoStore.getState();
 
 function entry(hash: string, subject: string, parents: string[] = []): CommitLogEntry {
   return { hash, shortHash: hash.slice(0, 7), parents, author: "T", email: "t@example.com", timestamp: 1, subject };
+}
+
+/** A minimal cached snapshot, for tests that seed the cache by hand. */
+function snapshot(overrides: Partial<RepoSnapshot> = {}): RepoSnapshot {
+  return {
+    branches: ["main"], remoteBranches: [], currentBranch: "main",
+    logEntries: [], graphData: { nodes: [], edges: [], maxLane: 0, branchRefs: {} },
+    logSkip: 0, hasMoreCommits: false, tags: [], remotes: [], branchTracking: [],
+    ongoing: null, status: emptyStatus, fetchedAt: 1, ...overrides,
+  };
+}
+
+/** Stalls a mocked git call forever, so the refresh it belongs to never lands. */
+function stall(): Promise<never> {
+  return new Promise(() => {});
 }
 
 const s = () => useRepoStore.getState();
@@ -299,5 +314,353 @@ describe("repo group transitions", () => {
     s().removeRepoGroup("team");
     expect(s().repoGroups).toEqual([]);
     expect(api.setSetting).toHaveBeenLastCalledWith("repoGroups", []);
+  });
+});
+
+describe("tab set transitions", () => {
+  it("openTab appends, persists and activates the repository", async () => {
+    await s().openTab("/r/a");
+    expect(s().customTabs).toEqual(["/r/a"]);
+    expect(s().currentRepo).toBe("/r/a");
+    expect(api.setSetting).toHaveBeenCalledWith("tabs", ["/r/a"]);
+    expect(api.watchRepo).toHaveBeenCalledWith("/r/a");
+  });
+
+  it("openTab does not duplicate a tab that is already there", async () => {
+    useRepoStore.setState({ customTabs: ["/r/a"], currentRepo: "/r/b" });
+    await s().openTab("/r/a");
+    expect(s().customTabs).toEqual(["/r/a"]);
+    expect(s().currentRepo).toBe("/r/a");
+  });
+
+  it("closeTab removes, persists and activates the neighbour", () => {
+    useRepoStore.setState({ customTabs: ["/r/a", "/r/b", "/r/c"], currentRepo: "/r/b" });
+    s().closeTab("/r/b");
+    expect(s().customTabs).toEqual(["/r/a", "/r/c"]);
+    expect(s().currentRepo).toBe("/r/c");
+    expect(api.setSetting).toHaveBeenCalledWith("tabs", ["/r/a", "/r/c"]);
+  });
+
+  it("closeTab drops the cached snapshot so a reopen starts clean", () => {
+    useRepoStore.setState({ customTabs: ["/r/a"], currentRepo: "/r/b", repoCache: { "/r/a": snapshot() } });
+    s().closeTab("/r/a");
+    expect(s().repoCache["/r/a"]).toBeUndefined();
+  });
+
+  it("closeTab clears the repository when the last tab goes", () => {
+    useRepoStore.setState({ customTabs: ["/r/a"], currentRepo: "/r/a" });
+    s().closeTab("/r/a");
+    expect(s().customTabs).toEqual([]);
+    expect(s().currentRepo).toBeNull();
+    expect(api.unwatchRepo).toHaveBeenCalled();
+  });
+
+  it("closeTab ignores a path that is not a tab", () => {
+    useRepoStore.setState({ customTabs: ["/r/a"], currentRepo: "/r/a" });
+    s().closeTab("/r/zzz");
+    expect(s().customTabs).toEqual(["/r/a"]);
+    expect(s().currentRepo).toBe("/r/a");
+  });
+
+  it("activateTab keeps the selection when the current tab is re-activated", async () => {
+    useRepoStore.setState({ customTabs: ["/r/a"], currentRepo: "/r/a", selectedCommit: "h1" });
+    await s().activateTab("/r/a");
+    expect(s().selectedCommit).toBe("h1");
+    expect(api.branches).not.toHaveBeenCalled();
+  });
+
+  it("reorderTabs moves a tab and persists the new order", () => {
+    useRepoStore.setState({ customTabs: ["/r/a", "/r/b", "/r/c"] });
+    s().reorderTabs(0, 2);
+    expect(s().customTabs).toEqual(["/r/b", "/r/c", "/r/a"]);
+    expect(api.setSetting).toHaveBeenCalledWith("tabs", ["/r/b", "/r/c", "/r/a"]);
+  });
+
+  it("reorderTabs ignores indexes that are equal or out of range", () => {
+    useRepoStore.setState({ customTabs: ["/r/a", "/r/b"] });
+    s().reorderTabs(1, 1);
+    s().reorderTabs(0, 5);
+    s().reorderTabs(-1, 1);
+    expect(s().customTabs).toEqual(["/r/a", "/r/b"]);
+    expect(api.setSetting).not.toHaveBeenCalled();
+  });
+
+  it("cycleTab wraps around in both directions", async () => {
+    useRepoStore.setState({ customTabs: ["/r/a", "/r/b", "/r/c"], currentRepo: "/r/a" });
+    await s().cycleTab(1);
+    expect(s().currentRepo).toBe("/r/b");
+    await s().cycleTab(-1);
+    expect(s().currentRepo).toBe("/r/a");
+    await s().cycleTab(-1);
+    expect(s().currentRepo).toBe("/r/c");
+  });
+
+  it("cycleTab is a no-op with fewer than two tabs", async () => {
+    useRepoStore.setState({ customTabs: ["/r/a"], currentRepo: "/r/a" });
+    await s().cycleTab(1);
+    expect(s().currentRepo).toBe("/r/a");
+    useRepoStore.setState({ customTabs: [] });
+    await s().cycleTab(1);
+    expect(s().currentRepo).toBe("/r/a");
+  });
+
+  it("removeRepo closes the matching tab", () => {
+    useRepoStore.setState({ repos: [{ path: "/r/a", name: "A" }], customTabs: ["/r/a", "/r/b"], currentRepo: "/r/b" });
+    s().removeRepo("/r/a");
+    expect(s().customTabs).toEqual(["/r/b"]);
+    expect(s().currentRepo).toBe("/r/b");
+  });
+});
+
+describe("group view", () => {
+  it("enterGroupView snapshots the members and activates the first one", async () => {
+    useRepoStore.setState({ repoGroups: [{ name: "team", repos: ["/r/a", "/r/b"] }], customTabs: ["/r/z"], currentRepo: "/r/z" });
+    await s().enterGroupView("team");
+    expect(s().groupView).toEqual({ name: "team", tabs: ["/r/a", "/r/b"] });
+    expect(s().currentRepo).toBe("/r/a");
+    // The custom set is what "back" restores, so entering must not touch it.
+    expect(s().customTabs).toEqual(["/r/z"]);
+  });
+
+  it("enterGroupView keeps the current repository when the group contains it", async () => {
+    useRepoStore.setState({ repoGroups: [{ name: "team", repos: ["/r/a", "/r/b"] }], currentRepo: "/r/b" });
+    await s().enterGroupView("team");
+    expect(s().currentRepo).toBe("/r/b");
+  });
+
+  it("enterGroupView on an empty group leaves no repository open", async () => {
+    useRepoStore.setState({ repoGroups: [{ name: "team", repos: [] }], currentRepo: "/r/z" });
+    await s().enterGroupView("team");
+    expect(s().groupView).toEqual({ name: "team", tabs: [] });
+    expect(s().currentRepo).toBeNull();
+  });
+
+  it("enterGroupView ignores an unknown group name", async () => {
+    useRepoStore.setState({ currentRepo: "/r/z" });
+    await s().enterGroupView("nope");
+    expect(s().groupView).toBeNull();
+    expect(s().currentRepo).toBe("/r/z");
+  });
+
+  it("tab edits made in group view die with the snapshot", async () => {
+    useRepoStore.setState({ groupView: { name: "team", tabs: ["/r/a", "/r/b"] }, customTabs: ["/r/z"], currentRepo: "/r/a" });
+    await s().openTab("/r/c");
+    expect(s().groupView).toEqual({ name: "team", tabs: ["/r/a", "/r/b", "/r/c"] });
+    expect(s().customTabs).toEqual(["/r/z"]);
+
+    s().closeTab("/r/c");
+    expect(s().groupView).toEqual({ name: "team", tabs: ["/r/a", "/r/b"] });
+    // Group view is in-memory only: the persisted tab set never changes.
+    expect(api.setSetting).not.toHaveBeenCalledWith("tabs", expect.anything());
+  });
+
+  it("reordering in group view touches the snapshot only", () => {
+    useRepoStore.setState({ groupView: { name: "team", tabs: ["/r/a", "/r/b"] }, customTabs: ["/r/z"] });
+    s().reorderTabs(0, 1);
+    expect(s().groupView).toEqual({ name: "team", tabs: ["/r/b", "/r/a"] });
+    expect(s().customTabs).toEqual(["/r/z"]);
+  });
+
+  it("exitGroupView restores the custom tab set", async () => {
+    useRepoStore.setState({ groupView: { name: "team", tabs: ["/r/a"] }, customTabs: ["/r/z"], currentRepo: "/r/a" });
+    await s().exitGroupView();
+    expect(s().groupView).toBeNull();
+    expect(s().currentRepo).toBe("/r/z");
+  });
+
+  it("exitGroupView keeps a repository that is also a custom tab", async () => {
+    useRepoStore.setState({ groupView: { name: "team", tabs: ["/r/a"] }, customTabs: ["/r/a", "/r/z"], currentRepo: "/r/a" });
+    await s().exitGroupView();
+    expect(s().groupView).toBeNull();
+    expect(s().currentRepo).toBe("/r/a");
+  });
+
+  it("exitGroupView with no custom tabs left closes everything", async () => {
+    useRepoStore.setState({ groupView: { name: "team", tabs: ["/r/a"] }, customTabs: [], currentRepo: "/r/a" });
+    await s().exitGroupView();
+    expect(s().currentRepo).toBeNull();
+  });
+
+  it("exitGroupView is a no-op outside group view", async () => {
+    useRepoStore.setState({ customTabs: ["/r/z"], currentRepo: "/r/z" });
+    await s().exitGroupView();
+    expect(s().currentRepo).toBe("/r/z");
+  });
+
+  it("deleting the group on screen leaves group view", () => {
+    useRepoStore.setState({
+      repoGroups: [{ name: "team", repos: ["/r/a"] }],
+      groupView: { name: "team", tabs: ["/r/a"] },
+      customTabs: ["/r/z"],
+      currentRepo: "/r/a",
+    });
+    s().removeRepoGroup("team");
+    expect(s().groupView).toBeNull();
+    expect(s().currentRepo).toBe("/r/z");
+  });
+});
+
+describe("per-repository snapshot cache", () => {
+  it("caches every refresh by repository path", async () => {
+    api.log.mockResolvedValue({ success: true, data: [entry("h1", "c1")] });
+    useRepoStore.setState({ currentRepo: "/r/a" });
+    await s().refreshAll();
+    expect(s().repoCache["/r/a"].currentBranch).toBe("main");
+    expect(s().repoCache["/r/a"].logEntries.map((e) => e.hash)).toEqual(["h1"]);
+    expect(s().repoCache["/r/a"].fetchedAt).toBeGreaterThan(0);
+  });
+
+  it("restores a cached snapshot synchronously when its tab is re-activated", async () => {
+    api.log.mockResolvedValue({ success: true, data: [entry("h1", "c1")] });
+    api.branches.mockResolvedValue({ success: true, data: { current: "main", all: ["main", "dev"], branches: {} } });
+    useRepoStore.setState({ currentRepo: "/r/a" });
+    await s().refreshAll();
+    await s().openTab("/r/b");
+
+    // Stall the background refresh: what is on screen must come from the cache.
+    api.branches.mockImplementation(stall);
+    void s().activateTab("/r/a");
+    expect(s().branches).toEqual(["main", "dev"]);
+    expect(s().currentBranch).toBe("main");
+    expect(s().logEntries.map((e) => e.hash)).toEqual(["h1"]);
+  });
+
+  it("blanks the previous repository's data when the new tab has no cache", async () => {
+    api.log.mockResolvedValue({ success: true, data: [entry("h1", "c1")] });
+    useRepoStore.setState({ currentRepo: "/r/a" });
+    await s().refreshAll();
+    expect(s().logEntries).toHaveLength(1);
+
+    api.branches.mockImplementation(stall);
+    void s().activateTab("/r/b");
+    expect(s().logEntries).toEqual([]);
+    expect(s().currentBranch).toBe("");
+    expect(s().status).toBeNull();
+    expect(s().ongoing).toBeNull();
+    expect(s().viewRef).toBeNull();
+  });
+
+  it("refreshes silently when the cache already has something to show", async () => {
+    useRepoStore.setState({ currentRepo: "/r/a", repoCache: { "/r/a": snapshot() } });
+    await s().openTab("/r/b");
+    api.branches.mockImplementation(stall);
+    void s().activateTab("/r/a");
+    // A silent refresh must not put a spinner over data that is already painted.
+    expect(s().loading).toBe(false);
+  });
+
+  it("only feeds the cache when refreshing a repository that is not on screen", async () => {
+    useRepoStore.setState({ currentRepo: "/r/b", currentBranch: "b-main" });
+    await s().refreshAll("/r/a");
+    expect(s().repoCache["/r/a"].currentBranch).toBe("main");
+    expect(s().currentBranch).toBe("b-main");
+    expect(s().branches).toEqual([]);
+  });
+
+  it("evicts the stalest snapshots past the cache cap", async () => {
+    for (let i = 0; i < 34; i++) {
+      useRepoStore.setState({ currentRepo: `/r/${i}` });
+      await s().refreshAll();
+    }
+    expect(Object.keys(s().repoCache)).toHaveLength(32);
+    expect(s().repoCache["/r/0"]).toBeUndefined();
+    expect(s().repoCache["/r/33"]).toBeDefined();
+  });
+});
+
+describe("per-repository refresh sequencing", () => {
+  it("lets a late answer fill its own cache without touching the visible tab", async () => {
+    let resolveA: (value: unknown) => void = () => {};
+    api.branches.mockImplementation((repo: string) => {
+      if (repo === "/r/a") return new Promise((res) => { resolveA = res; });
+      return Promise.resolve({ success: true, data: { current: "b-main", all: ["b-main"], branches: {} } });
+    });
+
+    useRepoStore.setState({ currentRepo: "/r/a" });
+    const pending = s().refreshAll("/r/a");
+
+    // The user switches tab while A is still in flight.
+    useRepoStore.setState({ currentRepo: "/r/b" });
+    await s().refreshAll("/r/b");
+    expect(s().currentBranch).toBe("b-main");
+
+    resolveA({ success: true, data: { current: "a-main", all: ["a-main"], branches: {} } });
+    await pending;
+    expect(s().currentBranch).toBe("b-main");
+    expect(s().repoCache["/r/a"].currentBranch).toBe("a-main");
+  });
+
+  it("ignores a watch-driven probe that lands after a tab switch", async () => {
+    const resolvers: ((value: unknown) => void)[] = [];
+    api.status.mockImplementation(() => new Promise((res) => { resolvers.push(res); }));
+    useRepoStore.setState({ currentRepo: "/r/a", lastStatusFingerprint: "seed" });
+
+    const pending = s().silentDiffRefresh();
+    useRepoStore.setState({ currentRepo: "/r/b" });
+    resolvers[0]({ success: true, data: emptyStatus });
+    await pending;
+
+    // A's fingerprint must not be written while B is on screen.
+    expect(s().lastStatusFingerprint).toBe("seed");
+    expect(api.branches).not.toHaveBeenCalled();
+  });
+
+  it("drops a paginated page when the user switched tab mid-flight", async () => {
+    const resolvers: ((value: unknown) => void)[] = [];
+    api.log.mockImplementation(() => new Promise((res) => { resolvers.push(res); }));
+    useRepoStore.setState({ currentRepo: "/r/a", logEntries: [entry("h1", "c1")], logSkip: 1, hasMoreCommits: true });
+
+    const pending = s().loadMoreCommits();
+    expect(s().loadingMore).toBe(true);
+
+    // Switching tab starts a refresh, which also releases the pagination flag.
+    api.branches.mockImplementation(stall);
+    void s().activateTab("/r/b");
+    resolvers[0]({ success: true, data: [entry("h2", "c2", ["h1"])] });
+    await pending;
+
+    expect(s().logEntries).toEqual([]);
+    expect(s().loadingMore).toBe(false);
+  });
+});
+
+describe("tab persistence on startup", () => {
+  it("restores the saved tab set and the last active tab", async () => {
+    api.getSettings.mockResolvedValue({
+      repos: [{ path: "/r/a", name: "A" }, { path: "/r/b", name: "B" }],
+      tabs: ["/r/a", "/r/b"],
+      lastRepo: "/r/b",
+    });
+    await s().initFromSettings();
+    expect(s().customTabs).toEqual(["/r/a", "/r/b"]);
+    expect(s().currentRepo).toBe("/r/b");
+  });
+
+  it("seeds the first tab from lastRepo when no tab set was saved", async () => {
+    api.getSettings.mockResolvedValue({ repos: [{ path: "/r/a", name: "A" }], lastRepo: "/r/a" });
+    await s().initFromSettings();
+    expect(s().customTabs).toEqual(["/r/a"]);
+    expect(s().currentRepo).toBe("/r/a");
+    expect(api.setSetting).toHaveBeenCalledWith("tabs", ["/r/a"]);
+  });
+
+  it("falls back to the head of the tab set when lastRepo is no longer a tab", async () => {
+    api.getSettings.mockResolvedValue({ tabs: ["/r/a", "/r/b"], lastRepo: "/r/removed" });
+    await s().initFromSettings();
+    expect(s().currentRepo).toBe("/r/a");
+  });
+
+  it("ignores malformed tab entries", async () => {
+    api.getSettings.mockResolvedValue({ tabs: ["/r/a", 42, null] });
+    await s().initFromSettings();
+    expect(s().customTabs).toEqual(["/r/a"]);
+    expect(s().currentRepo).toBe("/r/a");
+  });
+
+  it("opens nothing when there is no tab and no known last repository", async () => {
+    api.getSettings.mockResolvedValue({ repos: [{ path: "/r/a", name: "A" }] });
+    await s().initFromSettings();
+    expect(s().customTabs).toEqual([]);
+    expect(s().currentRepo).toBeNull();
   });
 });

@@ -371,7 +371,7 @@ async stashDiff(repoPath: string, ref: string): Promise<string> {
 
 1. Jira / PR 深度集成 —— 现有托管平台链接（`hostingUrl`）兜底；
 2. 可配置快捷键系统 —— 固定键位 + 只读速查表；
-3. 插件体系、Mercurial 支持、多窗口多标签页；
+3. 插件体系、Mercurial 支持、多窗口（单窗口内的「仓库标签页」不在此列：它已作为后续独立需求落地，见 CHANGELOG 的 Unreleased › Repository tabs）；
 4. 任何新的运行时第三方依赖（图表库、虚拟列表库、chokidar）；
 5. 完整 Git LFS 生命周期管理。
 

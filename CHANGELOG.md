@@ -2,6 +2,31 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.3.8] - 2026-09-04
+
+### Features
+
+- **Repository tabs** — a tab strip below the top bar, one tab per repository: click to switch, `×` or middle-click to close, drag to reorder, wheel to scroll the overflow
+  - Tabs are decoupled from the saved repository list and their labels are derived (saved name, else the path's last segment), so repo-group members that were never "opened" still display correctly
+  - The tab set is persisted (new `tabs` setting) and restored on startup together with the last active tab
+- **Tab picker** — `Ctrl+P` searches open tabs and known repositories in one overlay with open tabs ranked first; `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle tabs, `Ctrl+Shift+W` closes the current one
+  - `Ctrl+W` is deliberately not bound: Electron's default application menu assigns it to window close, and a renderer `preventDefault` cannot win that race
+- **Repo group as tabs** — "Show as tabs" in the repo group dialog replaces the whole tab set with a snapshot of the group's members; the tab bar's back button returns to your own tabs, and edits made while the group is showing are discarded with the snapshot
+- **Per-repository data cache** — switching tabs paints the cached snapshot instantly and refreshes silently in the background; the refresh race token is now tracked per repository, so a slow answer can no longer overwrite the repository now on screen
+
+### Changed
+
+- Top bar repository dropdown simplified: the searchable repository list moved to the `Ctrl+P` picker, the trigger is now a read-only repository name, and its `+` menu offers "Open local repository" / "Clone"
+- Switching repository now blanks the previous repository's data instead of leaving it on screen until git answers
+
+### Fixed
+
+- The commit message box wiped itself on every keystroke: the amend effect listed `message` as a dependency, so its "unchecking amend clears the box" branch ran on each change. It now runs on the amend toggle and on repository switch only — which also drops a draft when you switch tab, so a message written for one repository can never be committed into another
+
+### Testing
+
+- 335 -> 427 tests: tab domain helpers (`repoDisplayName`, `filterTabs`), tab set / group view / snapshot cache / per-repository sequencing store transitions, `TabBar` and `TabPicker` components, the new App-level shortcuts, and commit-message typing / draft-on-switch regressions
+
 ## [1.3.7] - 2026-08-13
 
 ### Fixed

@@ -2,13 +2,13 @@
 import { useRepoStore } from "../application/repoStore";
 import { useT } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
+import { repoDisplayName } from "../domain/tabs/displayName";
 import DatePicker from "./DatePicker";
 
 export default function TopBar() {
   const t = useT();
   const repos = useRepoStore((s) => s.repos);
   const currentRepo = useRepoStore((s) => s.currentRepo);
-  const setCurrentRepo = useRepoStore((s) => s.setCurrentRepo);
   const isDark = useRepoStore((s) => s.isDark);
   const language = useRepoStore((s) => s.language);
   const setThemePreset = useRepoStore((s) => s.setThemePreset);
@@ -21,7 +21,6 @@ export default function TopBar() {
   const loading = useRepoStore((s) => s.loading);
   const setLoading = useRepoStore((s) => s.setLoading);
   const setError = useRepoStore((s) => s.setError);
-  const [searchText, setSearchText] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [showPullMenu, setShowPullMenu] = useState(false);
   const [fQuery, setFQuery] = useState("");
@@ -32,7 +31,7 @@ export default function TopBar() {
 
   useEffect(() => {
     if (!showDropdown) return;
-    const h = (e: MouseEvent) => { if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) { setShowDropdown(false); setSearchText(""); } };
+    const h = (e: MouseEvent) => { if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) setShowDropdown(false); };
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, [showDropdown]);
 
@@ -50,20 +49,15 @@ export default function TopBar() {
     return () => clearTimeout(timer);
   }, [fQuery, fAuthor, fSince, setLogFilters]);
 
-  const filteredRepos = repos.filter((r) => r.name.toLowerCase().includes(searchText.toLowerCase()) || r.path.toLowerCase().includes(searchText.toLowerCase()));
-
-  const handleRepoChange = useCallback((path: string) => { setCurrentRepo(path); useRepoStore.getState().refreshAll(path); setShowDropdown(false); setSearchText(""); }, [setCurrentRepo]);
-
   const handleAddRepo = useCallback(async () => {
+    setShowDropdown(false);
     const path = await gitApi().openDirectory();
     if (!path) return;
     const result = await gitApi().isRepo(path);
     if (result.success && result.data) {
-      const name = path.split(/[/\\]/).pop() || path;
       const store = useRepoStore.getState();
-      store.addRepo(path, name);
-      store.setCurrentRepo(path);
-      store.refreshAll(path);
+      store.addRepo(path, repoDisplayName(path));
+      store.openTab(path);
     } else {
       setError(`"${path}" ` + t("app.invalidRepo"));
     }
@@ -116,28 +110,25 @@ export default function TopBar() {
   return (<>
     <div className="top-bar drag-region">
       <span className="window-title no-drag" onClick={() => setShowSettings(true)}>ZenTree</span>
-      <div className="repo-selector no-drag" ref={selectorRef}>
-        <div className="repo-selector-trigger" onClick={() => setShowDropdown(!showDropdown)}>
+      <div className="repo-selector no-drag">
+        <div className="repo-selector-trigger" title={currentRepo ?? undefined}>
           <span className="repo-name">{currentRepoName || (repos.length === 0 ? t("topbar.noRepos") : t("topbar.selectRepo"))}</span>
-          <span className="dropdown-arrow">
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
         </div>
-        {showDropdown && (
-          <div className="repo-dropdown">
-            <div className="repo-search-box"><input type="text" placeholder={t("topbar.searchRepos")} value={searchText} onChange={(e) => setSearchText(e.target.value)} autoFocus onClick={(e) => e.stopPropagation()} /></div>
-            <div className="repo-dropdown-list">
-              {filteredRepos.map((r) => (<div key={r.path} className={`repo-dropdown-item${r.path === currentRepo ? " active" : ""}`} onClick={() => handleRepoChange(r.path)}><span className="repo-item-name">{r.name}</span><span className="repo-item-path">{r.path}</span></div>))}
-              {filteredRepos.length === 0 && <div className="repo-dropdown-empty">{searchText ? t("topbar.noMatch") : t("topbar.noAdded")}</div>}
+        {/* Switching repositories now lives in the tab strip and the Ctrl+P picker,
+            which is why this dropdown only offers the two ways to add one. */}
+        <div className="repo-add-wrap" ref={selectorRef}>
+          <button className="toolbar-btn icon-only" onClick={() => setShowDropdown(!showDropdown)} title={t("topbar.addRepo")}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
+          </button>
+          {showDropdown && (
+            <div className="repo-dropdown repo-add-menu">
+              <div className="repo-dropdown-item" onClick={handleAddRepo}><span className="repo-item-name">{t("topbar.addLocalRepo")}</span></div>
+              <div className="repo-dropdown-item" onClick={() => { setShowClone(true); setShowDropdown(false); }}><span className="repo-item-name">{t("topbar.clone")}</span></div>
             </div>
-            <div className="repo-dropdown-footer">
-              <button className="toolbar-btn add-repo" onClick={handleAddRepo} style={{ flex: 1, justifyContent: "center" }}>{t("topbar.add")}</button>
-              <button className="toolbar-btn add-repo" onClick={() => { setShowClone(true); setShowDropdown(false); }} style={{ flex: 1, justifyContent: "center" }}>{t("topbar.clone")}</button>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {currentRepo && (<div className="toolbar-group no-drag">
         <button className="toolbar-btn" onClick={handleFetch} disabled={loading} title={t("topbar.fetchTip")}>{t("topbar.fetch")}</button>
@@ -162,7 +153,6 @@ export default function TopBar() {
       </div>)}
       <div className="top-bar-spacer" />
       <div className="top-bar-right no-drag">
-        <button className="toolbar-btn add-repo" onClick={handleAddRepo} title={t("topbar.addRepo")}>{t("topbar.add")}</button>
         <button className="toolbar-btn icon-only" onClick={() => setThemePreset(isDark ? "catppuccin-latte" : "catppuccin-mocha")} title={t("topbar.toggleTheme")}>{isDark ? (
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
               <circle cx="8" cy="8" r="3.2" />

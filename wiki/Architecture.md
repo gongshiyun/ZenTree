@@ -59,6 +59,8 @@ UI Update ← Zustand Store ← Component ← IPC Response ←┘
 | Frameless window | Custom title bar blends with theme; `WebkitAppRegion: drag` for native window dragging |
 | JSON settings file | No database needed; stored in `app.getPath("userData")/zentree-settings.json` |
 | Lazy loading (200/batch) | Keeps initial load fast for large repos; infinite scroll triggers next batch |
+| One active repository + per-repo cache | Tabs reuse the existing single-repo data slices: switching paints `repoCache[path]` instantly, then a silent refresh replaces it — far cheaper than sharding every slice per repository |
+| Tab labels derived, never stored | A tab is a bare path, so repo-group members that were never "opened" render correctly and a renamed repository cannot desync from its tab |
 
 ## Module Boundaries
 
@@ -73,6 +75,7 @@ UI Update ← Zustand Store ← Component ← IPC Response ←┘
 | `src/domain/graph/*` | Pure graph layout + lane/color algorithms | types |
 | `src/domain/theme/presets.ts` | Theme presets + CSS variable application | — |
 | `src/domain/diff/*` | Diff parsing, hunk patch building, syntax highlighting (pure) | types |
+| `src/domain/tabs/*` | Tab label derivation + tab picker filtering (pure) | — |
 | `src/application/repoStore.ts` | Zustand store: state + use cases (refresh, load more, settings init) | zustand, i18n, domain |
 | `src/infrastructure/gitBridge.ts` | Renderer-side gateway over window.gitAPI | types |
 | `src/renderer/canvasRenderer.ts` | Canvas 2D rendering, camera, hit-testing, events | domain/graph, types |

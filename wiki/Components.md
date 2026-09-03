@@ -5,6 +5,7 @@
 ```
 App
 ├── TopBar              # Frameless title bar + toolbar
+├── TabBar              # Repository tab strip
 ├── [Welcome]           # Shown when no repo is open
 ├── Sidebar             # Branch list (left panel)
 ├── CommitGraph         # Canvas commit DAG (center-top)
@@ -13,7 +14,8 @@ App
 │   └── DiffViewer      # Hunk-level diff display
 ├── CommitBar           # Commit message + amend (bottom)
 ├── StatusBar           # Loading/error bar (very bottom)
-└── SettingsDialog      # Modal settings
+├── SettingsDialog      # Modal settings
+└── TabPicker           # Ctrl+P overlay
 ```
 
 ---
@@ -24,12 +26,40 @@ App
 
 Custom frameless window title bar with:
 - Window title ("ZenTree") — click opens Settings
-- Repository selector dropdown with search/filter
+- Read-only active repository name, plus a `+` menu (open local repository / clone)
 - Git action buttons: Fetch, Pull, Push, Refresh, Git Bash
-- Right controls: Add repo, theme toggle, language toggle, settings gear
+- Right controls: theme toggle, language toggle, settings gear
 - Native window controls: minimize, maximize/restore, close
 
 Uses `WebkitAppRegion: "drag"` for window dragging; interactive elements use `"no-drag"`.
+
+Repository *switching* used to live here as a searchable dropdown; it moved to [TabBar](#tabbar) and [TabPicker](#tabpicker).
+
+---
+
+## TabBar
+
+**File:** `src/components/TabBar.tsx`
+
+A 34px row of its own below the top bar (deliberately outside the drag region, so every pixel stays clickable):
+- One tab per visible repository — click to switch, `×` or middle-click to close, drag to reorder
+- Overflow scrolls horizontally: the scrollbar is hidden, vertical wheel deltas are mapped onto `scrollLeft`, and the active tab is scrolled into view
+- Labels are derived, never stored: the saved repository name when known, else the path's last segment
+- Right-hand actions: back to your own tabs (group view only), the tab-set menu (`My tabs` + every repo group), search (`Ctrl+P`), add repository
+
+Which tabs are visible comes from the store (`groupView ? groupView.tabs : customTabs`), so the component itself has no notion of group view beyond rendering the back button.
+
+---
+
+## TabPicker
+
+**File:** `src/components/TabPicker.tsx`
+
+`Ctrl+P` overlay, modelled on `CommandPalette`:
+- Lists the visible tabs first, then the known repositories that are not open yet
+- Dependency-free substring filter over the label and the path (`filterTabs` in `src/domain/tabs`)
+- `↑`/`↓` move (the highlighted row is scrolled into view), `Enter` picks, `Esc` closes
+- Picking an open tab activates it; picking anything else opens it as a new tab
 
 ---
 
