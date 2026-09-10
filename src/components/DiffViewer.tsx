@@ -77,17 +77,25 @@ export default function DiffViewer({ filePath, isStaged, status, fromPath, onClo
       setFetchError("");
       return;
     }
+    let cancelled = false;
     setFetching(true); setFetchError("");
     (async () => {
-      let r;
-      if (isCompare) r = await gitApi().compareFileDiff(currentRepo, compareFrom!, compareTo!, filePath);
-      else if (diffCommit) r = await gitApi().commitFileDiff(currentRepo, diffCommit, filePath);
-      else if (isUntracked) r = await gitApi().readWorkingFile(currentRepo, filePath);
-      else r = await gitApi().diffFile(currentRepo, filePath, isStaged, fromPath);
-      if (r.success && r.data !== undefined) setDiffText(isUntracked ? buildUntrackedDiff(filePath, r.data) : r.data);
-      else setFetchError(r.error || t("diff.fetchFailed"));
-      setFetching(false);
+      try {
+        let r;
+        if (isCompare) r = await gitApi().compareFileDiff(currentRepo, compareFrom!, compareTo!, filePath);
+        else if (diffCommit) r = await gitApi().commitFileDiff(currentRepo, diffCommit, filePath);
+        else if (isUntracked) r = await gitApi().readWorkingFile(currentRepo, filePath);
+        else r = await gitApi().diffFile(currentRepo, filePath, isStaged, fromPath);
+        if (cancelled) return;
+        if (r.success && r.data !== undefined) setDiffText(isUntracked ? buildUntrackedDiff(filePath, r.data) : r.data);
+        else setFetchError(r.error || t("diff.fetchFailed"));
+      } catch (err: any) {
+        if (!cancelled) setFetchError(err?.message || t("diff.fetchFailed"));
+      } finally {
+        if (!cancelled) setFetching(false);
+      }
     })();
+    return () => { cancelled = true; };
   }, [currentRepo, filePath, isStaged, status, fromPath, refreshKey, diffCommit, isCompare, compareFrom, compareTo, rawDiff]);
 
   // Load history / blame data when those tabs are opened

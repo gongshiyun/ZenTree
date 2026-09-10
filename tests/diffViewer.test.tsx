@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, fireEvent, cleanup, waitFor, act } from "@testing-library/react";
 import DiffViewer from "../src/components/DiffViewer";
 import { useRepoStore } from "../src/application/repoStore";
 import { setGlobalLocale, t } from "../src/i18n";
@@ -72,6 +72,29 @@ describe("DiffViewer", () => {
     await waitFor(() => expect(container.querySelector(".diff-hunk")).toBeTruthy());
     fireEvent.click([...container.querySelectorAll(".diff-hunk-btn")].find((b) => b.textContent === t("diff.stageBtn"))!);
     await waitFor(() => expect(calls.some(([name]) => name === "stageHunk")).toBe(true));
+  });
+
+  it("ignores a stale diff response after the selected file changes", async () => {
+    let resolveA: ((value: unknown) => void) | undefined;
+    installApi({
+      diffFile: (_repo: string, filePath: string) => {
+        if (filePath === "a.txt") return new Promise((resolve) => { resolveA = resolve; });
+        return Promise.resolve({ success: true, data: "@@ -1,1 +1,1 @@\n+B_ONLY\n" });
+      },
+    });
+    const { container, rerender } = render(
+      <DiffViewer filePath="a.txt" isStaged={false} onClose={() => {}} />,
+    );
+    await waitFor(() => expect(resolveA).toBeTypeOf("function"));
+
+    rerender(<DiffViewer filePath="b.txt" isStaged={false} onClose={() => {}} />);
+    await waitFor(() => expect(container.textContent).toContain("B_ONLY"));
+
+    await act(async () => {
+      resolveA!({ success: true, data: "@@ -1,1 +1,1 @@\n+A_STALE\n" });
+    });
+    expect(container.textContent).toContain("B_ONLY");
+    expect(container.textContent).not.toContain("A_STALE");
   });
 
   it("unstages a hunk from a staged diff", async () => {

@@ -2,6 +2,24 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.3.9] - 2026-09-10
+
+### Fixed
+
+- Discarding staged modifications, new files and renames now restores both the index and working tree instead of leaving the staged change behind
+- The file panel classifies staged, partially staged and renamed files from per-file index/worktree state, preventing duplicate unstaged rows and missing staged renames
+- The diff panel ignores stale responses after switching files, so a slow request can no longer display the wrong diff or apply a hunk to the wrong path
+- Working-tree file reads and writes now reject traversal, absolute paths and symlink escapes outside the repository
+- Automatic refresh now uses a repository fingerprint covering HEAD, refs, index/worktree changes and untracked file content, so repeated edits and external branch/tag updates are detected
+- Commit-graph lane allocation keeps merged branches separate until their common ancestor instead of overlapping them on one lane
+- Cancelling Amend restores the user's draft and prevents a late commit-message response from overwriting it
+- Hunk stage/unstage/revert patches preserve no-newline markers, fixing operations on files without a trailing newline
+- Git Bash discovery correctly resolves `bin\git.exe` and `cmd\git.exe` configurations without returning `git.exe` as the shell
+
+### Testing
+
+- 427 -> 445 tests: staged discard, file-state classification, stale diff responses, path/symlink confinement, repository fingerprints, merge-lane layout, Amend races, no-newline hunks and Git Bash discovery
+
 ## [1.3.8] - 2026-09-04
 
 ### Features

@@ -14,38 +14,42 @@ export function buildGraphData(logEntries: CommitLogEntry[]): GraphData {
   if (logEntries.length === 0) return { nodes: [], edges: [], maxLane: 0 };
   const n = logEntries.length;
   const hashToIndex = new Map<string, number>();
-  for (let i = 0; i < n; i++) hashToIndex.set(logEntries[i].hash, i);
-
-  // Pre-build parent -> children map (O(n) total)
-  const childMap = new Map<string, number[]>();
+  const loadedHashes = new Set<string>();
   for (let i = 0; i < n; i++) {
-    for (const p of logEntries[i].parents) {
-      let arr = childMap.get(p);
-      if (!arr) { arr = []; childMap.set(p, arr); }
-      arr.push(i);
-    }
+    hashToIndex.set(logEntries[i].hash, i);
+    loadedHashes.add(logEntries[i].hash);
   }
 
+  // Each lane is waiting for the next commit expected on that branch. A commit
+  // may be referenced by multiple children; when it is reached, those lanes
+  // converge and the duplicate lanes become free again.
   const activeColumns: (string | null)[] = [];
   const nodeLanes: number[] = new Array(n).fill(-1);
   for (let i = 0; i < n; i++) {
     const commit = logEntries[i];
-    let lane = -1;
-    const childIndices = childMap.get(commit.hash);
-    if (!childIndices || childIndices.length === 0) {
+    let lane = activeColumns.indexOf(commit.hash);
+    if (lane === -1) {
       lane = activeColumns.indexOf(null);
       if (lane === -1) { lane = activeColumns.length; activeColumns.push(null); }
-    } else {
-      for (const childIdx of childIndices) {
-        if (nodeLanes[childIdx] !== -1) { lane = nodeLanes[childIdx]; break; }
-      }
-      if (lane === -1) {
-        lane = activeColumns.indexOf(null);
-        if (lane === -1) { lane = activeColumns.length; activeColumns.push(null); }
-      }
     }
     nodeLanes[i] = lane;
-    activeColumns[lane] = commit.hash;
+
+    // All other lanes waiting for this commit converge into the chosen lane.
+    for (let j = 0; j < activeColumns.length; j++) {
+      if (j !== lane && activeColumns[j] === commit.hash) activeColumns[j] = null;
+    }
+
+    const parents = commit.parents.filter((parent) => loadedHashes.has(parent));
+    activeColumns[lane] = parents[0] ?? null;
+    for (const parent of parents.slice(1)) {
+      if (activeColumns.includes(parent)) continue;
+      let parentLane = activeColumns.indexOf(null);
+      if (parentLane === -1) {
+        parentLane = activeColumns.length;
+        activeColumns.push(null);
+      }
+      activeColumns[parentLane] = parent;
+    }
   }
 
   const nodes: GraphNode[] = logEntries.map((entry, i) => ({

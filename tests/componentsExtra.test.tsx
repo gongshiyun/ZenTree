@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, fireEvent, cleanup, waitFor, screen } from "@testing-library/react";
+import { render, fireEvent, cleanup, waitFor, screen, act } from "@testing-library/react";
 import { useRepoStore } from "../src/application/repoStore";
 import { setGlobalLocale, t } from "../src/i18n";
 import RefNameDialog from "../src/components/RefNameDialog";
@@ -148,6 +148,29 @@ describe("CommitBar", () => {
     await waitFor(() => {
       expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe("previous commit\n");
     });
+  });
+
+  it("restores the draft and ignores a stale amend response when toggled off", async () => {
+    let resolveLastMessage: ((value: unknown) => void) | undefined;
+    installApi({ lastMessage: () => new Promise((resolve) => { resolveLastMessage = resolve; }) });
+    resetStore({
+      currentRepo: "/r",
+      status: { staged: ["a.txt"], created: [], modified: [], deleted: [], renamed: [], not_added: [], conflicted: [], files: [], current: "main" },
+    });
+    const { container } = render(<CommitBar />);
+    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
+    const checkbox = container.querySelector("input[type='checkbox']") as HTMLInputElement;
+
+    fireEvent.change(textarea, { target: { value: "my draft" } });
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(resolveLastMessage).toBeTypeOf("function"));
+    fireEvent.click(checkbox);
+    expect(textarea.value).toBe("my draft");
+
+    await act(async () => {
+      resolveLastMessage!({ success: true, data: "previous commit\n" });
+    });
+    expect(textarea.value).toBe("my draft");
   });
 
   it("keeps what the user types in the message box", () => {

@@ -310,6 +310,7 @@ export interface GitStatusData {
   staged: string[]; modified: string[]; created: string[]; deleted: string[];
   renamed: { from: string; to: string }[]; not_added: string[]; conflicted: string[];
   files: { path: string; index: string; working_dir: string }[]; current: string;
+  fingerprint?: string;
 }
 
 export interface CommitDetail { hash: string; author: string; email: string; timestamp: number; subject: string; files: string[]; stats?: CommitFileStat[]; }
@@ -328,6 +329,8 @@ export interface DiffLine {
   content: string;
   oldLineNum?: number;
   newLineNum?: number;
+  /** True when this line is followed by a no-newline marker in the patch. */
+  noNewline?: boolean;
 }
 
 declare global {

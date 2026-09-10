@@ -76,6 +76,63 @@ describe("FilePanel", () => {
     expect(container.textContent).toContain("staged.txt");
   });
 
+  it("does not duplicate a fully staged modification in the unstaged list", () => {
+    installApi();
+    const status = makeStatus();
+    // simple-git reports a file in both `staged` and `modified` once its
+    // index-side change is staged, even when the working tree matches the index.
+    useRepoStore.setState({ status: { ...status, modified: ["staged.txt", "modified.txt"] } });
+    const { container } = render(<FilePanel />);
+
+    const unstagedRow = [...container.querySelectorAll(".file-item")]
+      .find((el) => el.querySelector(".file-name")?.textContent === "staged.txt");
+    expect(unstagedRow).toBeUndefined();
+
+    fireEvent.click([...container.querySelectorAll(".file-tab")].find((t) => t.textContent?.includes("Staged"))!);
+    expect(rowByFile(container, "staged.txt")).toBeTruthy();
+  });
+
+  it("shows a staged rename in the staged list only", () => {
+    installApi();
+    useRepoStore.setState({
+      status: {
+        ...makeStatus(),
+        staged: [],
+        modified: [],
+        not_added: [],
+        conflicted: [],
+        renamed: [{ from: "old.txt", to: "new.txt" }],
+        files: [{ path: "new.txt", index: "R", working_dir: " ", from: "old.txt" }],
+      },
+    });
+    const { container } = render(<FilePanel />);
+
+    expect(container.textContent).not.toContain("new.txt");
+    fireEvent.click([...container.querySelectorAll(".file-tab")].find((t) => t.textContent?.includes("Staged"))!);
+    const row = rowByFile(container, "old.txt \u2192 new.txt");
+    expect([...row.querySelectorAll("button")].some((b) => b.textContent === "Unstage")).toBe(true);
+  });
+
+  it("shows a partially staged file in both lists", () => {
+    installApi();
+    useRepoStore.setState({
+      status: {
+        ...makeStatus(),
+        staged: ["partial.txt"],
+        modified: ["partial.txt"],
+        not_added: [],
+        conflicted: [],
+        renamed: [],
+        files: [{ path: "partial.txt", index: "M", working_dir: "M" }],
+      },
+    });
+    const { container } = render(<FilePanel />);
+
+    expect(rowByFile(container, "partial.txt")).toBeTruthy();
+    fireEvent.click([...container.querySelectorAll(".file-tab")].find((t) => t.textContent?.includes("Staged"))!);
+    expect(rowByFile(container, "partial.txt")).toBeTruthy();
+  });
+
   it("stages a single unstaged file through gitApi().stage", async () => {
     installApi({ stage: () => Promise.resolve({ success: true }) });
     useRepoStore.setState({ status: makeStatus() });

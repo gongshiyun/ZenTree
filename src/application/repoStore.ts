@@ -337,13 +337,14 @@ export const useRepoStore = create<AppState>((set, get) => ({
     const state = get();
     const repo = state.currentRepo;
     if (!repo || state.loading || state.ongoing) return;
-    // Two cheap calls in parallel: status + single-commit log (HEAD hash).
-    const [r, head] = await Promise.all([gitApi().status(repo), gitApi().log(repo, 0, 1)]);
+    // Status carries a repository-wide fingerprint covering HEAD, refs, staged
+    // and unstaged diffs, and untracked file content.
+    const r = await gitApi().status(repo);
     if (!r.success) return;
     // The user may have switched tab while those two calls were in flight, and
     // the fingerprint belongs to the repository it was computed from.
     if (get().currentRepo !== repo) return;
-    const fp = statusFingerprint(r.data) + "@" + (head.success ? head.data?.[0]?.hash ?? "" : "");
+    const fp = r.data?.fingerprint ?? statusFingerprint(r.data);
     if (fp === state.lastStatusFingerprint) return;
     set({ lastStatusFingerprint: fp });
     await get().refreshAll(repo, true);
@@ -515,7 +516,9 @@ export const useRepoStore = create<AppState>((set, get) => ({
           // Keep the silent-refresh fingerprint in sync so the first watch event
           // after a manual refresh does not trigger a redundant full refresh.
           const headHash = entries.length > 0 ? entries[0].hash : undefined;
-          set({ lastStatusFingerprint: statusFingerprint(snapshot.status ?? undefined) + "@" + (headHash ?? "") });
+          const fingerprint = snapshot.status?.fingerprint
+            ?? statusFingerprint(snapshot.status ?? undefined) + "@" + (headHash ?? "");
+          set({ lastStatusFingerprint: fingerprint });
         }
       } else if (branchResult.error && isActive()) {
         set({ error: branchResult.error });

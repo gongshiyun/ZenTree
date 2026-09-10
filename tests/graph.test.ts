@@ -51,6 +51,22 @@ describe("buildGraphData layout", () => {
     expect(g.edges).toHaveLength(2);
   });
 
+  it("keeps merged branches on separate lanes until their common ancestor", () => {
+    const entries = [
+      entry("merge", ["main", "side"]),
+      entry("main", ["base"]),
+      entry("side", ["base"]),
+      entry("base", []),
+    ];
+    const g = buildGraphData(entries);
+
+    expect(g.maxLane).toBe(2);
+    expect(g.nodes.map((n) => n.lane)).toEqual([0, 0, 1, 0]);
+    const mergeToSide = g.edges.find((e) => e.fromY === g.nodes[0].y && e.toY === g.nodes[2].y);
+    expect(mergeToSide).toBeDefined();
+    expect(mergeToSide!.fromX).not.toBe(mergeToSide!.toX);
+  });
+
   it("ignores parents outside the loaded log window", () => {
     // root's parent is not part of the log (pagination) => no edge for it
     const entries = [entry("tip", ["root"]), entry("root", ["outside"])];

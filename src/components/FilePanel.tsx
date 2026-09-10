@@ -45,49 +45,56 @@ export default function FilePanel() {
   const [fileMenu, setFileMenu] = useState<{ x: number; y: number; file: FileEntry } | null>(null);
   const [mergeFile, setMergeFile] = useState<string | null>(null);
 
+  const statusFiles = useMemo(() => (status?.files || []).map((f) => {
+    let path = f.path;
+    let fromPath = (f as { from?: string }).from;
+    const arrow = path.indexOf(" -> ");
+    if (arrow >= 0) {
+      fromPath = path.substring(0, arrow);
+      path = path.substring(arrow + 4);
+    }
+    return { path, fromPath, index: f.index, workingDir: f.working_dir };
+  }), [status]);
+
   const unstagedFiles = useMemo((): FileEntry[] => {
     if (!status) return [];
-    const indexOf = new Map(status.files.map((f) => [f.path, f.index]));
     const e: FileEntry[] = [];
-    for (const f of status.not_added || []) e.push({ path: f, status: "untracked" });
-    for (const f of status.modified || []) e.push({ path: f, status: "modified" });
-    for (const f of status.deleted || []) {
-      // A staged deletion is fully represented in the staged tab.
-      if (indexOf.get(f) === "D") continue;
-      e.push({ path: f, status: "deleted" });
+    for (const f of statusFiles) {
+      if (status.conflicted.includes(f.path)) {
+        e.push({ path: f.path, status: "conflict" });
+      } else if (f.index === "?" || f.workingDir === "?") {
+        e.push({ path: f.path, status: "untracked" });
+      } else if (f.workingDir === "D") {
+        e.push({ path: f.path, status: "deleted" });
+      } else if (f.workingDir === "R" || f.workingDir === "C") {
+        const from = f.fromPath || f.path;
+        e.push({ path: f.path, label: `${from} \u2192 ${f.path}`, status: "renamed", discardPaths: [from, f.path], fromPath: f.fromPath });
+      } else if (f.workingDir !== " ") {
+        e.push({ path: f.path, status: "modified" });
+      }
     }
-    for (const r of status.renamed || []) {
-      e.push({ path: r.to, label: `${r.from} \u2192 ${r.to}`, status: "renamed", discardPaths: [r.from, r.to], fromPath: r.from });
-    }
-    for (const f of status.conflicted || []) e.push({ path: f, status: "conflict" });
     return e;
-  }, [status]);
+  }, [status, statusFiles]);
 
   const stagedFiles = useMemo((): FileEntry[] => {
     if (!status) return [];
-    const indexOf = new Map<string, string>();
-    for (const f of status.files) {
-      indexOf.set(f.path, f.index);
-      // simple-git reports renames in files[].path as "from -> to"
-      if (f.index === "R" && f.path.includes(" -> ")) {
-        indexOf.set(f.path.split(" -> ")[1], "R");
-      }
-    }
-    return status.staged.map((f) => {
-      const idx = indexOf.get(f) || "";
+    return statusFiles.filter((f) => f.index !== " " && f.index !== "?" && f.index !== "U").map((f) => {
       let st: FileStatus = "modified";
-      let fromPath: string | undefined;
-      if (idx === "A") st = "added";
-      else if (idx === "D") st = "deleted";
-      else if (idx === "R") {
+      if (f.index === "A") st = "added";
+      else if (f.index === "D") st = "deleted";
+      else if (f.index === "R" || f.index === "C") {
         st = "renamed";
-        const m = status.files.find((x) => x.index === "R" && x.path.split(" -> ")[1] === f);
-        if (m) fromPath = m.path.split(" -> ")[0];
       }
-      else if (status.created.includes(f)) st = "added";
-      return { path: f, status: st, fromPath };
+      const label = st === "renamed" && f.fromPath ? `${f.fromPath} \u2192 ${f.path}` : undefined;
+      return {
+        path: f.path,
+        label,
+        status: st,
+        fromPath: f.fromPath,
+        discardPaths: st === "renamed" && f.fromPath ? [f.fromPath, f.path] : undefined,
+      };
     });
-  }, [status]);
+  }, [status, statusFiles]);
 
   const runOp = useCallback(async (op: () => Promise<{ success: boolean; error?: string }>, label: string, okMsg: string) => {
     if (!currentRepo) return;

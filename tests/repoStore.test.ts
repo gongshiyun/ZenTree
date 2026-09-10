@@ -18,7 +18,7 @@ function makeApi() {
     getSettings: vi.fn(async () => null),
     branches: vi.fn(async (_repo: string) => ({ success: true, data: { current: "main", all: ["main"], branches: {} } })),
     log: vi.fn(async () => ({ success: true, data: [] as CommitLogEntry[] })),
-    status: vi.fn(async () => ({ success: true, data: emptyStatus })),
+    status: vi.fn(async () => ({ success: true, data: { ...emptyStatus, fingerprint: "status-default" } })),
     tags: vi.fn(async () => ({ success: true, data: [] })),
     remotes: vi.fn(async () => ({ success: true, data: [] })),
     branchTracking: vi.fn(async () => ({ success: true, data: [] })),
@@ -158,7 +158,7 @@ describe("refreshAll", () => {
     expect(s().logSkip).toBe(2);
     expect(s().hasMoreCommits).toBe(false);
     expect(s().graphData.branchRefs).toEqual({ h2: ["main"], h1: ["dev"] });
-    expect(s().status).toEqual(emptyStatus);
+    expect(s().status).toMatchObject(emptyStatus);
     expect(s().ongoing).toBeNull();
     expect(s().loading).toBe(false);
     expect(s().error).toBeNull();
@@ -231,7 +231,7 @@ describe("incremental watch wiring", () => {
 
 describe("silentDiffRefresh", () => {
   it("short-circuits when nothing changed (same fingerprint)", async () => {
-    const statusA = { ...emptyStatus, modified: ["a.txt"] };
+    const statusA = { ...emptyStatus, modified: ["a.txt"], fingerprint: "fp-1" };
     api.status.mockResolvedValue({ success: true, data: statusA });
     api.log.mockResolvedValue({ success: true, data: [entry("h1", "c1")] });
     useRepoStore.setState({ currentRepo: "/r/a", lastStatusFingerprint: "seed" });
@@ -247,14 +247,13 @@ describe("silentDiffRefresh", () => {
     expect(api.branches).not.toHaveBeenCalled();
   });
 
-  it("detects HEAD moves in detached state via the head hash", async () => {
-    api.status.mockResolvedValue({ success: true, data: emptyStatus });
-    api.log.mockResolvedValue({ success: true, data: [entry("h1", "c1")] });
+  it("detects content changes through the repository fingerprint", async () => {
+    api.status.mockResolvedValue({ success: true, data: { ...emptyStatus, fingerprint: "fp-1" } });
     useRepoStore.setState({ currentRepo: "/r/a", lastStatusFingerprint: "seed" });
     await s().silentDiffRefresh();
     api.branches.mockClear();
 
-    api.log.mockResolvedValue({ success: true, data: [entry("h2", "c2")] }); // new HEAD, same status
+    api.status.mockResolvedValue({ success: true, data: { ...emptyStatus, fingerprint: "fp-2" } });
     await s().silentDiffRefresh();
     expect(api.branches).toHaveBeenCalledTimes(1);
   });
@@ -292,10 +291,10 @@ describe("checkoutBranch", () => {
 describe("refreshAll fingerprint sync", () => {
   it("writes the fingerprint after a successful refresh", async () => {
     api.log.mockResolvedValue({ success: true, data: [entry("h1", "c1")] });
+    api.status.mockResolvedValue({ success: true, data: { ...emptyStatus, fingerprint: "fp-1" } });
     useRepoStore.setState({ currentRepo: "/r/a" });
     await s().refreshAll();
-    expect(s().lastStatusFingerprint).toContain("h1");
-    expect(s().lastStatusFingerprint).toContain("main");
+    expect(s().lastStatusFingerprint).toBe("fp-1");
   });
 });
 

@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as childProcess from "child_process";
+import { createHash } from "crypto";
 
 const LOG_SEP = "|||ZENTREE|||";
 
@@ -75,11 +76,42 @@ export class GitRepository {
   }
 
   async status(repoPath: string) {
-    const status = await this.git(repoPath).status();
+    const git = this.git(repoPath);
+    const status = await git.status();
+    const [head, refs, unstagedRaw, stagedRaw] = await Promise.all([
+      git.raw(["rev-parse", "--verify", "HEAD"]).catch(() => ""),
+      git.raw(["for-each-ref", "--format=%(refname)%00%(objectname)"]),
+      git.raw(["diff", "--raw", "-z", "--no-ext-diff"]),
+      git.raw(["diff", "--cached", "--raw", "-z", "--no-ext-diff"]),
+    ]);
+    const hash = createHash("sha1");
+    hash.update(head);
+    hash.update(refs);
+    hash.update(unstagedRaw);
+    hash.update(stagedRaw);
+    // Raw diffs carry the index blob ids and modes. Hash the working-tree file
+    // content for paths with working-side changes or untracked files, keeping
+    // the probe bounded for unusually large files.
+    const files = [...status.files].sort((a, b) => a.path.localeCompare(b.path));
+    for (const file of files) {
+      hash.update(`${file.index}\0${file.working_dir}\0${file.path}\0`);
+      if (file.working_dir === " " && file.index !== "?") continue;
+      const fullPath = path.join(repoPath, file.path);
+      try {
+        const stat = fs.statSync(fullPath);
+        hash.update(`${stat.size}\0${stat.mtimeMs}\0`);
+        if (stat.isFile() && stat.size <= 2 * 1024 * 1024) {
+          hash.update(fs.readFileSync(fullPath));
+        }
+      } catch {
+        hash.update("missing\0");
+      }
+    }
     return {
       staged: status.staged, modified: status.modified, created: status.created,
       deleted: status.deleted, renamed: status.renamed, not_added: status.not_added,
       conflicted: status.conflicted, files: status.files, current: status.current,
+      fingerprint: hash.digest("hex"),
     };
   }
 
@@ -133,9 +165,43 @@ export class GitRepository {
     return this.git(repoPath).raw(["show", "--format=", hash, "--", filePath]);
   }
 
+  /** Resolve a repository-relative working-tree path and reject escapes via
+   * traversal, absolute paths or symlinked parents. */
+  private resolveWorkingFilePath(repoPath: string, filePath: string): string {
+    if (!filePath || filePath.includes("\0") || path.isAbsolute(filePath) ||
+        filePath.split(/[\\/]/).includes("..")) {
+      throw new Error("Invalid file path");
+    }
+    let root: string;
+    try {
+      root = fs.realpathSync(repoPath);
+    } catch {
+      throw new Error("Invalid file path");
+    }
+    const fullPath = path.resolve(root, filePath);
+    const isInside = (candidate: string) => {
+      const rel = path.relative(root, candidate);
+      return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+    };
+    if (!isInside(fullPath)) throw new Error("Invalid file path");
+
+    // Resolve the nearest existing ancestor so a symlinked directory cannot
+    // redirect a read or write outside the repository.
+    let existing = fullPath;
+    while (!fs.existsSync(existing)) {
+      const parent = path.dirname(existing);
+      if (parent === existing) break;
+      existing = parent;
+    }
+    const realExisting = fs.realpathSync(existing);
+    const target = path.resolve(realExisting, path.relative(existing, fullPath));
+    if (!isInside(target)) throw new Error("Invalid file path");
+    return fullPath;
+  }
+
   /** Read the current working-tree content of a file (e.g. untracked files). */
   async readWorkingFile(repoPath: string, filePath: string): Promise<string> {
-    const fullPath = path.join(repoPath, filePath);
+    const fullPath = this.resolveWorkingFilePath(repoPath, filePath);
     if (!fs.existsSync(fullPath) || fs.statSync(fullPath).isDirectory()) {
       throw new Error("File does not exist");
     }
@@ -167,11 +233,7 @@ export class GitRepository {
 
   /** Write text content back to the working tree with traversal protection and EOL preservation. */
   async writeWorkingFile(repoPath: string, filePath: string, content: string): Promise<boolean> {
-    const root = path.resolve(repoPath);
-    const fullPath = path.resolve(repoPath, filePath);
-    if (filePath.split(/[\\/]/).includes("..") || !fullPath.startsWith(root + path.sep)) {
-      throw new Error("Invalid file path");
-    }
+    const fullPath = this.resolveWorkingFilePath(repoPath, filePath);
     let output = content;
     if (fs.existsSync(fullPath)) {
       const raw = fs.readFileSync(fullPath, "utf8");
@@ -230,13 +292,17 @@ export class GitRepository {
     const status = await git.status();
     const untracked = new Set(status.not_added);
     const toClean: string[] = [];
-    const toCheckout: string[] = [];
+    const toRestore: string[] = [];
     for (const f of files) {
       if (untracked.has(f)) toClean.push(f);
-      else toCheckout.push(f);
+      else toRestore.push(f);
     }
     if (toClean.length > 0) await git.raw(["clean", "-f", "--", ...toClean]);
-    if (toCheckout.length > 0) await git.checkout(toCheckout);
+    if (toRestore.length > 0) {
+      // `git checkout -- <path>` restores only the working tree from the index,
+      // so staged changes would survive a discard. Restore both sides from HEAD.
+      await git.raw(["restore", "--source=HEAD", "--staged", "--worktree", "--", ...toRestore]);
+    }
     return true;
   }
 
@@ -588,22 +654,23 @@ export class GitRepository {
     if (settingsGitPath && settingsGitPath !== "git") {
       const gitExe = path.resolve(settingsGitPath);
       const candidates = [
-        gitExe.replace(/\bin\git\.exe$/i, "\git-bash.exe"),
-        gitExe.replace(/\cmd\git\.exe$/i, "\..\git-bash.exe"),
+        gitExe.replace(/([\\/])bin([\\/])git\.exe$/i, "$1..$2git-bash.exe"),
+        gitExe.replace(/([\\/])cmd([\\/])git\.exe$/i, "$1..$2git-bash.exe"),
         path.join(path.dirname(gitExe), "..", "git-bash.exe"),
       ];
       for (const c of candidates) {
-        if (fs.existsSync(path.normalize(c))) return path.normalize(c);
+        const candidate = path.normalize(c);
+        if (candidate !== gitExe && fs.existsSync(candidate)) return candidate;
       }
     }
 
     // Tier 2: Hardcoded paths + env vars
     const hardPaths = [
-      "C:\Program Files\Git\git-bash.exe",
-      "C:\Program Files (x86)\Git\git-bash.exe",
+      path.join("C:\\Program Files", "Git", "git-bash.exe"),
+      path.join("C:\\Program Files (x86)", "Git", "git-bash.exe"),
       path.join(process.env.LOCALAPPDATA || "", "Programs", "Git", "git-bash.exe"),
-      path.join(process.env.ProgramFiles || "C:\Program Files", "Git", "git-bash.exe"),
-      path.join(process.env.ProgramW6432 || "C:\Program Files", "Git", "git-bash.exe"),
+      path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "git-bash.exe"),
+      path.join(process.env.ProgramW6432 || "C:\\Program Files", "Git", "git-bash.exe"),
     ];
     for (const p of hardPaths) { if (fs.existsSync(p)) return p; }
 

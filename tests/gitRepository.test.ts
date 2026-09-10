@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { GitRepository, parseHostingUrl } from "../electron/gitRepository";
+import { buildHunkPatch, parseDiff } from "../src/domain/diff/parser";
 
 /**
  * Integration tests against a real `git` binary.
@@ -109,6 +110,39 @@ describe("conflict stages (showStage / writeWorkingFile)", () => {
     await expect(repo.writeWorkingFile(dir, "sub/../escape.txt", "x")).rejects.toThrow(/Invalid file path/);
   });
 
+  it("rejects reading outside the repository", async () => {
+    const dir = makeRepo("read-traversal");
+    await initRepo(dir);
+    const outside = path.join(dir, "..", "outside.txt");
+    fs.writeFileSync(outside, "secret\n", "utf8");
+    try {
+      await expect(repo.readWorkingFile(dir, "../outside.txt")).rejects.toThrow(/Invalid file path/);
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
+  });
+
+  it("rejects reads and writes escaping through a symlinked directory", async (ctx) => {
+    const dir = makeRepo("symlink-traversal");
+    await initRepo(dir);
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "zentree-outside-"));
+    const outsideFile = path.join(outsideDir, "secret.txt");
+    fs.writeFileSync(outsideFile, "secret\n", "utf8");
+    try {
+      try {
+        fs.symlinkSync(outsideDir, path.join(dir, "linked"), process.platform === "win32" ? "junction" : "dir");
+      } catch {
+        ctx.skip();
+        return;
+      }
+      await expect(repo.readWorkingFile(dir, "linked/secret.txt")).rejects.toThrow(/Invalid file path/);
+      await expect(repo.writeWorkingFile(dir, "linked/secret.txt", "overwritten")).rejects.toThrow(/Invalid file path/);
+      expect(fs.readFileSync(outsideFile, "utf8")).toBe("secret\n");
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects binary and oversized files on read", async () => {
     const dir = makeRepo("read-binary");
     await initRepo(dir);
@@ -131,6 +165,39 @@ describe("stashDiff", () => {
     expect(diff).toContain("s.txt");
     expect(diff).toContain("-v1");
     expect(diff).toContain("+v2");
+  });
+});
+
+describe("hunk patches without a trailing newline", () => {
+  it("stages a hunk when both versions lack a trailing newline", async () => {
+    const dir = makeRepo("hunk-no-newline");
+    await initRepo(dir);
+    writeFile(dir, "f.txt", "a");
+    await commitAll(dir, "initial");
+    writeFile(dir, "f.txt", "b");
+
+    const diff = await repo.diffFile(dir, "f.txt", false);
+    const patch = buildHunkPatch("f.txt", parseDiff(diff)[0]);
+    await repo.stageHunk(dir, patch);
+
+    const st = await repo.status(dir);
+    expect(st.staged).toContain("f.txt");
+    expect(await repo.diffFile(dir, "f.txt", true)).toContain("\\ No newline at end of file");
+  });
+
+  it("reverts a hunk when both versions lack a trailing newline", async () => {
+    const dir = makeRepo("hunk-no-newline-revert");
+    await initRepo(dir);
+    writeFile(dir, "f.txt", "a");
+    await commitAll(dir, "initial");
+    writeFile(dir, "f.txt", "b");
+
+    const diff = await repo.diffFile(dir, "f.txt", false);
+    const patch = buildHunkPatch("f.txt", parseDiff(diff)[0]);
+    await repo.revertHunk(dir, patch);
+
+    expect(fs.readFileSync(path.join(dir, "f.txt"), "utf8")).toBe("a");
+    expect((await repo.status(dir)).modified).not.toContain("f.txt");
   });
 });
 
@@ -231,6 +298,47 @@ describe("working-tree diffs", () => {
   });
 });
 
+describe("repository status fingerprint", () => {
+  it("changes when an already-modified file changes again", async () => {
+    const dir = makeRepo("status-fingerprint-content");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "base\n");
+    await commitAll(dir, "initial");
+    writeFile(dir, "a.txt", "first edit\n");
+    const first = (await repo.status(dir)).fingerprint;
+    writeFile(dir, "a.txt", "second edit\n");
+    const second = (await repo.status(dir)).fingerprint;
+
+    expect(first).toBeTruthy();
+    expect(second).not.toBe(first);
+  });
+
+  it("changes when a repository ref changes without moving HEAD", async () => {
+    const dir = makeRepo("status-fingerprint-ref");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "base\n");
+    await commitAll(dir, "initial");
+    const before = (await repo.status(dir)).fingerprint;
+    await repo.createBranch(dir, "external-branch", false);
+    const after = (await repo.status(dir)).fingerprint;
+
+    expect(before).toBeTruthy();
+    expect(after).not.toBe(before);
+  });
+
+  it("changes when an untracked file changes without changing size", async () => {
+    const dir = makeRepo("status-fingerprint-untracked");
+    await initRepo(dir);
+    writeFile(dir, "new.txt", "one\n");
+    const before = (await repo.status(dir)).fingerprint;
+    writeFile(dir, "new.txt", "two\n");
+    const after = (await repo.status(dir)).fingerprint;
+
+    expect(before).toBeTruthy();
+    expect(after).not.toBe(before);
+  });
+});
+
 describe("stage all / unstage all", () => {
   it("stages and unstages every change including untracked files", async () => {
     const dir = makeRepo("stage-all");
@@ -251,6 +359,57 @@ describe("stage all / unstage all", () => {
     expect(st.staged).not.toContain("a.txt");
     expect(st.modified).toContain("a.txt");
     expect(st.not_added).toContain("new.txt");
+  });
+});
+
+describe("discard", () => {
+  it("reverts a staged tracked modification to HEAD", async () => {
+    const dir = makeRepo("discard-staged-modified");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "base\n");
+    await commitAll(dir, "initial");
+    writeFile(dir, "a.txt", "changed\n");
+    await repo.stage(dir, ["a.txt"]);
+
+    await repo.discard(dir, ["a.txt"]);
+
+    const st = await repo.status(dir);
+    expect(st.staged).not.toContain("a.txt");
+    expect(st.modified).not.toContain("a.txt");
+    expect(fs.readFileSync(path.join(dir, "a.txt"), "utf8").replace(/\r\n/g, "\n")).toBe("base\n");
+  });
+
+  it("removes a staged new file from both the index and the working tree", async () => {
+    const dir = makeRepo("discard-staged-new");
+    await initRepo(dir);
+    writeFile(dir, "base.txt", "base\n");
+    await commitAll(dir, "initial");
+    writeFile(dir, "new.txt", "new\n");
+    await repo.stage(dir, ["new.txt"]);
+
+    await repo.discard(dir, ["new.txt"]);
+
+    const st = await repo.status(dir);
+    expect(st.staged).not.toContain("new.txt");
+    expect(st.created).not.toContain("new.txt");
+    expect(fs.existsSync(path.join(dir, "new.txt"))).toBe(false);
+  });
+
+  it("restores both sides of a staged rename", async () => {
+    const dir = makeRepo("discard-staged-rename");
+    await initRepo(dir);
+    writeFile(dir, "old.txt", "base\n");
+    await commitAll(dir, "initial");
+    await repo["git"](dir).raw(["mv", "old.txt", "new.txt"]);
+
+    await repo.discard(dir, ["old.txt", "new.txt"]);
+
+    const st = await repo.status(dir);
+    expect(st.renamed).toHaveLength(0);
+    expect(st.staged).toHaveLength(0);
+    expect(fs.existsSync(path.join(dir, "old.txt"))).toBe(true);
+    expect(fs.existsSync(path.join(dir, "new.txt"))).toBe(false);
+    expect(fs.readFileSync(path.join(dir, "old.txt"), "utf8").replace(/\r\n/g, "\n")).toBe("base\n");
   });
 });
 
@@ -944,6 +1103,24 @@ describe("mergetool", () => {
     writeFile(dir, "m.txt", "x\n");
     await commitAll(dir, "c1");
     await expect(repo.mergetool(dir)).rejects.toThrow(/merge tool/i);
+  });
+});
+
+describe("findGitBash", () => {
+  it("finds git-bash beside a configured git executable", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "zentree-git-path-"));
+    const cmdDir = path.join(root, "cmd");
+    const gitExe = path.join(cmdDir, "git.exe");
+    const bashExe = path.join(root, "git-bash.exe");
+    fs.mkdirSync(cmdDir, { recursive: true });
+    fs.writeFileSync(gitExe, "", "utf8");
+    fs.writeFileSync(bashExe, "", "utf8");
+    try {
+      const custom = new GitRepository(() => gitExe);
+      expect(custom.findGitBash()).toBe(bashExe);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

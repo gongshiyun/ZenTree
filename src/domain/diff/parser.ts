@@ -18,6 +18,9 @@ export function parseDiff(diffText: string): DiffHunk[] {
     } else if (cur) {
       if (line.startsWith("-")) cur.lines.push({ type: "deletion", content: line.substring(1), oldLineNum: ol++ });
       else if (line.startsWith("+")) cur.lines.push({ type: "addition", content: line.substring(1), newLineNum: nl++ });
+      else if (line === "\\ No newline at end of file" && cur.lines.length > 0) {
+        cur.lines[cur.lines.length - 1].noNewline = true;
+      }
       else if (line.startsWith(" ") || line === "") cur.lines.push({ type: "context", content: line.startsWith(" ") ? line.substring(1) : line, oldLineNum: ol++, newLineNum: nl++ });
     }
   }
@@ -28,6 +31,9 @@ export function parseDiff(diffText: string): DiffHunk[] {
 /** Rebuild a minimal unified patch for a single hunk (used for stage/unstage/revert). */
 export function buildHunkPatch(filePath: string, h: DiffHunk): string {
   const ls = [`diff --git a/${filePath} b/${filePath}`, `--- a/${filePath}`, `+++ b/${filePath}`, h.header];
-  for (const l of h.lines) ls.push(l.type === "addition" ? "+" + l.content : l.type === "deletion" ? "-" + l.content : " " + l.content);
+  for (const l of h.lines) {
+    ls.push(l.type === "addition" ? "+" + l.content : l.type === "deletion" ? "-" + l.content : " " + l.content);
+    if (l.noNewline) ls.push("\\ No newline at end of file");
+  }
   return ls.join("\n") + "\n";
 }

@@ -15,6 +15,7 @@ export default function CommitBar() {
   const t = useT();
 
   const userMessageRef = useRef("");
+  const lastRepoRef = useRef(currentRepo);
   const [lastCommitMsg, setLastCommitMsg] = useState("");
   const [textareaH, setTextareaH] = useState(72);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -29,20 +30,28 @@ export default function CommitBar() {
   // one tab must never be committed into another.
   useEffect(() => {
     if (!currentRepo) return;
+    if (lastRepoRef.current !== currentRepo) {
+      lastRepoRef.current = currentRepo;
+      userMessageRef.current = "";
+      setLastCommitMsg("");
+      setMessage("");
+      if (amend) setAmend(false);
+      return;
+    }
+    let cancelled = false;
     if (amend) {
       userMessageRef.current = message;
       (async () => {
         try {
           const r = await gitApi().lastMessage(currentRepo);
-          if (r.success && r.data) { setLastCommitMsg(r.data); setMessage(r.data); }
+          if (!cancelled && r.success && r.data) { setLastCommitMsg(r.data); setMessage(r.data); }
         } catch { /* */ }
       })();
     } else {
-      // Unchecking amend clears the message box.
-      setMessage("");
-      userMessageRef.current = "";
       setLastCommitMsg("");
+      setMessage(userMessageRef.current);
     }
+    return () => { cancelled = true; };
   }, [amend, currentRepo]);
 
   // Prefill the message box with the configured commit template when empty.

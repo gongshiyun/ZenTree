@@ -102,6 +102,22 @@ describe("git:discard channel", () => {
     expect(fs.existsSync(path.join(dir, "untracked.txt"))).toBe(false);
   });
 
+  it("reverts staged modifications through the IPC envelope", async () => {
+    const dir = makeRepo("discard-staged");
+    await initRepo(dir);
+    writeFile(dir, "tracked.txt", "base\n");
+    await commitAll(dir, "initial");
+    writeFile(dir, "tracked.txt", "changed\n");
+    await repo.stage(dir, ["tracked.txt"]);
+
+    const res = await invoke("git:discard", dir, ["tracked.txt"]);
+
+    expect(res).toEqual({ success: true, data: true });
+    const st = await repo.status(dir);
+    expect(st.staged).not.toContain("tracked.txt");
+    expect(readFile(dir, "tracked.txt")).toBe("base\n");
+  });
+
   it("returns a failure envelope instead of throwing for a non-repository", async () => {
     const dir = makeRepo("discard-not-a-repo");
     const res = await invoke("git:discard", dir, ["a.txt"]);

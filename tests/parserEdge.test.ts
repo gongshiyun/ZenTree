@@ -34,6 +34,7 @@ describe("parseDiff edge cases", () => {
     ].join("\n");
     const hunks = parseDiff(diff);
     expect(hunks[0].lines).toHaveLength(2);
+    expect(hunks[0].lines[1].noNewline).toBe(true);
   });
 });
 
