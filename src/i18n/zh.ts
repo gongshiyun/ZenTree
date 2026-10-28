@@ -59,6 +59,7 @@ const zh: Record<string, string> = {
   "sidebar.renamePrompt": "输入新分支名称：",
   "sidebar.renaming": "正在重命名分支 {0}...",
   "sidebar.setUpstream": "设置上游...",
+  "sidebar.upstreamPrompt": "输入上游分支（例如 origin/main）：",
   "sidebar.unsetUpstream": "取消上游",
   "sidebar.settingUpstream": "正在为 {0} 设置上游...",
   "sidebar.unsettingUpstream": "正在取消 {0} 的上游...",
@@ -404,5 +405,8 @@ const zh: Record<string, string> = {
   "settings.shortcut.unstageAll": "全部取消暂存",
   "settings.shortcut.discard": "丢弃选中的文件",
   "settings.shortcut.dismiss": "关闭错误提示",
+  "commit.resizeTip": "拖动调整输入框高度",
+  "settings.identityMissing": "当前仓库未配置 user.name / user.email，设置前提交可能失败。",
+  "rebase.firstActionInvalid": "Squash 和 Fixup 不能作为第一个操作——第一个提交请使用 Pick 或 Reword。",
 };
 export default zh;

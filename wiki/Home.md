@@ -1,4 +1,4 @@
-﻿# ZenTree Wiki
+# ZenTree Wiki
 
 A lightweight, modern Git GUI client built with **Electron + React + TypeScript**, delivering SourceTree-like core interactions with a faster, cleaner experience.
 
@@ -6,11 +6,12 @@ A lightweight, modern Git GUI client built with **Electron + React + TypeScript*
 
 | Feature | Description |
 |---------|-------------|
-| Commit Graph | HTML5 Canvas-rendered DAG with bezier curves, zoom/pan, viewport culling (10,000+ commits) |
-| Branch Labels | Colored branch tags rendered on the graph |
-| File Diff Viewer | Side-panel diff with hunk-level stage / unstage / revert |
+| Design Language | Claude Desktop / Claude Code inspired: warm paper surfaces, hairline borders, clay accent, bundled Newsreader + JetBrains Mono fonts (see [[Theming]]) |
+| Commit Graph | Dual-canvas HTML5 DAG with bezier lanes, branch-ref pills, zoom, in-graph search, viewport culling (10,000+ commits) |
+| Branch Labels | Colored branch pills rendered in the graph rail |
+| File Diff Viewer | Side-panel diff with hunk-level stage / unstage / revert (added, deleted and renamed files included) |
 | Three-Column Layout | Branches sidebar · Commit graph + file list · Diff panel |
-| 10 Color Themes | Catppuccin, Dracula, Nord, One Dark Pro, Tokyo Night, Monokai, GitHub Dark, Solarized Dark/Light, Catppuccin Latte |
+| 4 Color Themes | Claude (light, default) · Claude Dark · Claude Code · Claude Sand |
 | i18n | Full English & Chinese with real-time switching |
 | Frameless Window | Custom title bar with native window controls |
 | Amend Commit | Auto-fills last commit message |
@@ -96,8 +97,9 @@ ZenTree/
 │   ├── types/
 │   │   └── index.ts       # Shared TypeScript interfaces
 │   ├── App.tsx            # Root layout + Welcome screen
-│   ├── App.css            # Global styles
-│   ├── theme.css          # CSS custom properties
+│   ├── styles/            # shell.css · panels.css · dialogs.css
+│   ├── assets/fonts/      # Bundled OFL fonts (Newsreader, JetBrains Mono)
+│   ├── theme.css          # Design tokens + global base styles
 │   └── main.tsx           # React entry point
 ├── CHANGELOG.md
 ├── package.json

@@ -25,6 +25,28 @@ interface FileEntry {
 function statLabel(s: FileStatus): string { switch (s) { case "untracked": return "U"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; case "conflict": return "C"; default: return "M"; } }
 function statIcon(s: FileStatus): string { switch (s) { case "untracked": return "U"; case "added": return "A"; case "deleted": return "D"; case "renamed": return "R"; case "conflict": return "C"; default: return "M"; } }
 
+function formatTimestamp(ts: number): string {
+  return new Date(ts * 1000).toLocaleString();
+}
+
+/** Folder glyph for the file tree (inline SVG, follows currentColor). */
+function FolderIcon() {
+  return (
+    <svg className="tree-dir-icon" width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M1.5 3.25c0-.55.45-1 1-1h2.6l1.2 1.4h5.2c.55 0 1 .45 1 1v5.1c0 .55-.45 1-1 1H2.5c-.55 0-1-.45-1-1v-6.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * Paths a selection operation must touch. A rename is split across two paths
+ * (old + new); discarding only one side leaves the other behind, so the whole
+ * set travels with the selection.
+ */
+function selectionPaths(file: FileEntry): string[] {
+  return file.discardPaths && file.discardPaths.length > 0 ? file.discardPaths : [file.path];
+}
+
 export default function FilePanel() {
   const t = useT();
   const [activeTab, setActiveTab] = useState<FileTab>("unstaged");
@@ -108,11 +130,16 @@ export default function FilePanel() {
   }, [currentRepo, setLoading, setError, refreshAll]);
 
   const handleStage = useCallback((file: FileEntry) => {
-    runOp(() => gitApi().stage(currentRepo!, [file.path]), t("status.staging").replace("{0}", file.path), t("error.stageFailed"));
+    // A rename is two index entries: pass both sides so the change is not split
+    // into a deletion on the other tab.
+    const paths = file.discardPaths || [file.path];
+    runOp(() => gitApi().stage(currentRepo!, paths), t("status.staging").replace("{0}", file.path), t("error.stageFailed"));
   }, [runOp, currentRepo, t]);
 
   const handleUnstage = useCallback((file: FileEntry) => {
-    runOp(() => gitApi().unstage(currentRepo!, [file.path]), t("status.unstaging").replace("{0}", file.path), t("error.unstageFailed"));
+    // Symmetric to handleStage: unstage both sides of a rename together.
+    const paths = file.discardPaths || [file.path];
+    runOp(() => gitApi().unstage(currentRepo!, paths), t("status.unstaging").replace("{0}", file.path), t("error.unstageFailed"));
   }, [runOp, currentRepo, t]);
 
   const handleDiscard = useCallback((file: FileEntry) => {
@@ -184,10 +211,15 @@ export default function FilePanel() {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
-      const path = file.discardPaths?.[0] ?? file.path;
-      setSelectedFiles(selectedFiles.includes(path)
-        ? selectedFiles.filter((p) => p !== path)
-        : [...selectedFiles, path]);
+      const paths = selectionPaths(file);
+      const isSelected = paths.some((p) => selectedFiles.includes(p));
+      if (isSelected) {
+        setSelectedFiles(selectedFiles.filter((p) => !paths.includes(p)));
+      } else {
+        // Keep both sides of a rename so Delete cannot leave a half-discarded pair.
+        const additions = paths.filter((p) => !selectedFiles.includes(p));
+        setSelectedFiles([...selectedFiles, ...additions]);
+      }
     }
   }, [selectedFiles, setSelectedFiles]);
 
@@ -222,25 +254,69 @@ export default function FilePanel() {
   }, []);
 
   if (selectedCommit && commitDetail) {
-    return (<div className="file-panel"><div className="file-panel-header">
-      <div className="file-tab active">{t("files.filesIn")} {selectedCommit.substring(0, 7)}</div>
-      <div className="commit-actions">
-        <button className="file-action-btn" onClick={handleCopyHash} title={t("commit.copyHash")}>{t("commit.copy")}</button>
-        <button className="file-action-btn" onClick={handleRevertCommit} title={t("commit.revertTip")}>{t("commit.revert")}</button>
-        <button className="file-action-btn" onClick={handleCherryPick} title={t("commit.cherryPickTip")}>{t("commit.cherryPick")}</button>
-        <button className="file-action-btn" onClick={handleOpenOnHosting} title={t("commit.openOnHostingTip")}>{t("commit.openOnHosting")}</button>
+    const totals = (commitDetail.stats || []).reduce(
+      (acc, s) => (s.binary ? acc : { add: acc.add + s.additions, del: acc.del + s.deletions }),
+      { add: 0, del: 0 },
+    );
+    return (
+      <div className="file-panel">
+        <div className="file-panel-header commit-detail-header">
+          <div className="file-tab active commit-detail-tab">
+            <span className="commit-detail-label">{t("files.filesIn")}</span>{" "}
+            <span className="commit-hash-pill">{selectedCommit.substring(0, 7)}</span>
+          </div>
+          <span className="file-panel-spacer" />
+          <div className="commit-actions">
+            <button className="file-action-btn" onClick={handleCopyHash} title={t("commit.copyHash")}>{t("commit.copy")}</button>
+            <button className="file-action-btn" onClick={handleRevertCommit} title={t("commit.revertTip")}>{t("commit.revert")}</button>
+            <button className="file-action-btn" onClick={handleCherryPick} title={t("commit.cherryPickTip")}>{t("commit.cherryPick")}</button>
+            <button className="file-action-btn" onClick={handleOpenOnHosting} title={t("commit.openOnHostingTip")}>{t("commit.openOnHosting")}</button>
+          </div>
+        </div>
+        <div className="commit-detail-body">
+          <div className="commit-detail-subject" title={commitDetail.subject}>{commitDetail.subject}</div>
+          <div className="commit-detail-meta">
+            <span className="commit-detail-author">{commitDetail.author}</span>
+            <span className="commit-detail-sep" aria-hidden="true">&middot;</span>
+            <span className="commit-detail-time">{formatTimestamp(commitDetail.timestamp)}</span>
+            {(totals.add > 0 || totals.del > 0) && (
+              <span className="commit-detail-stats">
+                <span className="stat-add">+{totals.add}</span>
+                <span className="stat-del">-{totals.del}</span>
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="file-list">
+          {commitDetail.files.map((f) => {
+            const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit;
+            const st = commitDetail.stats?.find((s) => s.path === f);
+            return (
+              <div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, status: "modified", commitHash: selectedCommit })} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setFileMenu({ x: e.clientX, y: e.clientY, file: { path: f, status: "modified" } }); }}>
+                <span className="file-name" title={f}>{f}</span>
+                {st && !st.binary && (<span className="file-stat"><span className="stat-add">+{st.additions}</span><span className="stat-del">-{st.deletions}</span></span>)}
+              </div>
+            );
+          })}
+          {commitDetail.files.length === 0 && (
+            <div className="empty-state file-list-empty">
+              <span className="empty-icon" aria-hidden="true">&#10003;</span>
+              <span className="empty-title">{t("files.noChanged")}</span>
+            </div>
+          )}
+        </div>
       </div>
-    </div><div className="file-list">{commitDetail.files.map((f) => { const isSel = selectedDiffFile?.path === f && selectedDiffFile?.commitHash === selectedCommit; const st = commitDetail.stats?.find((s) => s.path === f); return (<div key={f} className={`file-item${isSel ? " selected" : ""}`} onClick={() => setSelectedDiffFile({ path: f, isStaged: false, status: "modified", commitHash: selectedCommit })} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setFileMenu({ x: e.clientX, y: e.clientY, file: { path: f, status: "modified" } }); }}><span className="file-name" title={f}>{f}</span>{st && !st.binary && (<span className="file-stat"><span className="stat-add">+{st.additions}</span><span className="stat-del">-{st.deletions}</span></span>)}</div>); })}{commitDetail.files.length === 0 && <div className="empty-state">{t("files.noChanged")}</div>}</div></div>);
+    );
   }
 
   const renderFileRow = (file: FileEntry) => {
     const sl = statLabel(file.status);
     const isSel = selectedDiffFile?.path === file.path && selectedDiffFile?.isStaged === (activeTab === "staged");
-    const isSelMulti = selectedFiles.includes(file.discardPaths?.[0] ?? file.path);
+    const isSelMulti = selectionPaths(file).some((p) => selectedFiles.includes(p));
     const display = file.label || file.path;
     return (
       <div className={`file-item${isSel ? " selected" : ""}${isSelMulti ? " multi-selected" : ""}${file.status === "conflict" ? " conflict" : ""}`} onClick={(e) => { toggleSelectFile(e, file); if (!e.defaultPrevented) setSelectedDiffFile({ path: file.path, isStaged: activeTab === "staged", status: file.status, fromPath: file.fromPath }); }} onContextMenu={(e) => handleFileMenu(e, file)} title={t("files.multiSelectHint")}>
-        <span className={`file-status ${sl}`}>{statIcon(file.status)}</span><span className="file-name" title={display}>{display}</span>
+        <span className={`file-status ${file.status}`}>{sl}</span><span className="file-name" title={display}>{display}</span>
         <span className="file-actions" onClick={(e) => e.stopPropagation()}>
           {file.status === "conflict"
             ? <button className="file-action-btn" onClick={() => handleResolveConflict(file)}>{t("files.resolve")}</button>
@@ -262,7 +338,7 @@ export default function FilePanel() {
           <div key={node.path}>
             <div className="tree-dir" style={{ paddingLeft: 8 + depth * 14 }} onClick={() => toggleDir(node.path)}>
               <span className="tree-arrow">{isCollapsed ? "\u25B6" : "\u25BC"}</span>
-              <span className="tree-dir-icon">&#128193;</span>
+              <FolderIcon />
               <span className="tree-dir-name">{node.name}</span>
             </div>
             {!isCollapsed && node.children && renderTree(node.children, depth + 1)}
@@ -275,21 +351,33 @@ export default function FilePanel() {
     })
   );
 
-  return (<div className="file-panel"><div className="file-panel-header">
-    <div className={`file-tab${activeTab === "unstaged" ? " active" : ""}`} onClick={() => setActiveTab("unstaged")}>{t("files.unstaged")} <span className="count">{unstagedFiles.length}</span></div>
-    <div className={`file-tab${activeTab === "staged" ? " active" : ""}`} onClick={() => setActiveTab("staged")}>{t("files.staged")} <span className="count">{stagedFiles.length}</span></div>
-    <span style={{ flex: 1 }} />
-    <button className="file-action-btn" onClick={() => setShowTree(!showTree)} title={showTree ? t("files.flatView") : t("files.treeView")}>{showTree ? "\u2630" : "\u25C4"}</button>
-    {activeTab === "unstaged" && unstagedFiles.length > 0 && (
-      <button className="file-action-btn" onClick={handleStageAll} title={t("files.stageAllTip")}>{t("files.stageAll")}</button>
-    )}
-    {activeTab === "staged" && stagedFiles.length > 0 && (
-      <button className="file-action-btn" onClick={handleUnstageAll} title={t("files.unstageAllTip")}>{t("files.unstageAll")}</button>
-    )}
-  </div><div className="file-list">
-    {showTree ? renderTree(tree, 0) : currentFiles.map((file) => <div key={activeTab + ":" + file.path}>{renderFileRow(file)}</div>)}
-    {currentFiles.length === 0 && <div className="empty-state">{activeTab === "unstaged" ? t("files.noUnstaged") : t("files.noStaged")}</div>}
-  </div>
+  return (
+    <div className="file-panel">
+      <div className="file-panel-header">
+        <div className="file-tabs" role="tablist">
+          <div className={`file-tab${activeTab === "unstaged" ? " active" : ""}`} role="tab" aria-selected={activeTab === "unstaged"} onClick={() => setActiveTab("unstaged")}>{t("files.unstaged")} <span className="count">{unstagedFiles.length}</span></div>
+          <div className={`file-tab${activeTab === "staged" ? " active" : ""}`} role="tab" aria-selected={activeTab === "staged"} onClick={() => setActiveTab("staged")}>{t("files.staged")} <span className="count">{stagedFiles.length}</span></div>
+        </div>
+        <span className="file-panel-spacer" />
+        <div className="file-panel-actions">
+          <button className="file-action-btn" onClick={() => setShowTree(!showTree)} title={showTree ? t("files.flatView") : t("files.treeView")}>{showTree ? "\u2630" : "\u25C4"}</button>
+          {activeTab === "unstaged" && unstagedFiles.length > 0 && (
+            <button className="file-action-btn" onClick={handleStageAll} title={t("files.stageAllTip")}>{t("files.stageAll")}</button>
+          )}
+          {activeTab === "staged" && stagedFiles.length > 0 && (
+            <button className="file-action-btn" onClick={handleUnstageAll} title={t("files.unstageAllTip")}>{t("files.unstageAll")}</button>
+          )}
+        </div>
+      </div>
+      <div className="file-list">
+        {showTree ? renderTree(tree, 0) : currentFiles.map((file) => <div key={activeTab + ":" + file.path}>{renderFileRow(file)}</div>)}
+        {currentFiles.length === 0 && (
+          <div className="empty-state file-list-empty">
+            <span className="empty-icon" aria-hidden="true">{activeTab === "unstaged" ? "\u2713" : "\u2191"}</span>
+            <span className="empty-title">{activeTab === "unstaged" ? t("files.noUnstaged") : t("files.noStaged")}</span>
+          </div>
+        )}
+      </div>
   {fileMenu && (
     <div className="context-menu" style={{ left: fileMenu.x, top: fileMenu.y }}>
       {!selectedCommit && (

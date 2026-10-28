@@ -1,4 +1,4 @@
-﻿# Build and Packaging
+# Build and Packaging
 
 ## Build Pipeline
 
@@ -110,18 +110,30 @@ The main process compiles to CommonJS because Electron's main process uses Node.
 
 ## Testing
 
-ZenTree uses Vitest for both integration and unit tests:
+ZenTree uses Vitest for both integration and unit tests. Integration tests shell out to a real `git`
+binary and run in isolated temp repositories with a hermetic git config (`tests/setup.ts`):
 
 ```bash
-npm test          # run once
+npm test              # run once
 npm run test:watch
+npm run test:coverage # v8 coverage report
+npm run check         # typecheck renderer + main + tests, then run the suite
 ```
 
-- `tests/gitRepository.test.ts` - integration tests against a real git binary
-  (clone, history, blame, revert, compare, cherry-pick, rebase, tags, remotes,
-  filters, conflicts, gitignore, core regression)
-- `tests/domain.test.ts` - pure unit tests (diff parser, hunk patches,
-  highlighting, graph layout, hosting URL parsing)
+- `tests/gitRepository.test.ts` — real-git integration (clone, history, blame, revert, compare,
+  cherry-pick, rebase, tags, remotes, submodules, worktrees, conflicts, hardening, filters, …)
+- `tests/ipc.test.ts` — IPC envelopes, argument validation, destructive channels
+- `tests/domain.test.ts` — pure unit tests (diff parser, hunk patches, highlighting, graph layout,
+  hosting URL parsing)
+- `tests/*.test.tsx` — jsdom component suites
+
+Visual QA tooling (requires a built `dist/`):
+
+```bash
+npm run build && npm run qa:fixture   # deterministic demo repositories
+npm run qa:shots                      # Electron screenshot matrix + layout probes
+npm run qa:css                        # className ↔ stylesheet coverage check
+```
 ## Development vs Production
 
 | Aspect | Development | Production |
@@ -129,7 +141,10 @@ npm run test:watch
 | Renderer source | `http://localhost:5173` | `dist/index.html` |
 | DevTools | Auto-opened | Hidden |
 | HMR | Active | N/A |
-| Detection | `--dev` flag or `NODE_ENV=development` | Default |
+| Detection | `--dev` flag or `NODE_ENV=development` **and** unpackaged | Default |
+
+A packaged app ignores dev-server flags entirely (a stray `--dev` cannot hand a local server the git
+bridge).
 
 ## Dependencies (Runtime)
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import { useRepoStore } from "../application/repoStore";
 import { gitApi } from "../infrastructure/gitBridge";
 import { useT } from "../i18n";
@@ -111,17 +111,21 @@ export default function CommitBar() {
 
   return (
     <div className="commit-bar">
+      {/* Top-edge resize hot zone: drag to grow the composer vertically. */}
+      <div className="commit-resize-handle" onMouseDown={handleResizeStart} title={t("commit.resizeTip")} />
       <div className="commit-body">
         <div className="commit-textarea-wrap">
           <textarea
             ref={textareaRef}
-            style={{ height: textareaH, resize: "none" }}
+            // CSS owns the rendered height (`height: var(--composer-h)`), so a
+            // short-viewport media query can cap the composer without fighting
+            // an inline style. Dragging the top edge only updates this variable.
+            style={{ "--composer-h": `${textareaH}px` } as CSSProperties}
             placeholder={canCommit ? t("commit.placeholder") : t("commit.noStaged")}
             value={message}
             onChange={handleMsgChange}
             onKeyDown={handleKeyDown}
           />
-          <div className="commit-resize-handle" onMouseDown={handleResizeStart} title="Drag to resize" />
         </div>
       </div>
       <div className="commit-options">

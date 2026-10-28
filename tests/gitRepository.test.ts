@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { GitRepository, parseHostingUrl } from "../electron/gitRepository";
 import { buildHunkPatch, parseDiff } from "../src/domain/diff/parser";
+import { buildUntrackedDiff } from "../src/domain/diff/untracked";
 
 /**
  * Integration tests against a real `git` binary.
@@ -23,6 +24,15 @@ function makeRepo(name: string): string {
 
 async function initRepo(dir: string): Promise<void> {
   await repo["git"](dir).raw(["init", "-b", "main"]);
+  await configureIdentity(dir);
+}
+
+/**
+ * Give a throw-away repository its own commit identity. Cloned repositories do
+ * not inherit the source's local config, and relying on the machine's global
+ * `user.name`/`user.email` makes the suite fail on clean CI machines.
+ */
+async function configureIdentity(dir: string): Promise<void> {
   await repo.setConfig(dir, "user.name", "Test User");
   await repo.setConfig(dir, "user.email", "test@example.com");
 }
@@ -544,6 +554,7 @@ describe("remote branch operations", () => {
     const work = makeRepo("remote-work");
     fs.rmdirSync(work);
     await repo["git"](src).raw(["clone", bare, work]);
+    await configureIdentity(work);
     return { src, bare, work };
   }
 
@@ -603,6 +614,7 @@ describe("branch rename & tracking", () => {
     const work = makeRepo(`upstream-work-${Math.random().toString(36).slice(2, 8)}`);
     fs.rmdirSync(work);
     await repo["git"](src).raw(["clone", bare, work]);
+    await configureIdentity(work);
 
     expect(await repo.getUpstream(work, "main")).toBe("origin/main");
     writeFile(work, "b.txt", "b\n");
@@ -693,6 +705,7 @@ describe("pull strategies", () => {
     const work = makeRepo(`pull-work-${Math.random().toString(36).slice(2, 8)}`);
     fs.rmdirSync(work);
     await repo["git"](src).raw(["clone", bare, work]);
+    await configureIdentity(work);
     // diverge: local commit on work, remote commit on src
     writeFile(work, "b.txt", "b\n");
     await commitAll(work, "local");
@@ -1205,5 +1218,257 @@ describe("hostingUrl", () => {
   it("returns null for unsupported URLs", () => {
     expect(parseHostingUrl("file:///c:/repo")).toBeNull();
     expect(parseHostingUrl("")).toBeNull();
+  });
+});
+
+describe("unborn repository (no commits yet)", () => {
+  it("unstages a single file without touching the working tree", async () => {
+    const dir = makeRepo("unborn-unstage-one");
+    await initRepo(dir);
+    writeFile(dir, "new.txt", "content\n");
+    await repo.stage(dir, ["new.txt"]);
+
+    await repo.unstage(dir, ["new.txt"]);
+
+    const st = await repo.status(dir);
+    expect(st.staged).not.toContain("new.txt");
+    expect(st.created).not.toContain("new.txt");
+    expect(st.not_added).toContain("new.txt");
+    expect(fs.existsSync(path.join(dir, "new.txt"))).toBe(true);
+  });
+
+  it("unstages everything before the first commit", async () => {
+    const dir = makeRepo("unborn-unstage-all");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "a\n");
+    writeFile(dir, "nested/b.txt", "b\n");
+    await repo.stageAll(dir);
+    expect((await repo.status(dir)).staged.length).toBeGreaterThan(0);
+
+    await repo.unstageAll(dir);
+
+    const st = await repo.status(dir);
+    expect(st.staged).toEqual([]);
+    expect(st.created).toEqual([]);
+    expect(st.not_added.sort()).toEqual(["a.txt", "nested/b.txt"]);
+  });
+
+  it("discards a staged first file by removing it from the index and disk", async () => {
+    const dir = makeRepo("unborn-discard");
+    await initRepo(dir);
+    writeFile(dir, "first.txt", "first\n");
+    await repo.stage(dir, ["first.txt"]);
+
+    await repo.discard(dir, ["first.txt"]);
+
+    const st = await repo.status(dir);
+    expect(st.staged).toEqual([]);
+    expect(fs.existsSync(path.join(dir, "first.txt"))).toBe(false);
+  });
+});
+
+describe("linked worktree support", () => {
+  it("recognises a linked worktree as a repository", async () => {
+    const main = makeRepo("worktree-main");
+    await initRepo(main);
+    writeFile(main, "a.txt", "1\n");
+    await commitAll(main, "init");
+    const wt = path.join(tempRoot, `worktree-linked-${Math.random().toString(36).slice(2, 8)}`);
+    repos.push(wt);
+    await repo["git"](main).raw(["worktree", "add", "-b", "wt-branch", wt]);
+
+    expect(fs.statSync(path.join(wt, ".git")).isFile()).toBe(true);
+    expect(repo.validateRepo(wt)).toBeNull();
+    expect(await repo.isRepo(wt)).toBe(true);
+    const branches = await repo.branches(wt);
+    expect(branches.all).toContain("wt-branch");
+    const status = await repo.status(wt);
+    expect(status.current).toBe("wt-branch");
+  });
+});
+
+describe("findGitBash beside a bin/ install", () => {
+  it("resolves git-bash one level above bin/git.exe", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "zentree-git-bin-"));
+    const binDir = path.join(root, "bin");
+    const gitExe = path.join(binDir, "git.exe");
+    const bashExe = path.join(root, "git-bash.exe");
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(gitExe, "", "utf8");
+    fs.writeFileSync(bashExe, "", "utf8");
+    try {
+      const custom = new GitRepository(() => gitExe);
+      expect(custom.findGitBash()).toBe(bashExe);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("never returns the configured git.exe as the bash shell", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "zentree-git-only-"));
+    const binDir = path.join(root, "bin");
+    const gitExe = path.join(binDir, "git.exe");
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(gitExe, "", "utf8");
+    try {
+      const custom = new GitRepository(() => gitExe);
+      expect(custom.findGitBash()).not.toBe(gitExe);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("hunk patches for added/deleted files", () => {
+  it("stages a hunk of an untracked new file", async () => {
+    const dir = makeRepo("hunk-new-file");
+    await initRepo(dir);
+    writeFile(dir, "base.txt", "base\n");
+    await commitAll(dir, "initial");
+    writeFile(dir, "new.txt", "hello\nworld\n");
+
+    const hunk = parseDiff(buildUntrackedDiff("new.txt", "hello\nworld\n"))[0];
+    await repo.stageHunk(dir, buildHunkPatch("new.txt", hunk, { isNew: true }));
+
+    const st = await repo.status(dir);
+    expect(st.staged).toContain("new.txt");
+    expect(st.not_added).not.toContain("new.txt");
+  });
+
+  it("reverts a hunk of a deleted file, restoring its content", async () => {
+    const dir = makeRepo("hunk-deleted-file");
+    await initRepo(dir);
+    writeFile(dir, "gone.txt", "v1\nline2\n");
+    await commitAll(dir, "initial");
+    fs.unlinkSync(path.join(dir, "gone.txt"));
+
+    const rawDiff = await repo.diffFile(dir, "gone.txt", false);
+    const hunk = parseDiff(rawDiff)[0];
+    await repo.revertHunk(dir, buildHunkPatch("gone.txt", hunk, { isDeleted: true }));
+
+    const content = fs.readFileSync(path.join(dir, "gone.txt"), "utf8").replace(/\r\n/g, "\n");
+    expect(content).toBe("v1\nline2\n");
+    const st = await repo.status(dir);
+    expect(st.modified).not.toContain("gone.txt");
+  });
+});
+
+describe("gitRepository hardening (review fixes)", () => {
+  it("rejects reading and writing git metadata through working-tree APIs", async () => {
+    const dir = makeRepo("metadata-guard");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "base\n");
+    await commitAll(dir, "initial");
+
+    await expect(repo.readWorkingFile(dir, ".git/config")).rejects.toThrow(/Invalid file path/);
+    await expect(repo.writeWorkingFile(dir, ".git/config", "[core]\n")).rejects.toThrow(/Invalid file path/);
+    await expect(repo.readWorkingFile(dir, "sub/.git/config")).rejects.toThrow(/Invalid file path/);
+    // The config file must be untouched.
+    expect(fs.readFileSync(path.join(dir, ".git", "config"), "utf8")).not.toContain("fsmonitor");
+  });
+
+  it("keeps rename paths concrete in compare()", async () => {
+    const dir = makeRepo("compare-rename");
+    await initRepo(dir);
+    writeFile(dir, "old.txt", "line one\nline two\nline three\n");
+    await commitAll(dir, "base");
+    await repo["git"](dir).raw(["checkout", "-b", "renamed"]);
+    await repo["git"](dir).raw(["mv", "old.txt", "new.txt"]);
+    await commitAll(dir, "rename");
+
+    const res = await repo.compare(dir, "main", "renamed");
+    const paths = res.files.map((f) => f.path);
+    expect(paths).toContain("new.txt");
+    expect(paths.some((p) => p.includes("=>"))).toBe(false);
+    // The reported path is a usable pathspec for the file diff.
+    const diff = await repo.compareFileDiff(dir, "main", "renamed", "new.txt");
+    expect(diff).toContain("line one");
+  });
+
+  it("stashes an untracked file when it is the only target", async () => {
+    const dir = makeRepo("stash-untracked");
+    await initRepo(dir);
+    writeFile(dir, "tracked.txt", "base\n");
+    await commitAll(dir, "initial");
+    writeFile(dir, "fresh.txt", "new content\n");
+
+    await repo.stashSave(dir, "fresh only", ["fresh.txt"]);
+
+    expect(fs.existsSync(path.join(dir, "fresh.txt"))).toBe(false);
+    const st = await repo.status(dir);
+    expect(st.not_added).not.toContain("fresh.txt");
+    const list = await repo.stashList(dir);
+    expect(list[0].subject).toContain("fresh only");
+  });
+
+  it("resolves user config to empty strings instead of throwing when unset", async () => {
+    const dir = makeRepo("config-unset");
+    // A raw init: no local identity at all, like a pristine machine.
+    await repo["git"](dir).raw(["init", "-b", "main"]);
+    // Simulate a fresh machine: no identity anywhere for this call.
+    const savedGlobal = process.env.GIT_CONFIG_GLOBAL;
+    const savedSystem = process.env.GIT_CONFIG_NOSYSTEM;
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "zentree-no-identity-"));
+    fs.writeFileSync(path.join(empty, "gitconfig"), "", "utf8");
+    process.env.GIT_CONFIG_GLOBAL = path.join(empty, "gitconfig");
+    process.env.GIT_CONFIG_NOSYSTEM = "1";
+    try {
+      const cfg = await repo.getConfig(dir);
+      expect(cfg).toEqual({ userName: "", userEmail: "" });
+    } finally {
+      if (savedGlobal === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = savedGlobal;
+      if (savedSystem === undefined) delete process.env.GIT_CONFIG_NOSYSTEM;
+      else process.env.GIT_CONFIG_NOSYSTEM = savedSystem;
+      fs.rmSync(empty, { recursive: true, force: true });
+    }
+  });
+
+  it("parses ssh remote URLs with a custom port", () => {
+    expect(parseHostingUrl("ssh://git@example.com:2222/owner/repo.git")).toBe("https://example.com/owner/repo");
+    expect(parseHostingUrl("ssh://git@example.com:2222/owner/repo.git", "main")).toBe("https://example.com/owner/repo/tree/main");
+  });
+
+  it("continues an interactive rebase when TEMP contains a space", async () => {
+    const dir = makeRepo("spaced-temp");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    await commitAll(dir, "c1");
+    writeFile(dir, "a.txt", "1\n2\n");
+    await commitAll(dir, "c2");
+    writeFile(dir, "a.txt", "1\n2\n3\n");
+    await commitAll(dir, "c3");
+
+    const spaced = path.join(os.tmpdir(), `zentree tmp ${Date.now()}`);
+    fs.mkdirSync(spaced, { recursive: true });
+    const savedTemp = process.env.TEMP;
+    const savedTmp = process.env.TMP;
+    process.env.TEMP = spaced;
+    process.env.TMP = spaced;
+    try {
+      const commits = await repo.logRange(dir, "HEAD~2", "HEAD");
+      await repo.rebaseInteractive(dir, "HEAD~2", commits.map((c) => ({ action: "pick" as const, hash: c.hash, subject: c.subject })));
+      const log = await repo.log(dir, 0, 5);
+      expect(log.map((c) => c.subject).slice(0, 3)).toEqual(["c3", "c2", "c1"]);
+    } finally {
+      if (savedTemp === undefined) delete process.env.TEMP; else process.env.TEMP = savedTemp;
+      if (savedTmp === undefined) delete process.env.TMP; else process.env.TMP = savedTmp;
+      fs.rmSync(spaced, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("branch summary hashes", () => {
+  it("reports full commit hashes so graph branch labels can be matched", async () => {
+    const dir = makeRepo("branch-hashes");
+    await initRepo(dir);
+    writeFile(dir, "a.txt", "1\n");
+    const head = await commitAll(dir, "init");
+    await repo["git"](dir).raw(["branch", "feature"]);
+
+    const summary = await repo.branches(dir);
+    expect(summary.branches["main"].commit).toBe(head);
+    expect(summary.branches["feature"].commit).toBe(head);
+    expect(summary.branches["main"].commit).toHaveLength(40);
   });
 });

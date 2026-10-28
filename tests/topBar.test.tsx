@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, fireEvent, cleanup, waitFor, screen } from "@testing-library/react";
 import TopBar from "../src/components/TopBar";
@@ -34,7 +34,7 @@ function resetStore(patch: Record<string, unknown> = {}) {
     repos: [],
     remotes: [],
     isDark: true,
-    themePreset: "catppuccin-mocha",
+    themePreset: "claude",
     language: "en",
     loading: false,
     error: null,
@@ -161,3 +161,4 @@ describe("TopBar", () => {
     expect((container.querySelector(".filter-query") as HTMLInputElement).value).toBe("");
   });
 });
+

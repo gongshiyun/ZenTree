@@ -150,7 +150,7 @@ describe("TabBar activation and closing", () => {
     resetStore({ customTabs: ["/r/a", "/r/b"], currentRepo: "/r/a" });
     const { container } = render(<TabBar />);
     fireEvent.click(tabEls(container)[1].querySelector(".repo-tab-close")!);
-    expect(calls.some(([name, args]) => name === "setSetting" && args[0] === "tabs" && args[1][0] === "/r/a")).toBe(true);
+    expect(calls.some(([name, args]) => name === "setSetting" && args[0] === "tabs" && (args[1] as string[])[0] === "/r/a")).toBe(true);
   });
 });
 

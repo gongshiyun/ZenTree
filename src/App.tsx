@@ -46,10 +46,19 @@ function Welcome() {
   };
   return (
     <div className="welcome" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "link"; }} onDrop={handleDrop}>
+      <span className="welcome-mark" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M10 2.4v15.2" />
+          <path d="M3.4 6.2 16.6 13.8" />
+          <path d="M16.6 6.2 3.4 13.8" />
+        </svg>
+      </span>
       <h1>ZenTree</h1>
-      <p>{t("app.welcome")}</p>
-      <button className="open-btn" onClick={handleOpen}>{t("app.openRepo")}</button>
-      <button className="open-btn secondary" onClick={() => useRepoStore.getState().setShowClone(true)}>{t("app.cloneRepo")}</button>
+      <p className="welcome-desc">{t("app.welcome")}</p>
+      <div className="welcome-actions">
+        <button className="open-btn" onClick={handleOpen} type="button">{t("app.openRepo")}</button>
+        <button className="open-btn secondary" onClick={() => useRepoStore.getState().setShowClone(true)} type="button">{t("app.cloneRepo")}</button>
+      </div>
       <p className="welcome-hint">{t("app.dragHint")}</p>
     </div>
   );
@@ -61,6 +70,8 @@ export default function App() {
   const selectedDiffFile = useRepoStore((s) => s.selectedDiffFile);
   const showRebase = useRepoStore((s) => s.showRebase);
   const showRepoGroups = useRepoStore((s) => s.showRepoGroups);
+  const customTabs = useRepoStore((s) => s.customTabs);
+  const groupView = useRepoStore((s) => s.groupView);
   const refreshAll = useRepoStore((s) => s.refreshAll);
   const setError = useRepoStore((s) => s.setError);
 
@@ -71,17 +82,34 @@ export default function App() {
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === "F5") { e.preventDefault(); if (currentRepo) refreshAll(); }
-    if (e.key === "Escape") setError(null);
+    if (e.key === "Escape") {
+      setError(null);
+      // Esc dismisses any modal surface, not just the error banner.
+      const s = useRepoStore.getState();
+      if (s.showCommandPalette) s.setShowCommandPalette(false);
+      if (s.showTabPicker) s.setShowTabPicker(false);
+      if (s.showSettings) s.setShowSettings(false);
+      if (s.showClone) s.setShowClone(false);
+      if (s.showCompare) s.setShowCompare(false);
+      if (s.showRebase) s.setShowRebase(null);
+      if (s.showRepoGroups) s.setShowRepoGroups(false);
+    }
     // Shortcuts below must not fire while typing in an input.
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
       e.preventDefault();
-      if (currentRepo) { gitApi().stageAll(currentRepo).then(() => refreshAll()); }
+      if (currentRepo) {
+        gitApi().stageAll(currentRepo)
+          .then((r) => { if (!r.success) setError(r.error || t("error.stageFailed")); return refreshAll(); });
+      }
     }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "U") {
       e.preventDefault();
-      if (currentRepo) { gitApi().unstageAll(currentRepo).then(() => refreshAll()); }
+      if (currentRepo) {
+        gitApi().unstageAll(currentRepo)
+          .then((r) => { if (!r.success) setError(r.error || t("error.unstageFailed")); return refreshAll(); });
+      }
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
@@ -96,9 +124,9 @@ export default function App() {
       e.preventDefault();
       useRepoStore.getState().cycleTab(e.shiftKey ? -1 : 1);
     }
-    // Close tab on Ctrl+Shift+W, not the expected Ctrl+W: Electron's default
-    // application menu binds Ctrl+W to window close in the main process, and a
-    // renderer preventDefault cannot win that race — the app would quit.
+    // Close tab on Ctrl+Shift+W, not the expected Ctrl+W: the shortcut set is
+    // documented and stable, and on Windows Electron would otherwise consume
+    // Ctrl+W at the application-menu level before the renderer sees it.
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "w") {
       e.preventDefault();
       const store = useRepoStore.getState();
@@ -146,7 +174,9 @@ export default function App() {
   return (
     <div className="app-layout">
       <TopBar />
-      <TabBar />
+      {/* The tab strip is repository chrome: on the welcome screen it is pure
+          noise, so it only renders once at least one tab is open. */}
+      {(currentRepo || customTabs.length > 0 || groupView) && <TabBar />}
       {currentRepo ? (
         <>
           <div className="main-content">

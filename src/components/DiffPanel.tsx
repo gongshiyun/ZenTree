@@ -34,7 +34,7 @@ export default function DiffPanel() {
 
   return (
     <>
-      <div className="diff-panel-resize" onMouseDown={handleResizeStart} />
+      <div className="diff-panel-resize" role="separator" aria-orientation="vertical" aria-label="Resize diff panel" onMouseDown={handleResizeStart} />
       <div className="diff-panel" style={{ width: panelWidth }}>
         <DiffViewer
           filePath={selectedDiffFile.path}

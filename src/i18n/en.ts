@@ -59,6 +59,7 @@ const en: Record<string, string> = {
   "sidebar.renamePrompt": "Enter a new branch name:",
   "sidebar.renaming": "Renaming branch {0}...",
   "sidebar.setUpstream": "Set upstream...",
+  "sidebar.upstreamPrompt": "Enter the upstream ref (e.g. origin/main):",
   "sidebar.unsetUpstream": "Unset upstream",
   "sidebar.settingUpstream": "Setting upstream for {0}...",
   "sidebar.unsettingUpstream": "Unsetting upstream for {0}...",
@@ -404,5 +405,8 @@ const en: Record<string, string> = {
   "settings.shortcut.unstageAll": "Unstage all",
   "settings.shortcut.discard": "Discard selected files",
   "settings.shortcut.dismiss": "Dismiss errors",
+  "commit.resizeTip": "Drag to resize the composer",
+  "settings.identityMissing": "No user.name / user.email is configured for this repository, so commits may fail until you set them.",
+  "rebase.firstActionInvalid": "Squash and fixup cannot be the first action — use Pick or Reword for the first commit.",
 };
 export default en;

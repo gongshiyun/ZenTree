@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { RepoInfo, CommitLogEntry, GraphData, GitStatusData, CommitDetail, LogFilters, RemoteInfo, TagInfo, BranchTracking, RepoGroup, RepoSnapshot, GroupTabView } from "../types";
 import { setGlobalLocale, t } from "../i18n";
 import { buildGraphData } from "../domain/graph/layout";
-import { getThemePreset, applyTheme } from "../domain/theme/presets";
+import { getThemePreset, applyTheme, DEFAULT_THEME } from "../domain/theme/presets";
 import { statusFingerprint } from "../domain/files/fingerprint";
 import { gitApi } from "../infrastructure/gitBridge";
 
@@ -146,7 +146,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
   logEntries: [], graphData: { nodes: [], edges: [], maxLane: 0, branchRefs: {} },
   logSkip: 0, hasMoreCommits: true, loadingMore: false,
   selectedCommit: null, commitDetail: null, selectedDiffFile: null, status: null,
-  themePreset: "catppuccin-mocha", isDark: true, language: "en",
+  themePreset: DEFAULT_THEME, isDark: false, language: "en",
   loading: false, loadingMessage: "", error: null,
   showSettings: false,
   showClone: false,
@@ -324,11 +324,13 @@ export const useRepoStore = create<AppState>((set, get) => ({
   },
   checkoutBranch: async (branch: string) => {
     const state = get();
-    if (!state.currentRepo || branch === state.currentBranch) return;
+    const repo = state.currentRepo;
+    if (!repo || branch === state.currentBranch) return;
     set({ loading: true, loadingMessage: t("status.checkingOut").replace("{0}", branch) });
     try {
-      const result = await gitApi().checkout(state.currentRepo, branch);
-      if (result.success) await get().refreshAll();
+      const result = await gitApi().checkout(repo, branch);
+      // Refresh the repository the checkout ran in, not whatever tab is active now.
+      if (result.success) await get().refreshAll(repo);
       else set({ error: result.error || t("error.checkoutFailed") });
     } catch (err: any) { set({ error: err.message || t("error.checkoutFailed") }); }
     finally { set({ loading: false, loadingMessage: "" }); }
@@ -380,6 +382,9 @@ export const useRepoStore = create<AppState>((set, get) => ({
     if (!repo) return;
     try {
       const [tagsRes, remotesRes] = await Promise.all([gitApi().tags(repo), gitApi().remotes(repo)]);
+      // The user may switch tabs while these are in flight; the metadata belongs
+      // to the repository it was read from.
+      if (get().currentRepo !== repo) return;
       set({
         tags: tagsRes.success && tagsRes.data ? tagsRes.data : [],
         remotes: remotesRes.success && remotesRes.data ? remotesRes.data : [],
@@ -392,7 +397,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
     if (!repo) return;
     try {
       const r = await gitApi().getOngoingOperation(repo);
-      if (r.success) set({ ongoing: r.data ?? null });
+      if (r.success && get().currentRepo === repo) set({ ongoing: r.data ?? null });
     } catch { /* keep previous */ }
   },
 
@@ -429,7 +434,11 @@ export const useRepoStore = create<AppState>((set, get) => ({
       const settings = await gitApi().getSettings();
       if (!settings) return;
       if (settings.language) get().setLanguage(settings.language);
-      if (settings.themePreset) get().setThemePreset(settings.themePreset);
+      // A preset saved by an older build may no longer exist: fall back to the
+      // default theme and persist the normalised name, never leaving the UI on
+      // the raw :root palette by accident.
+      const savedTheme = typeof settings.themePreset === "string" ? settings.themePreset : "";
+      get().setThemePreset(getThemePreset(savedTheme) ? savedTheme : DEFAULT_THEME);
       const repos = Array.isArray(settings.repos) ? settings.repos : [];
       for (const r of repos) {
         if (r && typeof r.path === "string" && typeof r.name === "string") get().addRepo(r.path, r.name);
@@ -490,7 +499,13 @@ export const useRepoStore = create<AppState>((set, get) => ({
             }
           }
         }
-        const entries = logResult.success && logResult.data ? logResult.data : [];
+        // A failed log call must not replace a good graph with an empty one
+        // (e.g. a transient index.lock). Keep the current entries on screen and
+        // do not sync the fingerprint, so the next silent refresh retries.
+        const logOk = logResult.success && Array.isArray(logResult.data);
+        const entries = logOk
+          ? (logResult.data as CommitLogEntry[])
+          : (isActive() ? get().logEntries : []);
         const snapshot: RepoSnapshot = {
           branches: localBranches,
           remoteBranches,
@@ -498,7 +513,7 @@ export const useRepoStore = create<AppState>((set, get) => ({
           logEntries: entries,
           graphData: graphWithRefs(entries, branchRefs),
           logSkip: entries.length,
-          hasMoreCommits: entries.length >= PAGE_SIZE,
+          hasMoreCommits: logOk ? entries.length >= PAGE_SIZE : get().hasMoreCommits,
           tags: tagsResult.success && tagsResult.data ? tagsResult.data : [],
           remotes: remotesResult.success && remotesResult.data ? remotesResult.data : [],
           branchTracking: trackingResult.success && trackingResult.data ? trackingResult.data : [],
@@ -515,10 +530,14 @@ export const useRepoStore = create<AppState>((set, get) => ({
           if (logResult.error) set({ error: logResult.error });
           // Keep the silent-refresh fingerprint in sync so the first watch event
           // after a manual refresh does not trigger a redundant full refresh.
-          const headHash = entries.length > 0 ? entries[0].hash : undefined;
-          const fingerprint = snapshot.status?.fingerprint
-            ?? statusFingerprint(snapshot.status ?? undefined) + "@" + (headHash ?? "");
-          set({ lastStatusFingerprint: fingerprint });
+          // Only a fully successful refresh may seed it: a partial one must stay
+          // retryable by the next watcher/poll tick.
+          if (logOk && statusResult.success) {
+            const headHash = entries.length > 0 ? entries[0].hash : undefined;
+            const fingerprint = snapshot.status?.fingerprint
+              ?? statusFingerprint(snapshot.status ?? undefined) + "@" + (headHash ?? "");
+            set({ lastStatusFingerprint: fingerprint });
+          }
         }
       } else if (branchResult.error && isActive()) {
         set({ error: branchResult.error });

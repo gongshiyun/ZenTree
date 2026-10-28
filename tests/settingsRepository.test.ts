@@ -63,3 +63,83 @@ describe("SettingsRepository", () => {
     expect(repo.load()).toBe(first);
   });
 });
+
+describe("SettingsRepository corruption hardening", () => {
+  function writeSettings(dirName: string, content: string): { dir: string; file: string } {
+    const dir = path.join(tempDir, dirName);
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, "zentree-settings.json");
+    fs.writeFileSync(file, content, "utf8");
+    return { dir, file };
+  }
+
+  it.each([
+    ["null", "null"],
+    ["array", "[]"],
+    ["scalar", "\"text\""],
+  ])("falls back to defaults for a structurally valid %s file", (_label, content) => {
+    const { dir, file } = writeSettings(`shape-${_label}`, content);
+    const repo = new SettingsRepository(dir);
+    expect(repo.load()).toEqual({});
+    expect(repo.get("gitPath")).toBeUndefined();
+    expect(() => repo.set("language", "en")).not.toThrow();
+    // The broken original is preserved for diagnostics.
+    const backups = fs.readdirSync(dir).filter((f) => f.includes(".corrupt-"));
+    expect(backups).toHaveLength(1);
+    expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it("drops/clamps invalid known keys instead of persisting them", () => {
+    const { dir } = writeSettings("invalid-keys", JSON.stringify({
+      windowWidth: "wide",
+      windowHeight: 200,
+      language: "fr",
+      repos: [{ path: "/ok", name: "ok" }, { path: 42 }],
+      tabs: ["/a", 7, null],
+    }));
+    const repo = new SettingsRepository(dir);
+    const loaded = repo.load();
+    expect(loaded.windowWidth).toBeUndefined();
+    expect(loaded.windowHeight).toBeUndefined(); // below the 600px minimum
+    expect(loaded.language).toBeUndefined();
+    expect(loaded.repos).toEqual([{ path: "/ok", name: "ok" }]);
+    expect(loaded.tabs).toEqual(["/a"]);
+  });
+
+  it("keeps valid values and unknown scalar keys", () => {
+    const { dir } = writeSettings("valid-keys", JSON.stringify({
+      windowWidth: 1500,
+      windowHeight: 1000,
+      themePreset: "claude-dark",
+      language: "zh",
+      customFlag: true,
+    }));
+    const repo = new SettingsRepository(dir);
+    const loaded = repo.load();
+    expect(loaded.windowWidth).toBe(1500);
+    expect(loaded.windowHeight).toBe(1000);
+    expect(loaded.themePreset).toBe("claude-dark");
+    expect(loaded.language).toBe("zh");
+    expect(loaded.customFlag).toBe(true);
+  });
+});
+
+describe("SettingsRepository window bounds", () => {
+  it("restores a minimum-size 900x600 window", () => {
+    const dir = path.join(tempDir, "min-window");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "zentree-settings.json"), JSON.stringify({ windowWidth: 900, windowHeight: 600 }), "utf8");
+    const repo = new SettingsRepository(dir);
+    expect(repo.get("windowWidth")).toBe(900);
+    expect(repo.get("windowHeight")).toBe(600);
+  });
+
+  it("drops values below the minimum window size", () => {
+    const dir = path.join(tempDir, "tiny-window");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "zentree-settings.json"), JSON.stringify({ windowWidth: 800, windowHeight: 500 }), "utf8");
+    const repo = new SettingsRepository(dir);
+    expect(repo.get("windowWidth")).toBeUndefined();
+    expect(repo.get("windowHeight")).toBeUndefined();
+  });
+});

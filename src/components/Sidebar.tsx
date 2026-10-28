@@ -4,6 +4,46 @@ import { useT } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
 import RefNameDialog from "./RefNameDialog";
 
+/* 12px sidebar glyphs: inline SVG, colour inherits the row's text hierarchy. */
+function BranchIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="4.6" cy="3.5" r="1.4" />
+      <circle cx="4.6" cy="12.5" r="1.4" />
+      <circle cx="11.4" cy="6" r="1.4" />
+      <path d="M4.6 4.9v6.2" />
+      <path d="M10 6.6c-2.6.3-5.4 1-5.4 4.5" />
+    </svg>
+  );
+}
+
+function CloudIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11.5 12.4H4.4a2.5 2.5 0 0 1-.3-5 3.6 3.6 0 0 1 6.9.2 2.2 2.2 0 0 1 .5 4.8Z" />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8.4 2.4a1.3 1.3 0 0 0-.9-.4H3.2a1.2 1.2 0 0 0-1.2 1.2v4.3c0 .3.1.7.4.9l5.3 5.3a1.6 1.6 0 0 0 2.3 0l3.9-3.9a1.6 1.6 0 0 0 0-2.3Z" />
+      <circle cx="5.1" cy="5.1" r=".9" />
+    </svg>
+  );
+}
+
+function ArchiveIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="1.8" y="2.6" width="12.4" height="3.4" rx=".8" />
+      <path d="M3 6v6.6a1.2 1.2 0 0 0 1.2 1.2h7.6a1.2 1.2 0 0 0 1.2-1.2V6" />
+      <path d="M6.6 8.8h2.8" />
+    </svg>
+  );
+}
+
 export default function Sidebar() {
   const t = useT();
   const branches = useRepoStore((s) => s.branches);
@@ -80,14 +120,52 @@ export default function Sidebar() {
     const current = branchTracking.find((x) => x.name === branch)?.upstream || "";
     const value = window.prompt(t("sidebar.upstreamPrompt"), current || `origin/${branch}`);
     if (!value || !value.trim()) return;
-    const parts = value.trim().split("/");
+    // Split the typed ref only at the first slash: the branch part can itself
+    // contain slashes (`upstream/feature/x`). A bare remote name is accepted as
+    // shorthand for <remote>/<local branch>. The `remotes/` prefix shown in the
+    // branch-tracking data is accepted too.
+    const typed = value.trim().replace(/^remotes\//, "");
+    const slash = typed.indexOf("/");
+    const remote = slash === -1 ? typed : typed.slice(0, slash);
+    const upstreamBranch = slash === -1 ? branch : typed.slice(slash + 1);
+    if (!remote || !upstreamBranch) {
+      setError(t("error.opFailed"));
+      return;
+    }
     setLoading(true, t("sidebar.settingUpstream").replace("{0}", branch));
     try {
-      const r = await gitApi().setUpstream(currentRepo, branch, parts[0]);
-      if (r.success) await refreshAll();
-      else setError(r.error || t("error.opFailed"));
+      let ok: boolean;
+      let failure: string | undefined;
+      if (upstreamBranch === branch) {
+        // The common case needs no remote-ref juggling: the bridge writes
+        // <remote>/<local branch>, which is exactly what was typed.
+        const r = await gitApi().setUpstream(currentRepo, branch, remote);
+        ok = r.success;
+        failure = r.error;
+      } else {
+        // An upstream branch with a different name cannot be expressed through
+        // setUpstream(repo, branch, remote): the bridge always pins
+        // <remote>/<local-branch>. Validate the typed ref against the fetched
+        // remote branches, then write the same two branch.* keys git itself
+        // writes for `git branch --set-upstream-to=<ref>`.
+        const remoteExists = remotes.some((r) => r.name === remote);
+        const refKnown = remoteBranches.length === 0
+          || remoteBranches.some((rb) => rb.replace(/^remotes\//, "") === `${remote}/${upstreamBranch}`);
+        if (!remoteExists || !refKnown) {
+          setError(t("error.opFailed"));
+          return;
+        }
+        const remoteWrite = await gitApi().setConfig(currentRepo, `branch.${branch}.remote`, remote);
+        const mergeWrite = remoteWrite.success
+          ? await gitApi().setConfig(currentRepo, `branch.${branch}.merge`, `refs/heads/${upstreamBranch}`)
+          : remoteWrite;
+        ok = remoteWrite.success && mergeWrite.success;
+        failure = remoteWrite.error || mergeWrite.error;
+      }
+      if (ok) await refreshAll();
+      else setError(failure || t("error.opFailed"));
     } catch (err: any) { setError(err.message); } finally { setLoading(false, ""); }
-  }, [currentRepo, branchTracking, setLoading, setError, refreshAll, t]);
+  }, [currentRepo, branchTracking, remoteBranches, remotes, setLoading, setError, refreshAll, t]);
 
   const handleUnsetUpstream = useCallback(async (branch: string) => {
     if (!currentRepo) return;
@@ -282,7 +360,7 @@ export default function Sidebar() {
     finally { setLoading(false, ""); }
   }, [currentRepo, setLoading, setError, refreshAll, t]);
 
-  const [sidebarWidth, setSidebarWidth] = useState(200);
+  const [sidebarWidth, setSidebarWidth] = useState(244);
   const isResizing = useRef(false);
   const clickTimerRef = useRef<number | null>(null);
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -310,8 +388,8 @@ export default function Sidebar() {
   return (<>
     <div className="sidebar" style={{ width: sidebarWidth }}>
       <div className="sidebar-header">
-        <span>{t("sidebar.branches")}</span>
-        <button className="sidebar-add-btn" onClick={() => setShowNewBranch(true)} title={t("sidebar.newBranch")}>+</button>
+        <span className="sidebar-header-title">{t("sidebar.branches")}</span>
+        <button className="sidebar-add-btn" onClick={() => setShowNewBranch(true)} title={t("sidebar.newBranch")} type="button">+</button>
       </div>
       {showNewBranch && (
         <RefNameDialog
@@ -325,9 +403,12 @@ export default function Sidebar() {
       <div className="sidebar-list">
         {branches.map((b) => {
           const tr = branchTracking.find((x) => x.name === b);
+          const isCurrent = b === currentBranch;
           return (
-            <div key={b} className={`branch-item${b === currentBranch ? " current" : ""}`} onDoubleClick={() => handleCheckout(b)} onContextMenu={(e) => handleContextMenu(e, b, false)} title={b + t("sidebar.dblClick")}>
-              <span className="branch-icon">{b === currentBranch ? "\u25CF" : "\u25CB"}</span><span>{b}</span>
+            <div key={b} className={`branch-item${isCurrent ? " current" : ""}`} onDoubleClick={() => handleCheckout(b)} onContextMenu={(e) => handleContextMenu(e, b, false)} title={b + t("sidebar.dblClick")}>
+              <span className="branch-icon"><BranchIcon /></span>
+              <span className="branch-name">{b}</span>
+              {isCurrent && <span className="branch-current-dot" aria-hidden="true" />}
               {tr?.upstream && (
                 <span className="branch-tracking" title={tr.upstream}>
                   <span className="track-up">{tr.upstream.replace(/^[^/]+\//, "")}</span>
@@ -342,91 +423,101 @@ export default function Sidebar() {
             </div>
           );
         })}
-        {branches.length === 0 && <div className="empty-state" style={{ padding: 20 }}>{t("sidebar.noBranches")}</div>}
+        {branches.length === 0 && <div className="empty-state">{t("sidebar.noBranches")}</div>}
         <div className="sidebar-subheader" onClick={() => setShowRemotes(!showRemotes)}>
-          <span className="subheader-arrow">{showRemotes ? "\u25BC" : "\u25B6"}</span> {t("sidebar.remotes")}
-          {remotes.length > 0 && (
-          <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); handlePruneRemote(defaultRemote); }} title={t("sidebar.prune")}>&#8635;</button>
-          )}
-          <button className="sidebar-add-btn" onClick={(e) => { e.stopPropagation(); setShowRemoteInput(!showRemoteInput); }} title={t("remotes.addTip")}>+</button>
+          <span className="subheader-arrow">{showRemotes ? "\u25BC" : "\u25B6"}</span>
+          <span className="subheader-title">{t("sidebar.remotes")}</span>
+          <span className="subheader-actions">
+            {remotes.length > 0 && (
+              <button className="sidebar-add-btn" onClick={(e) => { e.stopPropagation(); handlePruneRemote(defaultRemote); }} title={t("sidebar.prune")} type="button">&#8635;</button>
+            )}
+            <button className="sidebar-add-btn" onClick={(e) => { e.stopPropagation(); setShowRemoteInput(!showRemoteInput); }} title={t("remotes.addTip")} type="button">+</button>
+          </span>
         </div>
         {showRemotes && (<>
           {remotes.map((remote) => (
             <div key={remote.name} className="branch-item remote-item" title={remote.url}>
-              <span className="branch-icon">{"\u21C4"}</span>
-              <span className="stash-subject">{remote.name}</span>
+              <span className="branch-icon"><CloudIcon /></span>
+              <span className="branch-name">{remote.name}</span>
               <span className="file-actions">
-                <button className="file-action-btn danger" onClick={() => handleRemoveRemote(remote.name)}>{t("remotes.remove")}</button>
+                <button className="file-action-btn danger" onClick={() => handleRemoveRemote(remote.name)} type="button">{t("remotes.remove")}</button>
               </span>
             </div>
           ))}
-          {remotes.length === 0 && !showRemoteInput && <div className="empty-state" style={{ padding: 10 }}>{t("remotes.empty")}</div>}
+          {remotes.length === 0 && !showRemoteInput && <div className="empty-state">{t("remotes.empty")}</div>}
           {showRemoteInput && (
-            <div className="new-branch-input" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div className="new-branch-input">
               <input type="text" value={remoteName} placeholder={t("remotes.namePlaceholder")} onChange={(e) => setRemoteName(e.target.value)} />
               <input type="text" value={remoteUrl} placeholder={t("remotes.urlPlaceholder")} onChange={(e) => setRemoteUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleAddRemote(); }} />
-              <button onClick={handleAddRemote} disabled={!remoteName.trim() || !remoteUrl.trim()}>{t("remotes.add")}</button>
+              <button onClick={handleAddRemote} disabled={!remoteName.trim() || !remoteUrl.trim()} type="button">{t("remotes.add")}</button>
             </div>
           )}
           {remoteBranches.length > 0 && <div className="sidebar-group-label">{t("sidebar.remoteBranches")}</div>}
           {remoteBranches.map((b) => (
             <div key={b} className={`branch-item remote${viewRef === b ? " viewing" : ""}`} onClick={() => handleRemoteClick(b)} onDoubleClick={() => handleRemoteDoubleClick(b)} onContextMenu={(e) => handleContextMenu(e, b, true)} title={b + t("sidebar.dblClick")}>
-              <span className="branch-icon remote-icon">{"\u21C4"}</span><span>{b.replace(/^remotes\//, "")}</span>
+              <span className="branch-icon remote-icon"><CloudIcon /></span>
+              <span className="branch-name">{b.replace(/^remotes\//, "")}</span>
             </div>
           ))}
         </>)}
       </div>
-      <div className="sidebar-subheader" onClick={() => setShowStash(!showStash)} style={{ marginTop: 4 }}>
-        <span className="subheader-arrow">{showStash ? "\u25BC" : "\u25B6"}</span> {t("stash.title")}
-        <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setShowStashMessage(!showStashMessage); }} title={t("stash.saveTip")}>+</button>
+      <div className="sidebar-subheader" onClick={() => setShowStash(!showStash)}>
+        <span className="subheader-arrow">{showStash ? "\u25BC" : "\u25B6"}</span>
+        <span className="subheader-title">{t("stash.title")}</span>
+        <span className="subheader-actions">
+          <button className="sidebar-add-btn" onClick={(e) => { e.stopPropagation(); setShowStashMessage(!showStashMessage); }} title={t("stash.saveTip")} type="button">+</button>
+        </span>
       </div>
       {showStashMessage && (
-        <div className="new-branch-input" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div className="new-branch-input">
           <input type="text" value={stashMessage} placeholder={t("stash.messagePlaceholder")}
             onChange={(e) => setStashMessage(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleStashSave(stashMessage); if (e.key === "Escape") { setShowStashMessage(false); setStashMessage(""); } }} />
-          <button onClick={() => handleStashSave(stashMessage)}>{t("stash.save")}</button>
+          <button onClick={() => handleStashSave(stashMessage)} type="button">{t("stash.save")}</button>
         </div>
       )}
       {showStash && (
-        <div className="sidebar-list" style={{ flex: "none", maxHeight: 140 }}>
+        <div className="sidebar-list fixed stash-list">
           {stashList.map((s) => (
             <div key={s.ref} className="branch-item stash-item">
-              <span className="branch-icon">{"\u25A3"}</span>
+              <span className="branch-icon"><ArchiveIcon /></span>
               <span className="stash-subject" title={t("stash.previewTip")} onClick={() => handleStashPreview(s.ref, s.subject)}>{s.subject}</span>
               <span className="file-actions">
-                <button className="file-action-btn" onClick={() => handleStashPop(s.ref)}>{t("stash.pop")}</button>
-                <button className="file-action-btn danger" onClick={() => handleStashDrop(s.ref, s.subject)}>{t("stash.drop")}</button>
+                <button className="file-action-btn" onClick={() => handleStashPop(s.ref)} type="button">{t("stash.pop")}</button>
+                <button className="file-action-btn danger" onClick={() => handleStashDrop(s.ref, s.subject)} type="button">{t("stash.drop")}</button>
               </span>
             </div>
           ))}
-          {stashList.length === 0 && <div className="empty-state" style={{ padding: 10 }}>{t("stash.empty")}</div>}
-          {previewError && <div className="empty-state" style={{ padding: 10, color: "var(--danger)" }}>{previewError}</div>}
+          {stashList.length === 0 && <div className="empty-state">{t("stash.empty")}</div>}
+          {previewError && <div className="empty-state sidebar-error">{previewError}</div>}
         </div>
       )}
-      <div className="sidebar-subheader" onClick={() => setShowTags(!showTags)} style={{ marginTop: 4 }}>
-        <span className="subheader-arrow">{showTags ? "\u25BC" : "\u25B6"}</span> {t("tags.title")}
-        <button className="sidebar-add-btn" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); setShowTagInput(!showTagInput); }} title={t("tags.addTip")}>+</button>
+      <div className="sidebar-subheader" onClick={() => setShowTags(!showTags)}>
+        <span className="subheader-arrow">{showTags ? "\u25BC" : "\u25B6"}</span>
+        <span className="subheader-title">{t("tags.title")}</span>
+        <span className="subheader-actions">
+          <button className="sidebar-add-btn" onClick={(e) => { e.stopPropagation(); setShowTagInput(!showTagInput); }} title={t("tags.addTip")} type="button">+</button>
+        </span>
       </div>
       {showTags && (
-        <div className="sidebar-list" style={{ flex: "none", maxHeight: 160 }}>
+        <div className="sidebar-list fixed tag-list">
           {showTagInput && (
-            <div className="new-branch-input" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div className="new-branch-input">
               <input type="text" value={tagName} placeholder={t("tags.namePlaceholder")} onChange={(e) => setTagName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreateTag(); if (e.key === "Escape") { setShowTagInput(false); setTagName(""); } }} />
               <input type="text" value={tagRef} placeholder={t("tags.refPlaceholder")} onChange={(e) => setTagRef(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") handleCreateTag(); }} />
-              <button onClick={handleCreateTag} disabled={!tagName.trim()}>{t("tags.create")}</button>
+              <button onClick={handleCreateTag} disabled={!tagName.trim()} type="button">{t("tags.create")}</button>
             </div>
           )}
           {tags.map((tag) => (
             <div key={tag.name} className="branch-item tag-item">
-              <span className="branch-icon">{"\u25C8"}</span>
+              <span className="branch-icon"><TagIcon /></span>
               <span className="stash-subject" title={`${tag.subject || tag.hash}`}>{tag.name}</span>
               <span className="file-actions">
-                <button className="file-action-btn danger" onClick={() => handleDeleteTag(tag.name)}>{t("tags.delete")}</button>
+                <button className="file-action-btn danger" onClick={() => handleDeleteTag(tag.name)} type="button">{t("tags.delete")}</button>
               </span>
             </div>
           ))}
-          {tags.length === 0 && !showTagInput && <div className="empty-state" style={{ padding: 10 }}>{t("tags.empty")}</div>}
+          {tags.length === 0 && !showTagInput && <div className="empty-state">{t("tags.empty")}</div>}
         </div>
       )}
     </div>

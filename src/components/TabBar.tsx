@@ -101,6 +101,8 @@ export default function TabBar() {
             <button
               className="repo-tab-close"
               title={t("tabs.close")}
+              type="button"
+              aria-label={t("tabs.close")}
               onClick={(e) => { e.stopPropagation(); closeTab(path); }}
             >&times;</button>
           </div>
@@ -109,17 +111,17 @@ export default function TabBar() {
       </div>
       <div className="tab-bar-actions">
         {groupView && (
-          <button className="tab-action-btn back" onClick={() => { exitGroupView(); }} title={t("tabs.exitGroupTip")}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <button className="tab-action-btn back" onClick={() => { exitGroupView(); }} title={t("tabs.exitGroupTip")} type="button">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M7 2.5L3.5 6L7 9.5" />
             </svg>
             {t("tabs.exitGroup")}
           </button>
         )}
         <div className="tab-group-wrap" ref={groupRef}>
-          <button className="tab-action-btn" onClick={() => setShowGroupMenu(!showGroupMenu)} title={t("tabs.groupTip")}>
+          <button className="tab-action-btn" onClick={() => setShowGroupMenu(!showGroupMenu)} title={t("tabs.groupTip")} type="button">
             <span className="tab-group-label">{groupView ? groupView.name : t("tabs.custom")}</span>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
               <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
@@ -139,14 +141,14 @@ export default function TabBar() {
             </div>
           )}
         </div>
-        <button className="tab-action-btn icon-only" onClick={() => setShowTabPicker(true)} title={t("tabs.searchTip")}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <button className="tab-action-btn icon-only" onClick={() => setShowTabPicker(true)} title={t("tabs.searchTip")} type="button" aria-label={t("tabs.searchTip")}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
             <circle cx="7" cy="7" r="4.2" />
             <path d="M10.2 10.2L14 14" />
           </svg>
         </button>
-        <button className="tab-action-btn icon-only" onClick={handleAdd} title={t("tabs.addTip")}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <button className="tab-action-btn icon-only" onClick={handleAdd} title={t("tabs.addTip")} type="button" aria-label={t("tabs.addTip")}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
             <path d="M8 3v10M3 8h10" />
           </svg>
         </button>

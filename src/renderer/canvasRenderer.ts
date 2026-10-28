@@ -1,11 +1,25 @@
-﻿import type { GraphData, GraphNode, GraphEdge } from "../types";
-import { GRAPH_LANE_WIDTH } from "../domain/graph/layout";
+import type { GraphData, GraphNode } from "../types";
+import { GRAPH_LANE_WIDTH, GRAPH_ROW_HEIGHT } from "../domain/graph/layout";
+import { t } from "../i18n";
 
-const NODE_RADIUS = 7;
+/** Node dot radius in world units (the background ring extends past it). */
+const NODE_RADIUS = 6.5;
+/** Width of the surface-colored ring that separates nodes from lanes. */
+const NODE_RING_WIDTH = 2;
+/** Lane width in screen pixels; hairlines stay 1.5 px at any zoom level. */
+const EDGE_WIDTH = 1.5;
+/** Lanes are quiet: 80% alpha keeps crossings light without losing hue. */
+const EDGE_ALPHA = 0.8;
 const PADDING_LEFT = 20;
 const PADDING_TOP = 16;
 /** Fixed horizontal anchor: the commit graph column is pinned to the left edge. */
 const LOCK_OFFSET_X = 16;
+/** Horizontal distance between the commit text block and the ref-pill column. */
+const LABEL_COLUMN_OFFSET = 420;
+const LABEL_HEIGHT = 16;
+const LABEL_RADIUS = 8;
+const LABEL_PAD_X = 8;
+const LABEL_GAP = 6;
 
 interface Camera {
   offsetX: number;
@@ -13,12 +27,28 @@ interface Camera {
   scale: number;
 }
 
+/** Warm fallbacks used only when the CSS custom properties are unavailable (jsdom). */
+const FALLBACK_VARS = {
+  bg: "#faf9f5",
+  bgSecondary: "#ffffff",
+  textPrimary: "#1f1e1d",
+  textSecondary: "#57544e",
+  textMuted: "#8c877c",
+  textFaint: "#ada79b",
+  accent: "#d97757",
+  warning: "#a9762a",
+  fontSans: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+  fontMono: "ui-monospace, 'Cascadia Code', Consolas, monospace",
+};
+
+type CssVars = typeof FALLBACK_VARS;
+
 /**
  * Canvas graph engine with two stacked layers:
  * - base: background, edges, nodes, texts and branch labels (redrawn on data
  *   / camera / theme changes);
- * - overlay: hover ring, selection ring and search highlight rings (redrawn
- *   on interaction-state changes, O(visible highlights) per frame).
+ * - overlay: row highlight bands, hover ring, selection ring and search
+ *   highlight rings (redrawn on interaction-state changes, O(visible rows)).
  *
  * All pointer events are attached to the top overlay canvas; the base canvas
  * does not intercept them.
@@ -39,7 +69,9 @@ export class GraphRenderer {
   private dragStartX = 0;
   private dragStartY = 0;
   private theme: "dark" | "light" = "dark";
-  private cssVars: { bg: string; textPrimary: string; textSecondary: string; textMuted: string; accent: string; warning: string } = { bg: "#1a1b26", textPrimary: "#cdd6f4", textSecondary: "#a6adc8", textMuted: "#6c7086", accent: "#89b4fa", warning: "#f9e2af" };
+  /** Extra room above the first row, for floating banners / search bars. */
+  private topInset = PADDING_TOP;
+  private cssVars: CssVars = { ...FALLBACK_VARS };
   private rafId: number | null = null;
   private overlayRafId: number | null = null;
   private highlightHashes: Set<string> = new Set();
@@ -76,6 +108,19 @@ export class GraphRenderer {
     this.scheduleOverlayRender();
   }
 
+  /**
+   * Reserve vertical space above the first commit row. The graph container
+   * uses this while a floating banner (view-ref) or the search popover is
+   * visible so overlay chrome never sits on top of commit text.
+   */
+  setTopInset(px: number) {
+    const next = Math.max(0, Math.round(px));
+    if (next === this.topInset) return;
+    this.topInset = next;
+    this.scheduleRender();
+    this.scheduleOverlayRender();
+  }
+
   setCallbacks(callbacks: {
     onHover?: (node: GraphNode | null) => void;
     onClick?: (node: GraphNode) => void;
@@ -89,14 +134,27 @@ export class GraphRenderer {
   }
 
   setData(data: GraphData) {
-    const firstLoad = this.data.nodes.length === 0 && data.nodes.length > 0;
+    const previous = this.data;
+    const firstLoad = previous.nodes.length === 0 && data.nodes.length > 0;
+    // Cached tab switches swap graphData synchronously without ever passing
+    // through an empty state, so detect a repo switch from the graph identity.
+    // A shrinking tail also means a different graph (repo switch / filter
+    // change); pagination only ever appends, so infinite scroll keeps its view.
+    const repoSwitched =
+      previous.nodes.length > 0 &&
+      data.nodes.length > 0 &&
+      (previous.nodes[0].hash !== data.nodes[0].hash ||
+        (data.nodes.length < previous.nodes.length &&
+          previous.nodes[previous.nodes.length - 1].hash !== data.nodes[data.nodes.length - 1].hash));
     this.data = data;
     // Render caches are data-driven: drop them on every data change.
     this.textWidthCache.clear();
     this.dateStrCache.clear();
-    if (firstLoad) {
+    if (firstLoad || repoSwitched) {
+      // New repository: start at the top of its history at 100% zoom.
       this.camera.offsetX = LOCK_OFFSET_X;
       this.camera.offsetY = 0;
+      if (repoSwitched) this.camera.scale = 1;
     }
     this.scheduleRender();
     this.scheduleOverlayRender();
@@ -115,7 +173,7 @@ export class GraphRenderer {
   scrollToNode(hash: string) {
     const node = this.data.nodes.find((n) => n.hash === hash);
     if (!node) return;
-    this.camera.offsetY = this.height / 2 - node.y * this.camera.scale;
+    this.camera.offsetY = this.clampOffsetY(this.height / 2 - node.y * this.camera.scale);
     this.selectedHash = hash;
     this.scheduleRender();
     this.scheduleOverlayRender();
@@ -126,7 +184,7 @@ export class GraphRenderer {
     const newScale = Math.max(0.1, Math.min(5, this.camera.scale * factor));
     const anchorY = this.screenToWorld(0, this.height / 2).y;
     this.camera.scale = newScale;
-    this.camera.offsetY = this.height / 2 - anchorY * newScale;
+    this.camera.offsetY = this.clampOffsetY(this.height / 2 - anchorY * newScale);
     this.scheduleRender();
     this.scheduleOverlayRender();
   }
@@ -139,11 +197,33 @@ export class GraphRenderer {
     this.scheduleOverlayRender();
   }
 
+  /**
+   * Reset the camera to the identity view: pinned-left column, 100% zoom, top
+   * of history. Called when the active repository changes (cached tab switch),
+   * so a new repo never opens at the previous repo's scroll offset.
+   */
+  resetCamera() {
+    this.camera.offsetX = LOCK_OFFSET_X;
+    this.camera.offsetY = 0;
+    this.camera.scale = 1;
+    this.scheduleRender();
+    this.scheduleOverlayRender();
+  }
+
   getScale(): number {
     return this.camera.scale;
   }
 
+  /** Repaint both layers (e.g. after a language change affects canvas labels). */
+  refresh() {
+    this.scheduleRender();
+    this.scheduleOverlayRender();
+  }
+
   handleResize() {
+    // Re-read the DPR: monitor changes and Electron zoom updates can change it
+    // after construction, and a stale ratio leaves the canvas blurry.
+    this.dpr = window.devicePixelRatio || 1;
     const rect = this.baseCanvas.getBoundingClientRect();
     this.width = rect.width;
     this.height = rect.height;
@@ -157,17 +237,21 @@ export class GraphRenderer {
     this.scheduleOverlayRender();
   }
 
-  /** Read theme colors from CSS variables so the canvas follows the active theme. */
+  /** Read theme colors and font stacks from CSS variables (falls back for jsdom). */
   private readCssVars() {
     const cs = getComputedStyle(document.documentElement);
     const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
     this.cssVars = {
-      bg: v("--bg-primary", "#1a1b26"),
-      textPrimary: v("--text-primary", "#cdd6f4"),
-      textSecondary: v("--text-secondary", "#a6adc8"),
-      textMuted: v("--text-muted", "#6c7086"),
-      accent: v("--accent", "#89b4fa"),
-      warning: v("--warning", "#f9e2af"),
+      bg: v("--bg-primary", FALLBACK_VARS.bg),
+      bgSecondary: v("--bg-secondary", FALLBACK_VARS.bgSecondary),
+      textPrimary: v("--text-primary", FALLBACK_VARS.textPrimary),
+      textSecondary: v("--text-secondary", FALLBACK_VARS.textSecondary),
+      textMuted: v("--text-muted", FALLBACK_VARS.textMuted),
+      textFaint: v("--text-faint", FALLBACK_VARS.textFaint),
+      accent: v("--accent", FALLBACK_VARS.accent),
+      warning: v("--warning", FALLBACK_VARS.warning),
+      fontSans: v("--font-sans", FALLBACK_VARS.fontSans),
+      fontMono: v("--font-mono", FALLBACK_VARS.fontMono),
     };
   }
 
@@ -177,6 +261,37 @@ export class GraphRenderer {
     if (!m) return hex;
     const n = parseInt(m[1], 16);
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+
+  /** Relative luminance (WCAG) of a hex color; used to pick readable pill ink. */
+  private relativeLuminance(hex: string): number {
+    const m = hex.trim().match(/^#?([0-9a-f]{6})$/i);
+    if (!m) return 0.5;
+    const n = parseInt(m[1], 16);
+    const channel = (value: number) => {
+      const c = value / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const r = channel((n >> 16) & 255);
+    const g = channel((n >> 8) & 255);
+    const b = channel(n & 255);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  /**
+   * Ink color for a filled ref pill. The palette is mid-tone, so the readable
+   * choice flips around L*~50 (0.209 relative luminance); both candidate inks
+   * come from theme tokens so light/dark presets stay consistent.
+   */
+  private labelInk(hex: string, isDark: boolean): string {
+    const ink = isDark ? this.cssVars.bg : this.cssVars.textPrimary;
+    const paper = isDark ? this.cssVars.textPrimary : this.cssVars.bgSecondary;
+    return this.relativeLuminance(hex) > 0.209 ? ink : paper;
+  }
+
+  /** Left edge of the commit text block, shared by painting and hit testing. */
+  private textStartX(): number {
+    return this.data.maxLane * GRAPH_LANE_WIDTH + GRAPH_LANE_WIDTH + 14;
   }
 
   /** Schedule a base-layer render on the next animation frame (coalesces requests). */
@@ -200,15 +315,14 @@ export class GraphRenderer {
   render() {
     this.readCssVars();
     const { ctx, width, height, camera, data } = this;
-    const isDark = this.theme === "dark";
 
-    // Clear
+    // Clear with the app surface color (canvas and center area read as one).
     ctx.fillStyle = this.cssVars.bg;
     ctx.fillRect(0, 0, width, height);
 
     const scale = Math.max(0.1, Math.min(5, camera.scale));
     const sx = camera.offsetX + PADDING_LEFT;
-    const sy = camera.offsetY + PADDING_TOP;
+    const sy = camera.offsetY + this.topInset;
 
     ctx.save();
     ctx.translate(sx, sy);
@@ -224,48 +338,81 @@ export class GraphRenderer {
     const cullTop = viewTop - margin;
     const cullBottom = viewBottom + margin;
 
-    // Draw edges in visible range
-    this.drawEdges(cullTop, cullBottom, isDark);
+    this.drawEdges(cullTop, cullBottom);
 
-    // Draw nodes in visible range
-    this.drawNodes(cullTop, cullBottom, viewLeft, viewRight, isDark);
-    this.drawBranchLabels(cullTop, cullBottom, isDark);
+    this.drawNodes(cullTop, cullBottom, viewLeft, viewRight);
+    this.drawBranchLabels(cullTop, cullBottom, viewRight);
 
     ctx.restore();
 
-    // Draw node count info
-    ctx.fillStyle = this.cssVars.textMuted;
-    ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    const countText = `${data.nodes.length} commits`;
-    ctx.fillText(countText, 12, height - 8);
+    // Commit count sits bottom-left (the floating zoom capsule lives
+    // bottom-right). Technical data => mono, quiet => text-faint.
+    ctx.save();
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left";
+    ctx.font = `10.5px ${this.cssVars.fontMono}`;
+    ctx.fillStyle = this.cssVars.textFaint;
+    const n = data.nodes.length;
+    // Spaces come from the i18n suffix (" commits" / " 条提交").
+    ctx.fillText(`${n}${t("graph.commits")}`, 14, height - 10);
+    ctx.restore();
 
     // Detect scroll near bottom to trigger load more
     if (this.onNearBottom && data.nodes.length > 0) {
       const lastNode = data.nodes[data.nodes.length - 1];
       const lastWorldY = lastNode.y + 100;
-      const viewBottomWorld = viewBottom;
-      if (viewBottomWorld >= lastWorldY) {
+      if (viewBottom >= lastWorldY) {
         this.onNearBottom();
       }
     }
   }
 
-  /** Redraw only the interaction layer: hover ring, selection ring, highlight rings. */
+  /** Redraw only the interaction layer: row bands, hover / selection / search rings. */
   private renderOverlay() {
     const { overlayCtx, width, height, camera, data } = this;
     overlayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     overlayCtx.clearRect(0, 0, width, height);
 
     const scale = Math.max(0.1, Math.min(5, camera.scale));
-    const sy = camera.offsetY + PADDING_TOP;
+    const sx = camera.offsetX + PADDING_LEFT;
+    const sy = camera.offsetY + this.topInset;
     const viewTop = -sy / scale;
     const viewBottom = (height - sy) / scale;
     const margin = 100;
     const cullTop = viewTop - margin;
     const cullBottom = viewBottom + margin;
 
+    // --- Row highlight bands (screen space, behind the rings) ---
+    const rowHeight = GRAPH_ROW_HEIGHT * scale;
+    for (const node of data.nodes) {
+      if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
+      const isSelected = this.selectedHash === node.hash;
+      const isHovered = this.hoveredNode?.hash === node.hash;
+      const isHighlighted = this.highlightHashes.has(node.hash);
+      if (!isSelected && !isHovered && !isHighlighted) continue;
+      const screenY = node.y * scale + sy;
+      const top = screenY - rowHeight / 2;
+
+      if (isHighlighted && !isSelected) {
+        overlayCtx.fillStyle = this.withAlpha(this.cssVars.warning, 0.1);
+        overlayCtx.fillRect(0, top, width, rowHeight);
+      }
+      if (isHovered && !isSelected) {
+        overlayCtx.fillStyle = this.withAlpha(this.cssVars.textSecondary, 0.08);
+        overlayCtx.fillRect(0, top, width, rowHeight);
+      }
+      if (isSelected) {
+        overlayCtx.fillStyle = this.withAlpha(this.cssVars.accent, 0.11);
+        overlayCtx.fillRect(0, top, width, rowHeight);
+        // 2.5px accent rule on the row's left edge.
+        overlayCtx.fillStyle = this.withAlpha(this.cssVars.accent, 0.85);
+        overlayCtx.fillRect(0, top, 2.5, rowHeight);
+      }
+    }
+
+    // --- Rings (world space so they follow zoom) ---
     overlayCtx.save();
-    overlayCtx.translate(camera.offsetX + PADDING_LEFT, sy);
+    overlayCtx.translate(sx, sy);
     overlayCtx.scale(scale, scale);
 
     for (const node of data.nodes) {
@@ -274,63 +421,101 @@ export class GraphRenderer {
       const isHovered = this.hoveredNode?.hash === node.hash;
       const isHighlighted = this.highlightHashes.has(node.hash);
       if (!isSelected && !isHovered && !isHighlighted) continue;
-      const r = isSelected ? NODE_RADIUS + 2 : isHovered ? NODE_RADIUS + 1 : NODE_RADIUS;
 
       if (isHighlighted && !isSelected) {
         overlayCtx.beginPath();
-        overlayCtx.arc(node.x, node.y, r + 5, 0, Math.PI * 2);
-        overlayCtx.fillStyle = this.withAlpha(this.cssVars.warning, 0.35);
+        overlayCtx.arc(node.x, node.y, NODE_RADIUS + 5, 0, Math.PI * 2);
+        overlayCtx.fillStyle = this.withAlpha(this.cssVars.warning, 0.18);
         overlayCtx.fill();
-      }
-      if (isSelected || isHovered) {
         overlayCtx.beginPath();
-        overlayCtx.arc(node.x, node.y, r + 3, 0, Math.PI * 2);
-        overlayCtx.fillStyle = isSelected ? this.withAlpha(this.cssVars.accent, 0.3) : this.withAlpha(this.cssVars.textSecondary, 0.2);
+        overlayCtx.arc(node.x, node.y, NODE_RADIUS + 4.5, 0, Math.PI * 2);
+        overlayCtx.lineWidth = 1.25;
+        overlayCtx.strokeStyle = this.withAlpha(this.cssVars.warning, 0.6);
+        overlayCtx.stroke();
+      }
+      if (isHovered && !isSelected) {
+        overlayCtx.beginPath();
+        overlayCtx.arc(node.x, node.y, NODE_RADIUS + 2.5, 0, Math.PI * 2);
+        overlayCtx.lineWidth = 1.5;
+        overlayCtx.strokeStyle = this.withAlpha(this.cssVars.accent, 0.55);
+        overlayCtx.stroke();
+      }
+      if (isSelected) {
+        overlayCtx.beginPath();
+        overlayCtx.arc(node.x, node.y, NODE_RADIUS + 4.5, 0, Math.PI * 2);
+        overlayCtx.fillStyle = this.withAlpha(this.cssVars.accent, 0.14);
         overlayCtx.fill();
+        overlayCtx.beginPath();
+        overlayCtx.arc(node.x, node.y, NODE_RADIUS + 3, 0, Math.PI * 2);
+        overlayCtx.lineWidth = 2;
+        overlayCtx.strokeStyle = this.withAlpha(this.cssVars.accent, 0.9);
+        overlayCtx.stroke();
       }
     }
 
     overlayCtx.restore();
   }
 
-
-  private drawBranchLabels(cullTop: number, cullBottom: number, isDark: boolean) {
+  private drawBranchLabels(cullTop: number, cullBottom: number, viewRight: number) {
     const { ctx, data } = this;
     const refs = data.branchRefs;
     if (!refs) return;
-    const textX = data.maxLane * GRAPH_LANE_WIDTH + GRAPH_LANE_WIDTH + 12;
-    const labelX = textX + 420; // position labels after commit text area
-    for (const node of data.nodes) {
-      if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
-      const names = refs[node.hash];
+    const labelX = this.textStartX() + LABEL_COLUMN_OFFSET;
+    // Only paint the pill rail when the text columns left room for it.
+    if (viewRight <= labelX + 70) return;
+
+    // `branchRefs` may be keyed by abbreviated hashes (simple-git's `branch()`
+    // reports 7-char commit ids) while nodes carry full hashes. Resolve both
+    // forms once per render; without this join the pill rail is never painted.
+    const refsByNodeHash = new Map<string, string[]>();
+    for (const [key, names] of Object.entries(refs)) {
       if (!names || names.length === 0) continue;
-      ctx.font = "bold 10.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.textBaseline = "middle";
-      const baseY = node.y - 10;
-      for (let i = 0; i < names.length; i++) {
-        const name = names[i].replace(/^remotes\//, '');
-        const w = ctx.measureText(name).width + 12;
-        const ly = baseY + i * 18;
+      refsByNodeHash.set(key, names);
+      if (key.length < 40) {
+        const match = data.nodes.find((candidate) => candidate.hash.startsWith(key));
+        if (match) refsByNodeHash.set(match.hash, names);
+      }
+    }
+
+    const font = `600 10px ${this.cssVars.fontSans}`;
+    ctx.font = font;
+    ctx.textBaseline = "middle";
+
+    for (const node of data.nodes) {
+      if (node.y + LABEL_HEIGHT / 2 < cullTop || node.y - LABEL_HEIGHT / 2 > cullBottom) continue;
+      const names = refsByNodeHash.get(node.hash);
+      if (!names || names.length === 0) continue;
+      let x = labelX;
+      for (const rawName of names) {
+        const name = rawName.replace(/^remotes\//, "");
+        const width = this.cachedMeasure(name, font) + LABEL_PAD_X * 2;
+        if (x + width > viewRight - 10) break;
+        // Pill: rounded rect filled with the branch color, readable ink on top.
         ctx.fillStyle = node.color;
         ctx.beginPath();
-        ctx.roundRect(labelX, ly - 8, w, 16, 4);
+        ctx.roundRect(x, node.y - LABEL_HEIGHT / 2, width, LABEL_HEIGHT, LABEL_RADIUS);
         ctx.fill();
-        ctx.fillStyle = this.cssVars.bg;
-        ctx.fillText(name, labelX + 6, ly);
+        ctx.fillStyle = this.labelInk(node.color, this.theme === "dark");
+        ctx.fillText(name, x + LABEL_PAD_X, node.y + 0.5);
+        x += width + LABEL_GAP;
       }
     }
   }
 
-  private drawEdges(cullTop: number, cullBottom: number, isDark: boolean) {
+  private drawEdges(cullTop: number, cullBottom: number) {
     const { ctx, data } = this;
+    const scale = Math.max(0.1, Math.min(5, this.camera.scale));
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
     for (const edge of data.edges) {
       const minY = Math.min(edge.fromY, edge.toY);
       const maxY = Math.max(edge.fromY, edge.toY);
       if (maxY < cullTop || minY > cullBottom) continue;
 
-      ctx.strokeStyle = edge.color;
-      ctx.lineWidth = 2 / (this.camera.scale || 0.5);
+      ctx.strokeStyle = this.withAlpha(edge.color, EDGE_ALPHA);
+      // Hairline at every zoom level (1.5 screen px).
+      ctx.lineWidth = EDGE_WIDTH / scale;
       ctx.beginPath();
 
       const fromY = edge.fromY;
@@ -344,7 +529,6 @@ export class GraphRenderer {
       } else {
         // Different lanes: bezier curve
         ctx.moveTo(edge.fromX, fromY);
-        // Vertical down from fromX, then horizontal to toX, then vertical to toY
         const cornerY1 = fromY + Math.abs(toY - fromY) * 0.3;
         const cornerY2 = toY - Math.abs(toY - fromY) * 0.3;
         ctx.lineTo(edge.fromX, cornerY1);
@@ -364,7 +548,8 @@ export class GraphRenderer {
     let s = this.dateStrCache.get(hash);
     if (!s) {
       const d = new Date(ts * 1000);
-      s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      // Date only: the exact time is available in the hover tooltip.
+      s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       this.dateStrCache.set(hash, s);
     }
     return s;
@@ -386,41 +571,74 @@ export class GraphRenderer {
     return w;
   }
 
-  private drawNodes(cullTop: number, cullBottom: number, viewLeft: number, viewRight: number, isDark: boolean) {
+  /** Truncate text with an ellipsis so that it fits in maxWidth (measure-cached). */
+  private truncateToWidth(text: string, maxWidth: number, font: string): string {
+    if (maxWidth <= 0) return "";
+    if (this.cachedMeasure(text, font) <= maxWidth) return text;
+    const ellipsis = "\u2026";
+    const ellipsisW = this.cachedMeasure(ellipsis, font);
+    if (ellipsisW > maxWidth) return "";
+    let lo = 0;
+    let hi = text.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (this.cachedMeasure(text.slice(0, mid), font) + ellipsisW <= maxWidth) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo > 0 ? text.slice(0, lo).trimEnd() + ellipsis : ellipsis;
+  }
+
+  private drawNodes(cullTop: number, cullBottom: number, viewLeft: number, viewRight: number) {
     const { ctx, data } = this;
+    const textX = this.textStartX();
+    // Columns: subject / author / date stay left of the ref-pill column so the
+    // pill rail never overlaps commit text (pills are painted afterwards).
+    const labelColumnX = textX + LABEL_COLUMN_OFFSET;
+    const hasLabelColumn = viewRight > labelColumnX + 70;
+    const textRight = hasLabelColumn ? labelColumnX - 10 : viewRight - 12;
+    const subjectFont = `13px ${this.cssVars.fontSans}`;
+    const authorFont = `11px ${this.cssVars.fontSans}`;
+    const dateFont = `10.5px ${this.cssVars.fontMono}`;
+    const gapAfterSubject = 9;
+    const gapBeforeDate = 12;
+    const { textPrimary, textMuted, textFaint } = this.cssVars;
 
     for (const node of data.nodes) {
       if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
       if (node.x + NODE_RADIUS < viewLeft || node.x - NODE_RADIUS > viewRight) continue;
 
-      // Main node circle (interaction rings live on the overlay layer)
+      // Node dot with a surface-colored ring; interaction rings live on the overlay layer.
       ctx.beginPath();
       ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = node.color;
       ctx.fill();
-
-      // Outline
+      ctx.lineWidth = NODE_RING_WIDTH;
       ctx.strokeStyle = this.cssVars.bg;
-      ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Commit subject text
-      const textX = data.maxLane * GRAPH_LANE_WIDTH + GRAPH_LANE_WIDTH + 12;
-      const subj = node.subject;
-      const displayText = subj.length > 50 ? subj.substring(0, 50) + "..." : subj;
-      ctx.fillStyle = this.cssVars.textPrimary;
-      ctx.font = "12.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      // Commit text: subject (primary) / author (muted) / date (mono, faint)
       ctx.textBaseline = "middle";
+      const authorW = this.cachedMeasure(node.author, authorFont);
+      const dateStr = this.dateStrFor(node.timestamp, node.hash);
+      const dateW = this.cachedMeasure(dateStr, dateFont);
+      const reserved = authorW + dateW + gapAfterSubject + gapBeforeDate;
+      const maxSubjectW = Math.max(40, textRight - textX - reserved);
+      const displayText = this.truncateToWidth(node.subject, maxSubjectW, subjectFont);
+      const subjW = this.cachedMeasure(displayText, subjectFont);
+
+      ctx.font = subjectFont;
+      ctx.fillStyle = textPrimary;
       ctx.fillText(displayText, textX, node.y);
-      const subjW = this.cachedMeasure(displayText, ctx.font);
-      ctx.fillStyle = this.cssVars.textSecondary;
-      ctx.font = "11.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(node.author, textX + subjW + 8, node.y);
-      // Date column
-      const authorW = this.cachedMeasure(node.author, ctx.font);
-      ctx.fillStyle = this.cssVars.textMuted;
-      ctx.font = "11px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText(this.dateStrFor(node.timestamp, node.hash), textX + subjW + authorW + 20, node.y);
+
+      const authorX = textX + subjW + gapAfterSubject;
+      ctx.font = authorFont;
+      ctx.fillStyle = textMuted;
+      ctx.fillText(node.author, authorX, node.y);
+
+      const dateX = authorX + authorW + gapBeforeDate;
+      ctx.font = dateFont;
+      ctx.fillStyle = textFaint;
+      ctx.fillText(dateStr, dateX, node.y);
     }
   }
 
@@ -428,7 +646,7 @@ export class GraphRenderer {
 
   private screenToWorld(sx: number, sy: number): { x: number; y: number } {
     const relativeX = sx - this.camera.offsetX - PADDING_LEFT;
-    const relativeY = sy - this.camera.offsetY - PADDING_TOP;
+    const relativeY = sy - this.camera.offsetY - this.topInset;
     return {
       x: relativeX / this.camera.scale,
       y: relativeY / this.camera.scale,
@@ -438,7 +656,7 @@ export class GraphRenderer {
   private hitTest(sx: number, sy: number): GraphNode | null {
     const world = this.screenToWorld(sx, sy);
     const hitRadius = NODE_RADIUS + 6;
-    const textX = this.data.maxLane * GRAPH_LANE_WIDTH + GRAPH_LANE_WIDTH + 12;
+    const textX = this.textStartX();
     const halfFont = 7;
     const nodes = this.data.nodes;
     if (nodes.length === 0) return null;
@@ -489,21 +707,34 @@ export class GraphRenderer {
       const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
       this.zoomBy(zoomFactor);
     } else {
-      this.camera.offsetY -= e.deltaY;
-      this.camera.offsetY = Math.min(120, Math.max(this.minOffsetY(), this.camera.offsetY));
+      this.camera.offsetY = this.clampOffsetY(this.camera.offsetY - e.deltaY);
       this.scheduleRender();
       this.scheduleOverlayRender();
     }
   };
 
-  /** Lower bound for vertical scrolling so the graph cannot be scrolled past its end. */
+  /** Clamp offsetY into [minOffsetY(), 0]; never overscroll above the first row. */
+  private clampOffsetY(value: number): number {
+    return Math.max(this.minOffsetY(), Math.min(0, value));
+  }
+
+  /**
+   * Lowest allowed offsetY. 0 when the whole graph fits in the viewport (a
+   * short graph must not jump down and strand itself), negative when the graph
+   * is taller than the viewport.
+   */
   private minOffsetY(): number {
     const last = this.data.nodes[this.data.nodes.length - 1];
-    if (!last) return -this.height;
-    return Math.min(120, this.height - last.y * this.camera.scale - 40);
+    if (!last) return 0;
+    const scale = Math.max(0.1, Math.min(5, this.camera.scale));
+    // last.y is the last row centre; keep its row plus a little air visible.
+    return Math.min(0, this.height - last.y * scale - 40);
   }
 
   private handleMouseDown = (e: MouseEvent) => {
+    // Only the primary button starts a click; right-click drives the context menu.
+    // (`typeof` guard: synthetic events in component tests omit `button`.)
+    if (typeof e.button === "number" && e.button !== 0) return;
     // Drag-panning is intentionally disabled; track presses only for click detection.
     this.isDragging = true;
     this.dragStartX = e.offsetX;
@@ -526,6 +757,7 @@ export class GraphRenderer {
   };
 
   private handleMouseUp = (e: MouseEvent) => {
+    if (typeof e.button === "number" && e.button !== 0) return;
     if (!this.isDragging) return;
     this.isDragging = false;
 
@@ -565,3 +797,4 @@ export class GraphRenderer {
     this.overlayCanvas.removeEventListener("contextmenu", this.handleContextMenu);
   }
 }
+

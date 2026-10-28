@@ -84,4 +84,15 @@ Application settings persist to:
 
 On Windows: `%APPDATA%/zentree/zentree-settings.json`
 
-Stored keys include: `gitPath`, `themePreset`, `language`, `windowWidth`, `windowHeight`.
+Stored keys include: `gitPath`, `themePreset`, `language`, `windowWidth`, `windowHeight`, `repos`,
+`tabs`, `repoGroups`, `lastRepo`. Settings are shape-validated on load and on write
+(`electron/settingsRepository.ts`); a structurally corrupt file is backed up next to the original and
+replaced by defaults, so a bad edit can never brick git operations.
+
+## Testing Notes
+
+`npm test` needs a real `git` binary on `PATH`. Each integration test creates an isolated repository
+under the OS temp directory. `tests/setup.ts` gives every worker a hermetic git environment (temporary
+`HOME`/`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM=1`, no terminal prompts), so your machine's global
+git config cannot influence results. Use `npm run check` for the full gate (renderer + main + tests
+type-checked, then the suite) and `npm run test:coverage` for a coverage report.

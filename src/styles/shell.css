@@ -1,0 +1,1872 @@
+/* =============================================================================
+   ZenTree — application shell
+   -----------------------------------------------------------------------------
+   Top bar · filter bar · tab strip · sidebar · main layout · status bar ·
+   welcome screen · shell popovers · resize handles.
+
+   Visual language: warm cream paper, hairline borders, a single terracotta
+   accent, serif display type and calm low-chrome toolbars (see
+   docs/design-spec.md). Every colour here comes from a src/theme.css token —
+   no literal colour values, no gradients other than the token-based welcome
+   glow, no glow/shadows beyond the --shadow-* scale.
+   ============================================================================= */
+
+/* =============================================================================
+   1. Top bar — window chrome
+   ============================================================================= */
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--topbar-height);
+  padding: 0 10px 0 12px;
+  flex-shrink: 0;
+  min-width: 0;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  /* Popovers anchor inside the bar and must paint over the filter/tab rows. */
+  position: relative;
+  z-index: 40;
+  -webkit-app-region: drag;
+}
+
+.top-bar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 8px;
+  flex-shrink: 0;
+  background: var(--separator);
+}
+
+/* Brand: clay asterisk + Newsreader wordmark. Clicking it opens settings,
+   matching the behaviour of the old window title. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 6px 0 2px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.brand:hover {
+  background: var(--bg-hover);
+}
+
+.brand:active {
+  background: var(--bg-active);
+}
+
+.brand:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.brand-mark svg {
+  display: block;
+}
+
+.window-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ---- Repository chip ------------------------------------------------------ */
+
+.repo-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 300px;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.repo-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: default;
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.repo-selector-trigger:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.repo-status-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.repo-status-dot.idle {
+  background: var(--text-faint);
+}
+
+.repo-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.repo-add-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* ---- Toolbar -------------------------------------------------------------- */
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  flex-shrink: 0;
+  background: var(--separator);
+}
+
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toolbar-btn:active:not(:disabled) {
+  background: var(--bg-active);
+}
+
+.toolbar-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.toolbar-btn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.toolbar-btn.icon-only {
+  width: 28px;
+  padding: 0;
+}
+
+.toolbar-btn.add-repo:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.toolbar-btn.lang-btn {
+  width: auto;
+  padding: 0 7px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+/* Split pull control: main action + strategy caret. */
+.pull-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.toolbar-btn.pull-caret {
+  width: 15px;
+  min-width: 15px;
+  padding: 0;
+  color: var(--text-faint);
+}
+
+.toolbar-btn.pull-caret:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.top-bar-spacer {
+  flex: 1 1 auto;
+  min-width: 4px;
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+/* ---- Window controls ------------------------------------------------------ */
+
+.window-controls-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 6px;
+  flex-shrink: 0;
+  background: var(--separator);
+}
+
+.window-control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.window-control-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.window-control-btn:active {
+  background: var(--bg-active);
+}
+
+.window-control-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.window-control-btn.close:hover {
+  background: var(--danger);
+  color: var(--text-inverse);
+}
+
+.window-control-btn.close:active {
+  background: var(--danger-hover);
+  color: var(--text-inverse);
+}
+
+/* =============================================================================
+   2. Filter bar — commit-log search / author / since-date
+   ============================================================================= */
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--filterbar-height);
+  padding: 0 14px;
+  flex-shrink: 0;
+  min-width: 0;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 10px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.filter-field:hover {
+  background: var(--bg-hover);
+}
+
+.filter-field:focus-within {
+  background: var(--bg-input);
+  border-color: var(--accent-border);
+  box-shadow: var(--focus-ring);
+}
+
+.filter-field.filter-search {
+  flex: 1 1 auto;
+  max-width: 340px;
+}
+
+.filter-field.filter-author-field {
+  flex: 0 1 200px;
+  min-width: 140px;
+}
+
+.filter-icon {
+  display: block;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.filter-field:focus-within .filter-icon {
+  color: var(--text-muted);
+}
+
+.filter-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+.filter-input:focus,
+.filter-input:focus-visible {
+  box-shadow: none;
+}
+
+.filter-input::placeholder {
+  color: var(--text-faint);
+}
+
+.filter-input.filter-query {
+  flex: 1 1 auto;
+}
+
+.filter-input.filter-author {
+  flex: 1 1 auto;
+}
+
+.filter-label {
+  padding-left: 2px;
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* DatePicker root lives in the filter bar; layout only — the trigger styling
+   belongs to dialogs.css, with a scoped token fallback here so the 38px bar
+   always looks right. */
+.filter-input.filter-date {
+  flex: 0 0 152px;
+  width: 152px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  position: relative;
+}
+
+.filter-bar .date-picker {
+  flex: 0 0 152px;
+  width: 152px;
+}
+
+.filter-bar .date-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.filter-bar .date-picker-trigger:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.filter-bar .date-picker-trigger:focus-visible {
+  border-color: var(--accent-border);
+  box-shadow: var(--focus-ring);
+}
+
+.filter-bar .date-picker-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-bar .date-picker-value.empty {
+  color: var(--text-faint);
+}
+
+.filter-bar .date-picker-trigger svg {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.filter-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.filter-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.filter-clear:active {
+  background: var(--bg-active);
+}
+
+.filter-clear:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+/* =============================================================================
+   3. Tab strip — repo pills
+   ============================================================================= */
+
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--tabbar-height);
+  padding: 0 10px;
+  flex-shrink: 0;
+  min-width: 0;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  z-index: 30;
+  -webkit-app-region: no-drag;
+}
+
+.tab-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* The strip hides its scrollbar; TabBar maps wheel deltas to scrollLeft. */
+  scrollbar-width: none;
+}
+
+.tab-list::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+.repo-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 190px;
+  height: 28px;
+  padding: 0 6px 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.repo-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.repo-tab.active {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-xs);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.repo-tab.dragging {
+  opacity: 0.5;
+  border-style: dashed;
+  border-color: var(--border-strong);
+}
+
+.repo-tab-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+}
+
+.repo-tab:hover .repo-tab-close,
+.repo-tab.active .repo-tab-close,
+.repo-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.repo-tab-close:hover {
+  background: var(--bg-active);
+  color: var(--danger);
+}
+
+.repo-tab-close:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.tab-empty {
+  padding: 0 8px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.tab-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tab-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.tab-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tab-action-btn:active {
+  background: var(--bg-active);
+}
+
+.tab-action-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.tab-action-btn.icon-only {
+  width: 26px;
+  padding: 0;
+}
+
+.tab-action-btn.back {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.tab-action-btn.back:hover {
+  background: var(--accent-soft-hover);
+  color: var(--accent-strong);
+}
+
+.tab-group-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.tab-group-label {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Popover anchored to the group button (surface tokens follow dialogs.css). */
+.tab-bar .tab-group-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 210px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+  animation: zt-menu-in var(--dur-fast) var(--ease-out);
+}
+
+.tab-group-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.tab-group-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tab-group-item.active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.tab-group-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-group-item-count {
+  min-width: 18px;
+  padding: 0 6px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.tab-group-empty {
+  padding: 12px 10px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+/* =============================================================================
+   4. Main layout — sidebar / center / diff
+   ============================================================================= */
+
+.main-content {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.center-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.center-area.has-diff {
+  flex: 1 1 0;
+}
+
+/* Short windows (supported minimum: 900x600). The center column shares the
+   vertical budget with the window chrome above and the floating commit
+   composer below, so at small heights the two stacked panels must be allowed
+   to compress below their desktop floors — otherwise the file panel spills
+   under the composer (QA P3). Panels keep their graph:files flex ratio and
+   their skins (panels.css); this rule only relaxes the hard floors inside the
+   shell's center column while it is height-constrained. Selector is
+   deliberately more specific than the panel classes: panels.css loads after
+   shell.css, so equal-specificity floors would otherwise win. */
+@media (max-height: 780px) {
+  .main-content > .center-area > * {
+    min-height: 0;
+  }
+}
+
+/* =============================================================================
+   5. Sidebar — branches / remotes / stash / tags
+   ============================================================================= */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 0 auto;
+  width: var(--sidebar-width);
+  min-width: 140px;
+  height: auto;
+  background: var(--bg-tertiary);
+  border-right: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: 36px;
+  padding: 0 8px 0 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--separator);
+}
+
+.sidebar-header-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sidebar-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.sidebar-add-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-add-btn:active {
+  background: var(--bg-active);
+}
+
+.sidebar-add-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-2) 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Fixed-height side lists (stash / tags) keep their own scroll area. */
+.sidebar-list.fixed {
+  flex: 0 0 auto;
+  padding-top: 2px;
+}
+
+.sidebar-list.stash-list {
+  max-height: 140px;
+}
+
+.sidebar-list.tag-list {
+  max-height: 160px;
+}
+
+.sidebar-subheader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 12px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--separator);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.sidebar-subheader:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-subheader:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.subheader-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.subheader-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subheader-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.sidebar-group-label {
+  padding: 8px 10px 3px 12px;
+  color: var(--text-faint);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  user-select: none;
+}
+
+/* ---- List rows ------------------------------------------------------------ */
+
+.branch-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-ligatures: none;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.branch-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.branch-item.current {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 500;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.branch-item.current:hover {
+  background: var(--accent-soft-hover);
+  color: var(--accent-strong);
+}
+
+.branch-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.branch-icon svg {
+  display: block;
+}
+
+.branch-item:hover .branch-icon {
+  color: var(--text-muted);
+}
+
+.branch-item.current .branch-icon {
+  color: var(--accent);
+}
+
+.branch-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-current-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Upstream + ahead/behind badges. */
+.branch-tracking {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 1;
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.track-up {
+  max-width: 56px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+}
+
+.track-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-ahead,
+.track-behind {
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  line-height: 16px;
+}
+
+.track-ahead {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.track-behind {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+/* Remote entries are indented under the "Remote branches" label. */
+.branch-item.remote {
+  padding-left: 20px;
+}
+
+.branch-item.remote.viewing {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.branch-icon.remote-icon {
+  color: var(--text-faint);
+}
+
+.branch-item.remote.viewing .branch-icon.remote-icon {
+  color: var(--accent);
+}
+
+.branch-item.remote-item {
+  color: var(--text-muted);
+}
+
+.stash-subject {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-item.stash-item {
+  font-family: var(--font-sans);
+}
+
+.branch-item.stash-item .stash-subject {
+  font-size: var(--text-sm);
+}
+
+.branch-item.tag-item {
+  font-family: var(--font-mono);
+}
+
+.branch-item.remote-item .branch-name {
+  color: var(--text-secondary);
+}
+
+/* Row actions stay out of the way until the row is hovered/focused. */
+.file-actions {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.branch-item:hover .file-actions,
+.branch-item:focus-within .file-actions {
+  display: flex;
+}
+
+/* Sidebar-scoped fallback for the shared file-action button so remote/stash/tag
+   rows look right even though the base styling belongs to panels.css. */
+.sidebar .file-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.sidebar .file-action-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.sidebar .file-action-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.sidebar .file-action-btn.danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.sidebar .file-action-btn.primary {
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+}
+
+.sidebar .file-action-btn.primary:hover {
+  background: var(--button-primary-bg-hover);
+}
+
+/* ---- Inline creation forms ------------------------------------------------ */
+
+.new-branch-input {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 8px 6px;
+  padding: 8px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+}
+
+.new-branch-input input {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.new-branch-input input::placeholder {
+  color: var(--text-faint);
+  font-family: var(--font-sans);
+}
+
+.new-branch-input input:focus {
+  border-color: var(--accent-border);
+  box-shadow: var(--focus-ring);
+}
+
+.new-branch-input button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.new-branch-input button:hover:not(:disabled) {
+  background: var(--button-primary-bg-hover);
+}
+
+.new-branch-input button:active:not(:disabled) {
+  background: var(--accent-active);
+}
+
+.new-branch-input button:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.new-branch-input button:disabled {
+  background: var(--bg-active);
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* ---- Empty / error rows --------------------------------------------------- */
+
+.sidebar .empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  min-height: 28px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.sidebar .empty-state.sidebar-error {
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+/* =============================================================================
+   6. Status bar
+   ============================================================================= */
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--statusbar-height);
+  padding: 0 12px;
+  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  user-select: none;
+}
+
+.status-left,
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.status-left {
+  flex: 1 1 auto;
+}
+
+.status-right {
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+.status-repo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.status-repo-path {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.status-sep {
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.status-bar strong,
+.status-branch {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.status-spacer {
+  flex: 1 1 auto;
+  min-width: 4px;
+}
+
+.ongoing-op {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 5px 2px 8px;
+  flex-shrink: 0;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-pill);
+  background: var(--warning-bg);
+}
+
+.ongoing-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.ongoing-label {
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.status-op-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.status-op-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.status-op-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.status-op-btn.primary {
+  border-color: transparent;
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+}
+
+.status-op-btn.primary:hover {
+  background: var(--button-primary-bg-hover);
+  color: var(--button-primary-text);
+}
+
+.conflict-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-pill);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.conflict-badge svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.status-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.status-bar .spinner {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
+.status-bar .error {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 42vw;
+  min-width: 0;
+  height: 20px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--danger);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.status-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 42vw;
+  min-width: 0;
+}
+
+.status-error-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-loading-msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-bar .error:hover {
+  background: var(--danger-bg);
+}
+
+.status-bar .error:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.status-bar .error svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* =============================================================================
+   7. Welcome — no repository open
+   ============================================================================= */
+
+.welcome {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-8);
+  overflow: hidden;
+  /* Flat warm-paper surface. A radial accent glow quantises into visible
+     concentric bands in Chromium (QA checkpoint), so the welcome screen
+     deliberately stays clean instead of faking depth with a gradient. */
+  background: var(--bg-primary);
+}
+
+.welcome-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-1);
+  color: var(--accent);
+}
+
+.welcome-mark svg {
+  display: block;
+}
+
+.welcome h1 {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.welcome p {
+  max-width: 440px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  text-align: center;
+}
+
+.welcome-desc {
+  max-width: 440px;
+}
+
+.welcome-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.welcome .open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 22px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.welcome .open-btn:hover {
+  background: var(--button-primary-bg-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.welcome .open-btn:active {
+  transform: translateY(1px);
+}
+
+.welcome .open-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.welcome .open-btn.secondary {
+  border-color: var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.welcome .open-btn.secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.welcome .welcome-hint {
+  margin-top: var(--space-4);
+  color: var(--text-faint);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* =============================================================================
+   8. Shell popovers (repo menu · pull menu) and context menu fallback
+   ============================================================================= */
+
+.top-bar .repo-dropdown,
+.top-bar .pull-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 190px;
+  padding: var(--space-1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+  animation: zt-menu-in var(--dur-fast) var(--ease-out);
+}
+
+.top-bar .repo-add-menu {
+  width: 220px;
+}
+
+.repo-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.repo-dropdown-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.repo-dropdown-item:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.repo-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: inherit;
+}
+
+.repo-item-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.pull-menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.pull-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Fallback for the sidebar right-click menu. dialogs.css loads after this file
+   and provides the canonical base menu styling; these rules keep the shell
+   usable (fixed positioning + list rhythm) on their own. */
+.context-menu {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 190px;
+  padding: var(--space-1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popover);
+  animation: zt-menu-in var(--dur-fast) var(--ease-out);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.context-menu-item:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.context-menu-item.danger {
+  color: var(--danger);
+}
+
+.context-menu-item.danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--separator);
+}
+
+/* =============================================================================
+   9. Resize handles
+   ============================================================================= */
+
+.resize-handle,
+.diff-panel-resize {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.resize-handle:hover,
+.diff-panel-resize:hover {
+  background: var(--accent-border);
+}
+
+.resize-handle:active,
+.diff-panel-resize:active {
+  background: var(--accent);
+}
+
+.resize-handle:focus-visible,
+.diff-panel-resize:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+/* =============================================================================
+   10. Compact layout — minimum window width is 900px
+   ============================================================================= */
+
+@media (max-width: 1024px) {
+  .top-bar {
+    padding: 0 8px 0 10px;
+  }
+
+  .top-bar-divider {
+    margin: 0 5px;
+  }
+
+  .repo-selector {
+    flex-basis: 220px;
+  }
+
+  .filter-field.filter-search {
+    max-width: 280px;
+  }
+
+  .filter-field.filter-author-field {
+    flex-basis: 170px;
+  }
+
+  .window-control-btn {
+    width: 28px;
+  }
+
+  .status-repo-path {
+    max-width: 220px;
+  }
+
+  .status-bar .error {
+    max-width: 34vw;
+  }
+}

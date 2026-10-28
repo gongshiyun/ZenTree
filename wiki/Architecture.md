@@ -88,5 +88,11 @@ UI Update ← Zustand Store ← Component ← IPC Response ←┘
 - `contextIsolation: true` — renderer cannot access Node.js APIs
 - `nodeIntegration: false` — no `require()` in renderer
 - `sandbox: true` — preload only uses `contextBridge`/`ipcRenderer`, which work sandboxed
-- All filesystem access confined to main process
-- Hunk patches written to OS temp dir and cleaned up immediately
+- `window.gitAPI` is the only bridge; every channel is wrapped by `safeHandler` (diagnostics without
+  leaking stacks to the renderer) and mutating `git:*` channels validate the repository path
+- All filesystem access is confined to the main process; working-tree reads/writes reject traversal,
+  absolute paths, symlinked escapes and any `.git` metadata path
+- `shell.openExternal` only accepts `http:`/`https:`; popups are denied and off-origin navigation is
+  blocked; a packaged build never loads the dev server
+- Hunk patches are written to the OS temp dir and cleaned up immediately
+- A single-instance lock prevents two app instances from racing the settings file

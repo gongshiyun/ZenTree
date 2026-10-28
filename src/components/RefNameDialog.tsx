@@ -29,11 +29,11 @@ export default function RefNameDialog({ title, placeholder, defaultValue = "", c
 
   return (
     <div className="settings-overlay" onClick={onClose}>
-      <div className="settings-dialog ref-name-dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="settings-dialog ref-name-dialog" role="dialog" aria-modal="true" aria-labelledby="ref-name-title" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
-          <h2>{title}</h2>
-          <button className="settings-close" onClick={onClose} title={t("refName.cancel")}>
-            <svg width="14" height="14" viewBox="0 0 14 14"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" strokeWidth="1.5"/></svg>
+          <h2 id="ref-name-title">{title}</h2>
+          <button type="button" className="settings-close" onClick={onClose} aria-label={t("refName.cancel")} title={t("refName.cancel")}>
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" strokeWidth="1.5"/></svg>
           </button>
         </div>
         <div className="settings-body">
@@ -41,6 +41,7 @@ export default function RefNameDialog({ title, placeholder, defaultValue = "", c
             ref={inputRef}
             type="text"
             className="ref-name-input"
+            aria-label={title}
             value={name}
             placeholder={placeholder}
             onChange={(e) => setName(e.target.value)}
@@ -51,8 +52,8 @@ export default function RefNameDialog({ title, placeholder, defaultValue = "", c
           />
         </div>
         <div className="settings-footer">
-          <button className="settings-btn secondary" onClick={onClose}>{t("refName.cancel")}</button>
-          <button className="settings-btn primary" disabled={!name.trim()} onClick={submit}>{confirmLabel}</button>
+          <button type="button" className="settings-btn secondary" onClick={onClose}>{t("refName.cancel")}</button>
+          <button type="button" className="settings-btn primary" disabled={!name.trim()} onClick={submit}>{confirmLabel}</button>
         </div>
       </div>
     </div>

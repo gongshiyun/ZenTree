@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRepoStore } from "../application/repoStore";
 import { GraphRenderer } from "../renderer/canvasRenderer";
-import { useT } from "../i18n";
+import { useT, getGlobalLocale } from "../i18n";
 import { gitApi } from "../infrastructure/gitBridge";
 import RefNameDialog from "./RefNameDialog";
 import type { GraphNode } from "../types";
@@ -17,6 +17,7 @@ type NodeMenuAction =
 
 export default function CommitGraph() {
   const t = useT();
+  const locale = getGlobalLocale();
   const baseCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GraphRenderer | null>(null);
@@ -38,6 +39,9 @@ export default function CommitGraph() {
   const setShowCompare = useRepoStore((s) => s.setShowCompare);
 
   const [tooltip, setTooltip] = useState<{ node: GraphNode; x: number; y: number } | null>(null);
+  // Clamped tooltip position inside the graph viewport (never clipped/overlapping chrome).
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const [refDialog, setRefDialog] = useState<{ kind: "branch" | "tag"; hash: string } | null>(null);
   const [searchText, setSearchText] = useState("");
@@ -75,18 +79,22 @@ export default function CommitGraph() {
     }
   }, [matchIndex, matches]);
 
+  const openSearch = useCallback(() => {
+    setShowSearch(true);
+    setTimeout(() => searchInputRef.current?.focus(), 50);
+  }, []);
+
   // Ctrl+F to open search
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "f") {
         e.preventDefault();
-        setShowSearch(true);
-        setTimeout(() => searchInputRef.current?.focus(), 50);
+        openSearch();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [openSearch]);
 
   // Initialize renderer on the stacked base/overlay canvases
   useEffect(() => {
@@ -113,13 +121,16 @@ export default function CommitGraph() {
           }
         },
         onClick: async (node) => {
-          selectCommit(node.hash);
           const repo = useRepoStore.getState().currentRepo;
-          if (repo) {
-            const result = await gitApi().show(repo, node.hash);
-            if (result.success && result.data) {
-              setCommitDetail(result.data);
-            }
+          selectCommit(node.hash);
+          if (!repo) return;
+          const result = await gitApi().show(repo, node.hash);
+          // Drop stale responses: the user may have changed repositories or
+          // clicked another commit while show() was in flight.
+          const state = useRepoStore.getState();
+          if (state.currentRepo !== repo || state.selectedCommit !== node.hash) return;
+          if (result.success && result.data) {
+            setCommitDetail(result.data);
           }
         },
         onNearBottom: () => useRepoStore.getState().loadMoreCommits(),
@@ -149,6 +160,13 @@ export default function CommitGraph() {
     }
   }, [graphData]);
 
+  // Reset the camera when the active repository changes. Cached tab switches
+  // swap graph data synchronously, so the renderer's own identity check is not
+  // enough — mirror the store's repo change explicitly.
+  useEffect(() => {
+    rendererRef.current?.resetCamera();
+  }, [currentRepo]);
+
   // Update theme
   useEffect(() => {
     if (rendererRef.current) {
@@ -162,6 +180,47 @@ export default function CommitGraph() {
       rendererRef.current.setSelected(selectedCommit);
     }
   }, [selectedCommit]);
+
+  // Repaint when the language changes: the canvas commit-count suffix is i18n.
+  useEffect(() => {
+    rendererRef.current?.refresh();
+  }, [locale]);
+
+  // Clamp the hover tooltip inside the graph viewport: flip it below the cursor
+  // for the top rows and keep it clear of the edges and the chrome strip.
+  useLayoutEffect(() => {
+    if (!tooltip) {
+      setTooltipPos(null);
+      return;
+    }
+    const tip = tooltipRef.current;
+    const container = containerRef.current;
+    if (!tip || !container) return;
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    const tw = tip.offsetWidth || 300;
+    const th = tip.offsetHeight || 96;
+    // tooltip.x/y carry the raw cursor position plus a small offset.
+    const mouseX = tooltip.x - 14;
+    const mouseY = tooltip.y + 8;
+    const margin = 10;
+    // The top strip holds the zoom/search capsule and view-ref banner.
+    const topEdge = 44;
+
+    let left = mouseX + 16;
+    if (left + tw > cw - margin) left = mouseX - tw - 16;
+    left = Math.max(margin, Math.min(left, Math.max(margin, cw - tw - margin)));
+
+    let top = mouseY - th - 12;
+    if (top < topEdge) top = mouseY + 22; // top rows: show below the cursor
+    top = Math.max(topEdge, Math.min(top, Math.max(topEdge, ch - th - margin)));
+
+    setTooltipPos((prev) =>
+      prev && Math.abs(prev.left - left) < 0.5 && Math.abs(prev.top - top) < 0.5
+        ? prev
+        : { left, top }
+    );
+  }, [tooltip]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -268,18 +327,33 @@ export default function CommitGraph() {
     <div className="graph-container" ref={containerRef} onMouseMove={handleMouseMove}>
       {viewRef && (
         <div className="graph-view-ref">
+          <span className="graph-view-ref-dot" aria-hidden="true" />
           <span className="graph-view-ref-label">{t("graph.viewingRef").replace("{0}", viewRef)}</span>
-          <button className="graph-view-ref-close" onClick={() => setViewRef(null)} title={t("graph.backToCurrent")}>&times;</button>
+          <button className="graph-view-ref-close" onClick={() => setViewRef(null)} title={t("graph.backToCurrent")} aria-label={t("graph.backToCurrent")}>&times;</button>
         </div>
       )}
-      <div className="graph-zoom-controls">
-        <button className="graph-zoom-btn" onClick={() => handleZoom(1 / 1.2)} title={t("graph.zoomOut")}>&minus;</button>
-        <span className="graph-zoom-label">{zoom}%</span>
-        <button className="graph-zoom-btn" onClick={() => handleZoom(1.2)} title={t("graph.zoomIn")}>+</button>
-        <button className="graph-zoom-btn" onClick={handleZoomReset} title={t("graph.zoomReset")}>1:1</button>
-      </div>
+      {!showSearch && (
+        <div className="graph-zoom-controls">
+          <button className="graph-zoom-btn" onClick={() => handleZoom(1 / 1.2)} title={t("graph.zoomOut")} aria-label={t("graph.zoomOut")}>&minus;</button>
+          <span className="graph-zoom-label">{zoom}%</span>
+          <button className="graph-zoom-btn" onClick={() => handleZoom(1.2)} title={t("graph.zoomIn")} aria-label={t("graph.zoomIn")}>+</button>
+          <span className="graph-toolbar-separator" aria-hidden="true" />
+          <button className="graph-zoom-btn" onClick={handleZoomReset} title={t("graph.zoomReset")}>1:1</button>
+          <span className="graph-toolbar-separator" aria-hidden="true" />
+          <button className="graph-zoom-btn graph-search-toggle" onClick={openSearch} title={t("graph.searchPlaceholder")} aria-label={t("graph.searchPlaceholder")}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <circle cx="6" cy="6" r="4.25" stroke="currentColor" strokeWidth="1.5" />
+              <line x1="9.2" y1="9.2" x2="12.5" y2="12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
       {showSearch && (
         <div className="graph-search-bar">
+          <svg className="graph-search-icon" width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <circle cx="6" cy="6" r="4.25" stroke="currentColor" strokeWidth="1.5" />
+            <line x1="9.2" y1="9.2" x2="12.5" y2="12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
           <input
             ref={searchInputRef}
             type="text"
@@ -292,24 +366,29 @@ export default function CommitGraph() {
             }}
           />
           <span className="graph-search-count">{searchText ? `${matches.length}` : ""}</span>
-          <button className="graph-search-close" onClick={() => { setShowSearch(false); setSearchText(""); }}>&times;</button>
+          <button className="graph-search-close" onClick={() => { setShowSearch(false); setSearchText(""); }} aria-label={t("topbar.filterClear")}>&times;</button>
         </div>
       )}
       <canvas ref={baseCanvasRef} className="graph-canvas graph-canvas-base" />
       <canvas ref={overlayCanvasRef} className="graph-canvas graph-canvas-overlay" />
       {tooltip && (
         <div
+          ref={tooltipRef}
           className="graph-tooltip"
-          style={{ left: tooltip.x, top: tooltip.y, transform: "translateY(-100%)" }}
+          style={
+            tooltipPos
+              ? { left: tooltipPos.left, top: tooltipPos.top }
+              : { left: tooltip.x, top: tooltip.y, transform: "translateY(-100%)" }
+          }
         >
           <div className="tt-subject">{tooltip.node.subject}</div>
           {tooltip.node.body && (
             <div className="tt-body">{tooltip.node.body}</div>
           )}
-          <div className="tt-hash">{tooltip.node.hash}</div>
           <div className="tt-meta">
-            {tooltip.node.author} &lt;{tooltip.node.email}&gt; &middot;{" "}
-            {formatDate(tooltip.node.timestamp)}
+            <span className="tt-hash" title={tooltip.node.hash}>{tooltip.node.shortHash}</span>
+            <span className="tt-author">{tooltip.node.author}</span>
+            <span className="tt-time">{formatDate(tooltip.node.timestamp)}</span>
           </div>
         </div>
       )}

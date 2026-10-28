@@ -2,93 +2,83 @@
 
 ## Overview
 
-ZenTree supports **10 color themes** (8 dark + 2 light) implemented via CSS custom properties. Themes are defined as presets in `src/domain/theme/presets.ts` and applied at runtime by setting variables on `document.documentElement`.
+ZenTree uses a small design-token system: every colour, font, radius, shadow and layout metric is
+a CSS custom property defined once in `src/theme.css`. Component styles in
+`src/styles/{shell,panels,dialogs}.css` reference only those tokens, so a theme swap repaints the
+whole app — DOM and canvas — without touching component code.
 
-## Theme Presets
+The app ships **4 presets** in the Claude visual family, defined in
+`src/domain/theme/presets.ts`:
 
-| Name | Label | Type |
-|------|-------|------|
-| `catppuccin-mocha` | Catppuccin Mocha | Dark (default) |
-| `dracula` | Dracula | Dark |
-| `nord` | Nord | Dark |
-| `one-dark` | One Dark Pro | Dark |
-| `tokyo-night` | Tokyo Night | Dark |
-| `monokai` | Monokai | Dark |
-| `github-dark` | GitHub Dark | Dark |
-| `solarized-dark` | Solarized Dark | Dark |
-| `catppuccin-latte` | Catppuccin Latte | Light |
-| `solarized-light` | Solarized Light | Light |
+| Name | Label | Type | Notes |
+|------|-------|------|-------|
+| `claude` | Claude | Light (default) | Warm ivory paper, white cards, clay accent |
+| `claude-dark` | Claude Dark | Dark | Warm charcoal surfaces (matches the Claude desktop app) |
+| `claude-code` | Claude Code | Dark | Near-black terminal surfaces, higher-contrast mono content |
+| `claude-sand` | Claude Sand | Light | Sandier paper, deeper clay accent |
 
-## CSS Variables
+`DEFAULT_THEME` is `claude`; a preset saved by an older build that no longer exists falls back to it.
 
-Each theme defines these custom properties:
+## Tokens
 
-| Variable | Purpose | Example (Catppuccin Mocha) |
-|----------|---------|---------------------------|
-| `--bg-primary` | Main background | `#1a1b26` |
-| `--bg-secondary` | Panel/card background | `#1e1e2e` |
-| `--bg-tertiary` | Nested surfaces | `#2a2a3c` |
-| `--bg-hover` | Hover state | `#313147` |
-| `--bg-active` | Active/pressed state | `#3b3b54` |
-| `--border-color` | Borders and dividers | `#2e2e42` |
-| `--text-primary` | Main text | `#cdd6f4` |
-| `--text-secondary` | Secondary text | `#a6adc8` |
-| `--text-muted` | Muted/hint text | `#6c7086` |
-| `--text-inverse` | Text on accent backgrounds | `#1e1e2e` |
-| `--accent` | Primary accent | `#89b4fa` |
-| `--accent-hover` | Accent hover | `#74c7ec` |
-| `--success` | Success/added | `#a6e3a1` |
-| `--warning` | Warning/modified | `#f9e2af` |
-| `--danger` | Danger/deleted | `#f38ba8` |
-| `--danger-hover` | Danger hover | `#eba0ac` |
+`src/theme.css` defines the token contract. Presets only supply the palette tokens (all plain hex,
+enforced by `tests/theme.test.ts`); everything translucent — hover fills, borders, focus rings,
+diff tints, shadows — is derived with `color-mix()` so it adapts to every preset automatically.
 
-## Application Mechanism
+| Group | Tokens |
+|-------|--------|
+| Surfaces | `--bg-primary` `--bg-secondary` `--bg-tertiary` `--bg-elevated` `--bg-input` `--bg-code` `--bg-hover` `--bg-active` |
+| Lines | `--border-color` `--border-strong` `--separator` |
+| Text | `--text-primary` `--text-secondary` `--text-muted` `--text-faint` `--text-inverse` |
+| Accent | `--accent` `--accent-hover` `--accent-active` `--accent-strong` `--accent-contrast` `--accent-soft` `--accent-border` |
+| Primary action | `--button-primary-bg` `--button-primary-bg-hover` `--button-primary-text` |
+| Semantic | `--success` `--warning` `--danger` `--danger-hover` + `*-bg` / `*-border` |
+| Diff & code | `--code-bg` `--diff-add-*` `--diff-del-*` `--diff-hunk-*` |
+| Typography | `--font-sans` `--font-display` `--font-mono` `--text-xs…--text-display` |
+| Geometry | `--radius-*` `--space-*` `--control-height*` `--topbar-height` `--tabbar-height` `--sidebar-width` |
+| Elevation/motion | `--shadow-*` `--focus-ring` `--overlay` `--ease-out` `--dur*` |
 
-```typescript
-function applyTheme(preset: ThemePreset) {
+## Application mechanism
+
+`applyTheme(preset)` writes every palette token to `document.documentElement`, sets
+`data-theme="dark|light"` (used for shadows/overlay defaults) and `color-scheme` so native
+scrollbars/form controls match:
+
+```ts
+export function applyTheme(preset: ThemePreset): void {
   const root = document.documentElement;
-  for (const [key, value] of Object.entries(preset.colors)) {
-    root.style.setProperty(key, value);
-  }
+  for (const [key, value] of Object.entries(preset.colors)) root.style.setProperty(key, value);
   root.setAttribute("data-theme", preset.isDark ? "dark" : "light");
+  root.style.colorScheme = preset.isDark ? "dark" : "light";
 }
 ```
 
-The `data-theme` attribute enables theme-conditional CSS selectors:
+`src/domain/theme/presets.ts` also exports `REQUIRED_THEME_KEYS` (the palette keys every preset must
+define); `tests/theme.test.ts` validates presence, hex format, light/dark coverage, unique names and
+primary-button contrast.
 
-```css
-[data-theme="light"] .some-element { ... }
-```
+## Persistence & toggling
 
-## Persistence
+`useRepoStore.setThemePreset(name)` applies the preset and persists it via
+`gitAPI().setSetting("themePreset", name)`; `initFromSettings()` restores it on launch (normalising
+retired preset names). The TopBar toggle switches between `claude` and `claude-dark`.
 
-Theme selection is saved via `window.gitAPI.setSetting("themePreset", name)` to `zentree-settings.json` and restored on app startup in `SettingsDialog`'s `useEffect`.
+The main process reads the same preset name when it creates the window so the frameless window's
+`backgroundColor` matches the theme before the renderer has painted.
 
-## Quick Toggle
+## Canvas theme
 
-The TopBar provides a one-click toggle between dark and light:
-- Dark → switches to `catppuccin-latte`
-- Light → switches to `catppuccin-mocha`
+`GraphRenderer` reads tokens from the computed style (`readCssVars`) instead of duplicating colours:
+background, text tiers, accent, warning, and the `--font-sans` / `--font-mono` stacks. The branch
+palette itself lives in `src/domain/graph/colors.ts` and is chosen to stay readable on both the cream
+and the dark surfaces. Call `renderer.refresh()` after a theme or locale change (CommitGraph does this
+via effects).
 
-## Canvas Theme
+## Adding a theme
 
-The `GraphRenderer` has a separate `setTheme("dark" | "light")` method that adjusts canvas-specific colors (background fill, node outlines, text colors) independently from CSS variables.
-
-## Adding a New Theme
-
-1. Add a `ThemePreset` object to the `THEME_PRESETS` array in `repoStore.ts`:
-
-```typescript
-{
-  name: "my-theme",
-  label: "My Theme",
-  isDark: true,
-  colors: {
-    "--bg-primary": "#...",
-    "--bg-secondary": "#...",
-    // ... all 16 variables
-  },
-}
-```
-
-2. The theme automatically appears in the Settings → Appearance grid.
+1. Add a `ThemePreset` to `THEME_PRESETS` in `src/domain/theme/presets.ts` with every key from
+   `REQUIRED_THEME_KEYS` as a valid `#rrggbb` value.
+2. Keep `--button-primary-text` readable on `--button-primary-bg` (the theme test enforces WCAG ≥ 4.5
+   for that pair).
+3. That is all: Settings → Appearance renders a preview card automatically and the palette flows into
+   every surface, diff tint, menu and canvas.

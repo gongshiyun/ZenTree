@@ -1,121 +1,296 @@
-﻿:root {
-  /* 背景层级 */
-  --bg-primary: #1a1b26;
-  --bg-secondary: #1e1e2e;
-  --bg-tertiary: #2a2a3c;
-  --bg-hover: #313147;
-  --bg-active: #3b3b54;
-  --border-color: #2e2e42;
+/* =============================================================================
+   ZenTree — design tokens & global base
+   -----------------------------------------------------------------------------
+   Visual language: "Claude" — warm paper surfaces, hairline borders, a single
+   terracotta accent, serif display type, monospace for technical data and a
+   calm, low-chrome layout inspired by the Claude desktop / Claude Code apps.
 
-  /* 文本层级 */
-  --text-primary: #cdd6f4;
-  --text-secondary: #a6adc8;
-  --text-muted: #6c7086;
-  --text-inverse: #1e1e2e;
+   Structure
+     1. Bundled fonts
+     2. Token contract (:root) — palette defaults = the "claude" light theme
+     3. Dark defaults ([data-theme="dark"]) — shadows / selection only
+     4. Element reset, typography, scrollbars, focus, motion, utilities
+   Every palette token is also written by applyTheme() from
+   src/domain/theme/presets.ts, so all presets stay in sync.
+   ============================================================================= */
 
-  /* 强调与语义色 */
-  --accent: #89b4fa;
-  --accent-hover: #74c7ec;
-  --success: #a6e3a1;
-  --warning: #f9e2af;
-  --danger: #f38ba8;
-  --danger-hover: #eba0ac;
-
-  /* 圆角体系 */
-  --radius-sm: 7px;
-  --radius: 9px;
-  --radius-lg: 12px;
-  --radius-xl: 14px;
-
-  /* 控件尺寸 */
-  --control-height: 28px;
-  --control-height-lg: 32px;
-  --node-size: 14px;
-
-  /* 字体 */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --font-mono: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace;
-
-  /* 阴影体系 */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.26);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.42);
-  --shadow: var(--shadow-md);
-
-  /* 聚焦环 */
-  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
-
-  /* 语义混合色（自动适配全部主题） */
-  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
-  --accent-soft-hover: color-mix(in srgb, var(--accent) 22%, transparent);
-  --success-bg: color-mix(in srgb, var(--success) 14%, transparent);
-  --success-border: color-mix(in srgb, var(--success) 45%, transparent);
-  --warning-bg: color-mix(in srgb, var(--warning) 14%, transparent);
-  --warning-border: color-mix(in srgb, var(--warning) 45%, transparent);
-  --danger-bg: color-mix(in srgb, var(--danger) 14%, transparent);
-  --danger-border: color-mix(in srgb, var(--danger) 45%, transparent);
-  --separator: color-mix(in srgb, var(--border-color) 72%, transparent);
-  --overlay: rgba(0, 0, 0, 0.5);
-
-  /* 布局尺寸 */
-  --topbar-height: 42px;
-  --statusbar-height: 26px;
-  --sidebar-width: 216px;
+/* ---------- 1. Bundled fonts (OFL, see src/assets/fonts) ---------- */
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/newsreader-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/newsreader-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/newsreader-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
 }
 
-[data-theme="light"] {
-  --bg-primary: #f5f5f5;
+/* ---------- 2. Token contract ---------- */
+
+/* Palette tokens that every theme preset must provide as valid hex colors.
+   Kept in one place so presets.ts and the theme tests cannot drift. */
+:root {
+  color-scheme: light;
+
+  /* Surfaces — cream paper, white cards, warm hairlines */
+  --bg-primary: #faf9f5;
   --bg-secondary: #ffffff;
-  --bg-tertiary: #e8e8e8;
-  --bg-hover: #e0e0e0;
-  --bg-active: #d0d0d0;
-  --border-color: #d4d4d4;
-  --text-primary: #1e1e2e;
-  --text-secondary: #585b70;
-  --text-muted: #9399b2;
-  --text-inverse: #f5f5f5;
-  --accent: #1e66f5;
-  --accent-hover: #2e7af5;
-  --success: #40a02b;
-  --warning: #df8e1d;
-  --danger: #d20f39;
-  --danger-hover: #e64553;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.18);
+  --bg-tertiary: #f1efe8;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --bg-code: #fbfaf6;
+  --bg-hover: #edeae2;
+  --bg-active: #e5e1d7;
+  --border-color: #e6e2d9;
+  --border-strong: #d5d0c3;
+
+  /* Text */
+  --text-primary: #1f1e1d;
+  --text-secondary: #57544e;
+  --text-muted: #8c877c;
+  --text-faint: #ada79b;
+  --text-inverse: #faf9f5;
+
+  /* Accent — Anthropic clay */
+  --accent: #d97757;
+  --accent-hover: #c15f3c;
+  --accent-active: #a94e2e;
+  --accent-strong: #b4532f;
+  --accent-contrast: #ffffff;
+  --button-primary-bg: #b4532f;
+  --button-primary-bg-hover: #9d4526;
+  --button-primary-text: #ffffff;
+
+  /* Semantics */
+  --success: #3f7d5a;
+  --warning: #a9762a;
+  --danger: #b4483c;
+  --danger-hover: #9c3a30;
+
+  /* Code & diff */
+  --code-bg: #fbfaf6;
+  --diff-add-bg: #eaf3ec;
+  --diff-add-border: #cfe5d6;
+  --diff-add-text: #2f6b4a;
+  --diff-del-bg: #fbeae6;
+  --diff-del-border: #f0d2ca;
+  --diff-del-text: #a5402f;
+  --diff-hunk-bg: #f3f0e8;
+  --diff-hunk-text: #6b675e;
+  --overlay-tint: #1f1e1d;
+
+  /* ---- Derived tokens (theme-agnostic; reference the palette above) ---- */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-soft-hover: color-mix(in srgb, var(--accent) 20%, transparent);
+  --accent-border: color-mix(in srgb, var(--accent) 38%, transparent);
+  --success-bg: color-mix(in srgb, var(--success) 12%, transparent);
+  --success-border: color-mix(in srgb, var(--success) 38%, transparent);
+  --warning-bg: color-mix(in srgb, var(--warning) 13%, transparent);
+  --warning-border: color-mix(in srgb, var(--warning) 38%, transparent);
+  --danger-bg: color-mix(in srgb, var(--danger) 12%, transparent);
+  --danger-border: color-mix(in srgb, var(--danger) 38%, transparent);
+  --separator: color-mix(in srgb, var(--border-color) 72%, transparent);
+  --overlay: color-mix(in srgb, var(--overlay-tint) 45%, transparent);
+  --selection-bg: color-mix(in srgb, var(--accent) 20%, transparent);
+
+  /* ---- Typography ---- */
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", -apple-system,
+    BlinkMacSystemFont, "Helvetica Neue", Arial, "Microsoft YaHei",
+    "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-display: "Newsreader", "Copernicus", Georgia, "Times New Roman",
+    "Songti SC", "Noto Serif SC", serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas,
+    "Liberation Mono", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --text-display: 38px;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --tracking-wide: 0.06em;
+
+  /* ---- Space, radius, elevation ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  --shadow-xs: 0 1px 2px rgba(31, 30, 29, 0.05);
+  --shadow-sm: 0 1px 3px rgba(31, 30, 29, 0.07);
+  --shadow-md: 0 6px 20px rgba(31, 30, 29, 0.1);
+  --shadow-lg: 0 24px 64px rgba(31, 30, 29, 0.18);
+  --shadow-popover: 0 8px 28px rgba(31, 30, 29, 0.14);
   --shadow: var(--shadow-md);
-  --overlay: rgba(0, 0, 0, 0.32);
+
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent);
+
+  /* ---- Controls & layout ---- */
+  --control-height-sm: 26px;
+  --control-height: 30px;
+  --control-height-lg: 36px;
+  --node-size: 14px;
+  --topbar-height: 46px;
+  --filterbar-height: 38px;
+  --tabbar-height: 40px;
+  --statusbar-height: 28px;
+  --sidebar-width: 244px;
+  --commitbar-height: 148px;
+
+  /* ---- Motion & layering ---- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 110ms;
+  --dur: 160ms;
+  --dur-slow: 240ms;
+  --z-dropdown: 50;
+  --z-overlay: 100;
+  --z-dialog: 110;
+  --z-toast: 200;
 }
 
-* {
+/* ---------- 3. Dark defaults (shadows, selection, overlay) ---------- */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --overlay: color-mix(in srgb, var(--overlay-tint) 60%, transparent);
+  --selection-bg: color-mix(in srgb, var(--accent) 28%, transparent);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.38);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --shadow-popover: 0 10px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- 4. Reset & base ---------- */
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
   overflow: hidden;
+}
+
+html {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   color: var(--text-primary);
   background: var(--bg-primary);
-  user-select: none;
-  -webkit-user-select: none;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
-/* 输入区域允许选择文本 */
-input, textarea, [contenteditable="true"] {
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Textual surfaces stay selectable. */
+input,
+textarea,
+select,
+[contenteditable="true"],
+.selectable {
   user-select: text;
   -webkit-user-select: text;
 }
 
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+}
+
+a {
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: inherit;
+}
+
+/* Quiet, Claude-like scrollbars: thin, rounded, no arrows. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -123,20 +298,108 @@ input, textarea, [contenteditable="true"] {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
-  border: 2px solid transparent;
+  background: color-mix(in srgb, var(--text-muted) 26%, transparent);
+  border-radius: var(--radius-pill);
+  border: 3px solid transparent;
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 46%, transparent);
   background-clip: content-box;
 }
 
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Keyboard focus is a soft clay ring; pointer clicks stay quiet. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Layout shell */
 .app-layout {
   display: flex;
   flex-direction: column;
   height: 100vh;
   width: 100vw;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* Generic quiet helpers used across panels */
+.spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: zt-spin 0.8s linear infinite;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+@keyframes zt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes zt-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes zt-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes zt-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -21,7 +21,9 @@ export function t(key: string, ...args: string[]): string {
   const dict = locales[_currentLocale] || locales.en;
   let val = dict[key] ?? key;
   args.forEach((arg, i) => {
-    val = val.replace(`{${i}}`, arg);
+    // Replace every occurrence: some strings repeat a placeholder (e.g. the
+    // rebase confirmation mentions the target branch twice).
+    val = val.split(`{${i}}`).join(arg);
   });
   return val;
 }

@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 
 interface FakeEvent {
   offsetX?: number; offsetY?: number; clientX?: number; clientY?: number;
-  deltaY?: number; ctrlKey?: boolean; preventDefault: () => void;
+  deltaY?: number; ctrlKey?: boolean; button?: number; preventDefault: () => void;
 }
 
 function createFakeCanvas() {
@@ -87,6 +87,7 @@ afterAll(() => {
 
 import { GraphRenderer } from "../src/renderer/canvasRenderer";
 import { buildGraphData } from "../src/domain/graph/layout";
+import { setGlobalLocale } from "../src/i18n";
 import type { CommitLogEntry, GraphNode } from "../src/types";
 
 function entry(hash: string, parents: string[]): CommitLogEntry {
@@ -226,6 +227,34 @@ describe("GraphRenderer", () => {
     renderer.destroy();
   });
 
+  it("right-click opens the context menu without selecting the commit (P2)", () => {
+    const { overlay, renderer, data } = makeRenderer(3);
+    let clicks = 0;
+    let menus = 0;
+    renderer.setCallbacks({
+      onClick: () => { clicks += 1; },
+      onContextMenu: () => { menus += 1; },
+    });
+    renderer.setData(data);
+    flushRaf();
+
+    const sx = 16 + 20 + 22;
+    const sy = 16 + 15;
+    overlay.canvas.dispatch("mousedown", { offsetX: sx, offsetY: sy, button: 2 });
+    overlay.canvas.dispatch("mouseup", { offsetX: sx, offsetY: sy, button: 2 });
+
+    // The secondary button must not run the click path or paint a selection ring.
+    expect(clicks).toBe(0);
+    expect((renderer as unknown as { selectedHash: string | null }).selectedHash).toBeNull();
+    expect((renderer as unknown as { isDragging: boolean }).isDragging).toBe(false);
+
+    // The context menu still opens for the node under the pointer.
+    overlay.canvas.dispatch("contextmenu", { offsetX: sx, offsetY: sy, clientX: 500, clientY: 300 });
+    expect(menus).toBe(1);
+    expect(clicks).toBe(0);
+    renderer.destroy();
+  });
+
   it("scrollToNode ignores unknown hashes and selects known ones", () => {
     const { base, renderer, data } = makeRenderer(3);
     renderer.setData(data);
@@ -265,6 +294,109 @@ describe("GraphRenderer", () => {
     flushRaf();
     expect(base.ctx.measureCount).toBe(measuredOnce);
     renderer.destroy();
+  });
+
+  // --- Viewport regressions (review M15 / probes C1-C3) ---------------------
+
+  function cameraOf(renderer: GraphRenderer) {
+    return (renderer as unknown as {
+      camera: { offsetX: number; offsetY: number; scale: number };
+    }).camera;
+  }
+
+  it("keeps a short graph pinned to the top when the wheel is used (M15/C1)", () => {
+    // 3 rows = 90 px of content in a 600 px viewport: nothing to scroll.
+    const { overlay, renderer, data } = makeRenderer(3);
+    renderer.setData(data);
+    flushRaf();
+    const camera = cameraOf(renderer);
+    expect(camera.offsetY).toBe(0);
+
+    overlay.canvas.dispatch("wheel", { deltaY: 100 }); // scroll down
+    expect(camera.offsetY).toBe(0);
+    overlay.canvas.dispatch("wheel", { deltaY: -100 }); // scroll up again
+    expect(camera.offsetY).toBe(0);
+    renderer.destroy();
+  });
+
+  it("still scrolls a graph taller than the viewport (M15/C1)", () => {
+    const { overlay, renderer, data } = makeRenderer(200);
+    renderer.setData(data);
+    flushRaf();
+    renderer.setCallbacks({ onNearBottom: () => {} });
+    const camera = cameraOf(renderer);
+    overlay.canvas.dispatch("wheel", { deltaY: 300 });
+    expect(camera.offsetY).toBeLessThan(0);
+    renderer.destroy();
+  });
+
+  it("re-reads devicePixelRatio on resize (M15/C2)", () => {
+    const { base, overlay, renderer } = makeRenderer();
+    const g = globalThis as unknown as { window: { devicePixelRatio: number } };
+    const original = g.window.devicePixelRatio;
+    try {
+      g.window.devicePixelRatio = 1;
+      renderer.handleResize();
+      expect(base.canvas.width).toBe(800);
+      expect(base.canvas.height).toBe(600);
+      expect(overlay.canvas.width).toBe(800);
+      expect(overlay.canvas.height).toBe(600);
+
+      g.window.devicePixelRatio = 3;
+      renderer.handleResize();
+      expect(base.canvas.width).toBe(2400);
+      expect(overlay.canvas.height).toBe(1800);
+    } finally {
+      g.window.devicePixelRatio = original;
+      renderer.handleResize(); // restore realistic sizes for teardown
+      renderer.destroy();
+    }
+  });
+
+  it("resets the camera on a repo switch or explicit resetCamera (M15/C3)", () => {
+    const { renderer, data } = makeRenderer(60);
+    renderer.setData(data);
+    flushRaf();
+    const camera = cameraOf(renderer);
+    renderer.zoomBy(2);
+    camera.offsetY = -500; // user scrolled deep in repo A
+
+    // Repo B arrives as a shorter cached graph (same synthetic first hash):
+    // a shrinking tail is a different graph, so the camera returns to the top.
+    const other = makeRenderer(3);
+    renderer.setData(other.data);
+    flushRaf();
+    expect(camera.offsetY).toBe(0);
+    expect(renderer.getScale()).toBe(1);
+
+    // Pagination appends commits: an infinite scroll must keep its position.
+    camera.offsetY = -100;
+    renderer.setData(makeRenderer(4).data);
+    flushRaf();
+    expect(camera.offsetY).toBe(-100);
+
+    // Explicit API used by CommitGraph on currentRepo changes.
+    renderer.zoomBy(1.5);
+    camera.offsetY = -300;
+    renderer.resetCamera();
+    flushRaf();
+    expect(camera.offsetY).toBe(0);
+    expect(camera.scale).toBe(1);
+    expect(camera.offsetX).toBe(16);
+    renderer.destroy();
+  });
+
+  it("localizes the commit count through graph.commits (R7)", () => {
+    const { base, renderer, data } = makeRenderer(3);
+    setGlobalLocale("zh");
+    try {
+      renderer.setData(data);
+      flushRaf();
+      expect(base.ctx.texts).toContain("3 条提交");
+    } finally {
+      setGlobalLocale("en");
+      renderer.destroy();
+    }
   });
 
   it("detaches all listeners and pending frames on destroy", () => {

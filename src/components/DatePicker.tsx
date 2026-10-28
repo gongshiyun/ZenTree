@@ -97,19 +97,19 @@ export default function DatePicker({ value, onChange }: Props) {
 
   return (
     <div className="filter-input filter-date date-picker" ref={rootRef}>
-      <div className="date-picker-trigger" onClick={toggleOpen}>
+      <button type="button" className="date-picker-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={toggleOpen}>
         <span className={`date-picker-value${value ? "" : " empty"}`}>{value || t("datepicker.pickDate")}</span>
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" aria-hidden="true">
           <rect x="1.2" y="2" width="9.6" height="8.5" rx="1.5" />
           <path d="M1.2 5h9.6M3.4 1v2M8.6 1v2" />
         </svg>
-      </div>
+      </button>
       {open && (
-        <div className="date-picker-pop" style={{ position: "fixed", top: popPos.top, left: popPos.left }}>
+        <div className="date-picker-pop" role="dialog" aria-label={t("datepicker.pickDate")} style={{ position: "fixed", top: popPos.top, left: popPos.left }}>
           <div className="date-picker-head">
-            <button type="button" className="date-picker-nav" onClick={() => shiftMonth(-1)} title={t("datepicker.prevMonth")}>&#8249;</button>
+            <button type="button" className="date-picker-nav" onClick={() => shiftMonth(-1)} title={t("datepicker.prevMonth")} aria-label={t("datepicker.prevMonth")}>&#8249;</button>
             <span className="date-picker-title">{monthTitle}</span>
-            <button type="button" className="date-picker-nav" onClick={() => shiftMonth(1)} title={t("datepicker.nextMonth")}>&#8250;</button>
+            <button type="button" className="date-picker-nav" onClick={() => shiftMonth(1)} title={t("datepicker.nextMonth")} aria-label={t("datepicker.nextMonth")}>&#8250;</button>
           </div>
           <div className="date-picker-week">
             {weekdays.map((w, i) => <span key={i} className="date-picker-weekday">{w}</span>)}
@@ -125,6 +125,7 @@ export default function DatePicker({ value, onChange }: Props) {
                   key={i}
                   type="button"
                   className={`date-picker-cell${isSel ? " selected" : ""}${isToday ? " today" : ""}`}
+                  aria-pressed={isSel}
                   onClick={() => handleSelect(d)}
                 >
                   {d.getDate()}

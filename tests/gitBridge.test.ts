@@ -1,10 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { gitApi } from "../src/infrastructure/gitBridge";
 
-type GlobalWithWindow = typeof globalThis & { window?: unknown };
+type GlobalWithWindow = { window?: unknown };
 
 afterEach(() => {
-  delete (globalThis as GlobalWithWindow).window;
+  delete (globalThis as unknown as GlobalWithWindow).window;
 });
 
 describe("gitApi", () => {
@@ -13,13 +13,13 @@ describe("gitApi", () => {
   });
 
   it("throws when window exists but the preload bridge is missing", () => {
-    (globalThis as GlobalWithWindow).window = {};
+    (globalThis as unknown as GlobalWithWindow).window = {};
     expect(() => gitApi()).toThrowError(/run ZenTree inside Electron/);
   });
 
   it("returns the preload bridge when it is exposed", () => {
     const fakeApi = { status: async () => ({ success: true }) };
-    (globalThis as GlobalWithWindow).window = { gitAPI: fakeApi };
-    expect(gitApi()).toBe(fakeApi);
+    (globalThis as unknown as GlobalWithWindow).window = { gitAPI: fakeApi };
+    expect(gitApi()).toBe(fakeApi as unknown as ReturnType<typeof gitApi>);
   });
 });

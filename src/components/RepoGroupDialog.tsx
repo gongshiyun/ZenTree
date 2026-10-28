@@ -107,19 +107,19 @@ export default function RepoGroupDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="settings-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="settings-dialog repogroup-dialog">
+      <div className="settings-dialog repogroup-dialog" role="dialog" aria-modal="true" aria-labelledby="repogroup-title">
         <div className="settings-header">
-          <h2>{t("repoGroups.title")}</h2>
-          <button className="settings-close" onClick={onClose}>&times;</button>
+          <h2 id="repogroup-title">{t("repoGroups.title")}</h2>
+          <button type="button" className="settings-close" aria-label={t("settings.cancel")} title={t("settings.cancel")} onClick={onClose}>&times;</button>
         </div>
         <div className="repogroup-body">
           <div className="repogroup-side">
             <div className="setting-row"><label>{t("repoGroups.newGroup")}</label></div>
             <div className="repogroup-inline">
-              <input type="text" value={newGroupName} placeholder={t("repoGroups.groupNamePlaceholder")}
+              <input className="dialog-input" type="text" value={newGroupName} placeholder={t("repoGroups.groupNamePlaceholder")}
                 onChange={(e) => setNewGroupName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleCreateGroup(); }} />
-              <button className="settings-btn primary" onClick={handleCreateGroup} disabled={!newGroupName.trim()}>{t("repoGroups.addGroup")}</button>
+              <button type="button" className="settings-btn primary" onClick={handleCreateGroup} disabled={!newGroupName.trim()}>{t("repoGroups.addGroup")}</button>
             </div>
             <div className="repogroup-group-list">
               {groups.map((g) => (
@@ -148,17 +148,17 @@ export default function RepoGroupDialog({ onClose }: { onClose: () => void }) {
                       <div key={r} className="repogroup-repo-item">
                         <span className="repo-item-name">{r.split(/[/\\]/).pop()}</span>
                         <span className="repo-item-path">{r}</span>
-                        <button className="settings-btn secondary" onClick={() => handleRemoveRepo(r)}>{t("repoGroups.removeRepo")}</button>
+                        <button type="button" className="settings-btn danger" onClick={() => handleRemoveRepo(r)}>{t("repoGroups.removeRepo")}</button>
                       </div>
                     ))}
                     {group.repos.length === 0 && <div className="empty-state">{t("repoGroups.noRepos")}</div>}
                   </div>
                   <div className="repogroup-inline">
-                    <input type="text" value={repoPathInput} placeholder={t("repoGroups.addRepoPlaceholder")}
+                    <input className="dialog-input" type="text" value={repoPathInput} placeholder={t("repoGroups.addRepoPlaceholder")}
                       onChange={(e) => setRepoPathInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleAddManual(); }} />
-                    <button className="settings-btn secondary" onClick={handleBrowseRepo}>{t("repoGroups.browse")}</button>
-                    <button className="settings-btn primary" onClick={handleAddManual} disabled={!repoPathInput.trim()}>{t("repoGroups.addRepo")}</button>
+                    <button type="button" className="settings-btn secondary" onClick={handleBrowseRepo}>{t("repoGroups.browse")}</button>
+                    <button type="button" className="settings-btn primary" onClick={handleAddManual} disabled={!repoPathInput.trim()}>{t("repoGroups.addRepo")}</button>
                   </div>
                   <div className="repogroup-known">
                     {repos.filter((r) => !group.repos.includes(r.path)).map((r) => (
@@ -169,11 +169,11 @@ export default function RepoGroupDialog({ onClose }: { onClose: () => void }) {
                   <div className="setting-divider" />
                   <div className="setting-row"><label>{t("repoGroups.scanDir")}</label></div>
                   <div className="repogroup-inline">
-                    <input type="text" value={scanDir} placeholder={t("repoGroups.scanDirPlaceholder")}
+                    <input className="dialog-input" type="text" value={scanDir} placeholder={t("repoGroups.scanDirPlaceholder")}
                       onChange={(e) => setScanDir(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleScan(); }} />
-                    <button className="settings-btn secondary" onClick={handleBrowseScan}>{t("repoGroups.browse")}</button>
-                    <button className="settings-btn secondary" onClick={handleScan}>{t("repoGroups.scan")}</button>
+                    <button type="button" className="settings-btn secondary" onClick={handleBrowseScan}>{t("repoGroups.browse")}</button>
+                    <button type="button" className="settings-btn secondary" onClick={handleScan}>{t("repoGroups.scan")}</button>
                   </div>
                   {scanResults.length > 0 && (
                     <div className="repogroup-scan">
@@ -198,10 +198,10 @@ export default function RepoGroupDialog({ onClose }: { onClose: () => void }) {
                 <div className="settings-section">
                   <div className="setting-row"><label>{t("repoGroups.runTitle")}</label></div>
                   <div className="repogroup-inline">
-                    <input type="text" value={branch} placeholder={t("repoGroups.branchPlaceholder")}
+                    <input className="dialog-input" type="text" value={branch} placeholder={t("repoGroups.branchPlaceholder")}
                       onChange={(e) => setBranch(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && !busy) handleRun(); }} />
-                    <button className="settings-btn primary" onClick={handleRun} disabled={busy || !branch.trim() || group.repos.length === 0}>
+                    <button type="button" className="settings-btn primary" onClick={handleRun} disabled={busy || !branch.trim() || group.repos.length === 0}>
                       {busy ? t("repoGroups.running") : t("repoGroups.run")}
                     </button>
                   </div>

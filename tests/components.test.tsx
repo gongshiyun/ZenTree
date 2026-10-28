@@ -17,13 +17,13 @@ import type { CommitLogEntry } from "../src/types";
  * records calls; the zustand store is driven directly via setState.
  */
 
-function fakeGitApi(overrides: Record<string, (...args: unknown[]) => unknown> = {}) {
+function fakeGitApi(overrides: Record<string, (...args: any[]) => unknown> = {}) {
   const calls: [string, unknown[]][] = [];
   const api = new Proxy(overrides, {
     get(target, prop: string) {
       return (...args: unknown[]) => {
         calls.push([prop, args]);
-        if (prop in target) return (target as Record<string, unknown>)[prop](...args);
+        if (prop in target) return (target as Record<string, (...a: unknown[]) => unknown>)[prop](...args);
         return Promise.resolve({ success: false, error: "not implemented in test" });
       };
     },

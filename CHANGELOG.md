@@ -2,6 +2,88 @@
 
 All notable changes to ZenTree are documented in this file.
 
+## [1.4.0] - 2026-10-28
+
+### Redesign — Claude Desktop / Claude Code visual language
+
+- **Complete UI rewrite**: hand-written design-token system (`src/theme.css`) plus three focused
+  stylesheets (`src/styles/shell.css`, `panels.css`, `dialogs.css`) replace the old 56 KB
+  `App.css`. Warm paper surfaces, hairline borders, a single terracotta (clay) accent, serif
+  display type, monospace for hashes/diffs/dates, quiet low-chrome controls.
+- **Bundled typefaces** (OFL): Newsreader for display headings, JetBrains Mono for technical data;
+  no network font loading.
+- **4 theme presets** replace the previous 10 third-party palettes: `claude` (default light),
+  `claude-dark`, `claude-code` (deep terminal dark) and `claude-sand`. Settings → Appearance shows
+  live preview cards.
+- **Shell**: brand mark + repo pill + icon toolbar + window controls, segmented filter bar, pill
+  repository tabs, redesigned sidebar (branch/remote/tag/stash glyphs, tracking pills), compact
+  status bar, flat seamless welcome screen (tab strip now hidden until a tab exists).
+- **Panels**: warm 12-colour branch palette, pill branch labels on the canvas, dual-canvas graph
+  polish, segmented file views, two-row diff header with per-file/per-hunk counters, Claude-style
+  floating commit composer, redesigned empty states.
+- **Dialogs & overlays**: one coherent modal/menu/popover system for settings, clone, compare,
+  rebase, repo groups, merge, command palette, tab picker, date picker and context menus.
+- Frameless window background and native colour scheme follow the saved theme (no white flash).
+
+### Fixed
+
+- **Interactive rebase** sent the todo list in reverse order, reordering commits or producing
+  conflicts on a no-op rebase; it now replays in the original oldest-first order.
+- **Hunk-level actions** now work for new, deleted and renamed files (`/dev/null` sides, mode lines
+  and rename headers are emitted); reverting a brand-new file is no longer offered.
+- **Submodules** can be added/updated from https/ssh remotes again: the protocol allow-list is
+  extended instead of replaced by `file`.
+- **Merge / rebase / cherry-pick continue** and interactive rebase work when `%TEMP%` contains a
+  space (editor scripts are quoted for git's shell); git's stderr is now surfaced in errors.
+- **Working-tree file APIs** reject any `.git` path component, closing a config/hook write and
+  credential-read hole.
+- **IPC hardening**: every mutating git channel validates that the repository exists and contains
+  `.git`; settings values are shape-validated/clamped; window-control failures no longer surface as
+  unhandled rejections.
+- **Settings recovery**: a `null`/array/scalar `zentree-settings.json` no longer bricks all git
+  operations — it is backed up and replaced by defaults, and invalid keys are dropped on load.
+- **Refresh robustness**: a failed commit-log call keeps the previous graph on screen and no longer
+  seeds the status fingerprint (so the next watcher/poll tick retries); stale tag/remote/ongoing
+  responses are dropped after a tab switch.
+- **Compare** reports concrete paths for renames (`--no-renames`) so clicking a compared file shows
+  its diff.
+- **Targeted stash** works for untracked files (`stash push -u`).
+- **Watcher** resolves the real git dir for linked worktrees/submodules and watches the common refs
+  directory, so worktree repositories refresh incrementally instead of never.
+- **Branch labels** render again: the branch summary now returns full commit hashes so labels match
+  graph entries.
+- **Canvas viewport**: short graphs no longer jump and get stuck after a wheel gesture; DPR is
+  re-read on resize/monitor changes; cached tab switches reset the camera instead of inheriting the
+  previous repository's scroll offset.
+- **Packaged builds** can no longer load a localhost dev server (`--dev`/`NODE_ENV` are ignored when
+  packaged); popups and off-origin navigation are blocked.
+- **Updater**: install is refused unless an update has actually been downloaded.
+- **Git identity**: reading a missing `user.name`/`user.email` returns empty values instead of
+  failing, and Settings only writes non-empty identity values (with a hint when unset).
+- **i18n**: all placeholder occurrences are substituted (no literal `{0}` left in dialogs); added
+  missing keys (`sidebar.upstreamPrompt`, `commit.resizeTip`, `settings.identityMissing`,
+  `rebase.firstActionInvalid`).
+- **Upstream tracking**: setting an upstream whose branch name differs from the local branch
+  (`upstream/feature/x`) writes the correct `branch.*.remote`/`branch.*.merge` pair.
+- **Multi-select delete** discards both sides of a renamed file.
+- **Single instance** app lock; window resize debounce is cleared on close; delete-on-destroy guards
+  for webContents sends.
+- **Welcome/top bar/dialogs** layout fits the 900×600 minimum window; graph overlay chrome no longer
+  covers commit text.
+
+### Build & tooling
+
+- `npm run check` now type-checks the renderer, the main process **and the test suite**
+  (`tsconfig.test.json`).
+- Vitest runs with a hermetic git environment (temporary `HOME`/`GIT_CONFIG_GLOBAL`,
+  `GIT_CONFIG_NOSYSTEM`, no terminal prompts) and larger timeouts for real-git suites; added
+  `npm run test:coverage`.
+- New QA tooling (`npm run qa`): deterministic demo-repository fixtures, an Electron screenshot
+  matrix with layout probes, and a class-name/style coverage checker (`scripts/`).
+- Removed the obsolete `src/App.css`; added `AGENTS.md` (contributor/agent map) and
+  `docs/design-spec.md` (visual contract).
+- 504 tests (up from 445), covering the fixes above.
+
 ## [1.3.9] - 2026-09-10
 
 ### Fixed

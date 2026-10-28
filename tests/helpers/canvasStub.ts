@@ -19,7 +19,7 @@ export function installCanvasStub(): () => void {
   } as unknown as CanvasRenderingContext2D;
 
   const originalGetContext = HTMLCanvasElement.prototype.getContext;
-  HTMLCanvasElement.prototype.getContext = (() => ctx) as typeof originalGetContext;
+  HTMLCanvasElement.prototype.getContext = (() => ctx) as unknown as typeof originalGetContext;
 
   const originalResizeObserver = (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
   class ResizeObserverStub {

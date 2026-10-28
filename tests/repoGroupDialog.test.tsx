@@ -113,7 +113,7 @@ describe("RepoGroupDialog", () => {
     fireEvent.change(inputByPlaceholder(container, t("repoGroups.branchPlaceholder")), { target: { value: "feat" } });
     fireEvent.click(buttonByText(container, t("repoGroups.run")));
     await waitFor(() => {
-      expect(calls.some(([name, args]) => name === "batchCheckout" && args[2]?.stash === false)).toBe(true);
+      expect(calls.some(([name, args]) => name === "batchCheckout" && (args[2] as { stash?: boolean } | undefined)?.stash === false)).toBe(true);
     });
   });
 });

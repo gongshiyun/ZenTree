@@ -268,3 +268,70 @@ describe("buildGraphData", () => {
     expect(graph.edges).toEqual([]);
   });
 });
+
+describe("buildHunkPatch file preludes", () => {
+  it("marks a new file with /dev/null on the old side", () => {
+    const h = parseDiff(buildUntrackedDiff("new.txt", "hello\nworld\n"))[0];
+    const patch = buildHunkPatch("new.txt", h, { isNew: true });
+    expect(patch).toContain("new file mode 100644");
+    expect(patch).toContain("--- /dev/null");
+    expect(patch).toContain("+++ b/new.txt");
+    expect(patch).toContain("@@ -0,0 +1,2 @@");
+    expect(patch).toContain("+hello");
+    expect(patch).toContain("+world");
+  });
+
+  it("marks a deleted file with /dev/null on the new side", () => {
+    const deletedDiff = `diff --git a/gone.txt b/gone.txt
+deleted file mode 100644
+index a068ed4..0000000
+--- a/gone.txt
++++ /dev/null
+@@ -1,2 +0,0 @@
+-v1
+-line2`;
+    const h = parseDiff(deletedDiff)[0];
+    const patch = buildHunkPatch("gone.txt", h, { isDeleted: true });
+    expect(patch).toContain("deleted file mode 100644");
+    expect(patch).toContain("--- a/gone.txt");
+    expect(patch).toContain("+++ /dev/null");
+  });
+
+  it("names both sides of a rename", () => {
+    const renameDiff = `diff --git a/old.txt b/new.txt
+similarity index 90%
+rename from old.txt
+rename to new.txt
+--- a/old.txt
++++ b/new.txt
+@@ -1 +1 @@
+-old line
++new line`;
+    const h = parseDiff(renameDiff)[0];
+    const patch = buildHunkPatch("new.txt", h, { fromPath: "old.txt" });
+    expect(patch).toContain("rename from old.txt");
+    expect(patch).toContain("rename to new.txt");
+    expect(patch).toContain("--- a/old.txt");
+    expect(patch).toContain("+++ b/new.txt");
+  });
+
+  it("keeps the existing sides for a modified file", () => {
+    const h = parseDiff(sampleDiff)[0];
+    const patch = buildHunkPatch("hello.txt", h);
+    expect(patch).toContain("diff --git a/hello.txt b/hello.txt");
+    expect(patch).toContain("--- a/hello.txt");
+    expect(patch).toContain("+++ b/hello.txt");
+    expect(patch).not.toContain("/dev/null");
+  });
+});
+
+describe("parseDiff trailing newline", () => {
+  it("does not append a phantom empty context line", () => {
+    const hunks = parseDiff(sampleDiff + "\n");
+    expect(hunks).toHaveLength(1);
+    expect(hunks[0].lines).toHaveLength(5);
+    expect(hunks[0].lines.every((l) => l.content !== "" || l.type === "context")).toBe(true);
+    const last = hunks[0].lines[hunks[0].lines.length - 1];
+    expect(last.content).toBe("line four");
+  });
+});

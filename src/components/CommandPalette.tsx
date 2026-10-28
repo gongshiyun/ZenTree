@@ -98,19 +98,22 @@ export default function CommandPalette() {
 
   return (
     <div className="settings-overlay palette-overlay" onClick={() => setShow(false)}>
-      <div className="command-palette" onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
+      <div className="command-palette" role="dialog" aria-modal="true" aria-label={t("palette.placeholder")} onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
         <input
           ref={inputRef}
           type="text"
           className="palette-input"
           placeholder={t("palette.placeholder")}
+          aria-label={t("palette.placeholder")}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setIndex(0); }}
         />
-        <div className="palette-list">
+        <div className="palette-list" role="listbox" aria-label={t("palette.placeholder")}>
           {filtered.map((item, i) => (
             <div
               key={item.id}
+              role="option"
+              aria-selected={i === index}
               className={`palette-item${i === index ? " active" : ""}`}
               onMouseEnter={() => setIndex(i)}
               onClick={() => execute(item)}

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { CommitLogEntry, GitStatusData, RepoSnapshot } from "../src/types";
+import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
+import type { CommitLogEntry, GitAPI, GitStatusData, RepoSnapshot } from "../src/types";
 
 /**
  * Unit tests for the application store (src/application/repoStore.ts).
@@ -7,12 +7,15 @@ import type { CommitLogEntry, GitStatusData, RepoSnapshot } from "../src/types";
  * so this suite has no dependency on a real git binary.
  */
 
+/** Only the calls the store makes are mocked; the rest of the surface is unused. */
+type GitApiMock = { [K in keyof GitAPI]: Mock<(...args: any[]) => Promise<any>> };
+
 const emptyStatus: GitStatusData = {
   staged: [], modified: [], created: [], deleted: [],
   renamed: [], not_added: [], conflicted: [], files: [], current: "main",
 };
 
-function makeApi() {
+function makeApi(): GitApiMock {
   return {
     setSetting: vi.fn(),
     getSettings: vi.fn(async () => null),
@@ -30,7 +33,7 @@ function makeApi() {
     discard: vi.fn(async () => ({ success: true })),
     stageAll: vi.fn(async () => ({ success: true })),
     unstageAll: vi.fn(async () => ({ success: true })),
-  };
+  } as unknown as GitApiMock;
 }
 
 let api = makeApi();
@@ -569,7 +572,7 @@ describe("per-repository snapshot cache", () => {
 
 describe("per-repository refresh sequencing", () => {
   it("lets a late answer fill its own cache without touching the visible tab", async () => {
-    let resolveA: (value: unknown) => void = () => {};
+    let resolveA: (value: any) => void = () => {};
     api.branches.mockImplementation((repo: string) => {
       if (repo === "/r/a") return new Promise((res) => { resolveA = res; });
       return Promise.resolve({ success: true, data: { current: "b-main", all: ["b-main"], branches: {} } });
@@ -590,7 +593,7 @@ describe("per-repository refresh sequencing", () => {
   });
 
   it("ignores a watch-driven probe that lands after a tab switch", async () => {
-    const resolvers: ((value: unknown) => void)[] = [];
+    const resolvers: ((value: any) => void)[] = [];
     api.status.mockImplementation(() => new Promise((res) => { resolvers.push(res); }));
     useRepoStore.setState({ currentRepo: "/r/a", lastStatusFingerprint: "seed" });
 
@@ -605,7 +608,7 @@ describe("per-repository refresh sequencing", () => {
   });
 
   it("drops a paginated page when the user switched tab mid-flight", async () => {
-    const resolvers: ((value: unknown) => void)[] = [];
+    const resolvers: ((value: any) => void)[] = [];
     api.log.mockImplementation(() => new Promise((res) => { resolvers.push(res); }));
     useRepoStore.setState({ currentRepo: "/r/a", logEntries: [entry("h1", "c1")], logSkip: 1, hasMoreCommits: true });
 
@@ -661,5 +664,57 @@ describe("tab persistence on startup", () => {
     await s().initFromSettings();
     expect(s().customTabs).toEqual([]);
     expect(s().currentRepo).toBeNull();
+  });
+});
+
+describe("refresh failure recovery", () => {
+  it("keeps the previous graph and leaves the fingerprint retryable when log fails", async () => {
+    const graph = { nodes: [], edges: [], maxLane: 0, branchRefs: {} };
+    useRepoStore.setState({
+      currentRepo: "/r/a",
+      logEntries: [entry("h1", "kept commit")],
+      graphData: graph,
+      lastStatusFingerprint: "",
+    });
+    api.log.mockResolvedValueOnce({ success: false, error: "index.lock" });
+
+    await s().refreshAll("/r/a");
+
+    expect(s().logEntries.map((e) => e.subject)).toEqual(["kept commit"]);
+    expect(s().error).toBe("index.lock");
+    // A partial refresh must not seed the fingerprint: otherwise the silent
+    // refresh would short-circuit forever and the graph would stay stale.
+    expect(s().lastStatusFingerprint).toBe("");
+
+    await s().silentDiffRefresh();
+    expect(api.log).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("stale metadata after a tab switch", () => {
+  it("drops reloadMeta results for a repository that is no longer current", async () => {
+    let resolveTags: (value: any) => void = () => {};
+    api.tags.mockImplementation(() => new Promise((res) => { resolveTags = res; }));
+    useRepoStore.setState({ currentRepo: "/r/a", tags: [], remotes: [] });
+
+    const pending = s().reloadMeta();
+    useRepoStore.setState({ currentRepo: "/r/b" });
+    resolveTags({ success: true, data: [{ name: "a-tag", hash: "h", date: "", subject: "" }] });
+    await pending;
+
+    expect(s().tags).toEqual([]);
+  });
+
+  it("drops refreshOngoing results for a repository that is no longer current", async () => {
+    let resolveOngoing: (value: any) => void = () => {};
+    api.getOngoingOperation.mockImplementation(() => new Promise((res) => { resolveOngoing = res; }));
+    useRepoStore.setState({ currentRepo: "/r/a", ongoing: null });
+
+    const pending = s().refreshOngoing();
+    useRepoStore.setState({ currentRepo: "/r/b" });
+    resolveOngoing({ success: true, data: "rebase" });
+    await pending;
+
+    expect(s().ongoing).toBeNull();
   });
 });

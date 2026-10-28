@@ -64,30 +64,32 @@ export default function CompareDialog() {
 
   return (
     <div className="settings-overlay" onClick={handleClose}>
-      <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="settings-dialog compare-dialog" role="dialog" aria-modal="true" aria-labelledby="compare-title" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
-          <h2>{t("compare.title")}</h2>
-          <button className="settings-close" onClick={handleClose}>
-            <svg width="14" height="14" viewBox="0 0 14 14"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" strokeWidth="1.5"/></svg>
+          <h2 id="compare-title">{t("compare.title")}</h2>
+          <button type="button" className="settings-close" aria-label={t("clone.cancel")} title={t("clone.cancel")} onClick={handleClose}>
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" strokeWidth="1.5"/></svg>
           </button>
         </div>
         <div className="settings-body">
           <div className="settings-section">
-            <div className="setting-row"><label>{t("compare.from")}</label>
-              <select className="compare-select" value={fromRef} onChange={(e) => setFromRef(e.target.value)}>
-                {refs.map((r) => <option key={"f" + r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div className="setting-row"><label>{t("compare.to")}</label>
-              <select className="compare-select" value={toRef} onChange={(e) => setToRef(e.target.value)}>
-                <option value="">{t("compare.selectTarget")}</option>
-                {refs.map((r) => <option key={"t" + r} value={r}>{r}</option>)}
-              </select>
+            <div className="compare-fields">
+              <div className="setting-row"><label>{t("compare.from")}</label>
+                <select className="dialog-input compare-select" value={fromRef} onChange={(e) => setFromRef(e.target.value)}>
+                  {refs.map((r) => <option key={"f" + r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div className="setting-row"><label>{t("compare.to")}</label>
+                <select className="dialog-input compare-select" value={toRef} onChange={(e) => setToRef(e.target.value)}>
+                  <option value="">{t("compare.selectTarget")}</option>
+                  {refs.map((r) => <option key={"t" + r} value={r}>{r}</option>)}
+                </select>
+              </div>
             </div>
             <div className="compare-actions">
-              <button className="settings-btn primary" disabled={!fromRef || !toRef || fromRef === toRef} onClick={handleCompare}>{t("compare.compare")}</button>
+              <button type="button" className="settings-btn primary" disabled={!fromRef || !toRef || fromRef === toRef} onClick={handleCompare}>{t("compare.compare")}</button>
               {result && (
-                <span className="setting-hint">
+                <span className="compare-summary">
                   {t("compare.summary", String(result.ahead), String(result.behind), String(result.totalAdditions), String(result.totalDeletions))}
                 </span>
               )}
@@ -104,13 +106,13 @@ export default function CompareDialog() {
                     </span>
                   </div>
                 ))}
-                {result.files.length === 0 && <div className="empty-state" style={{ padding: 12 }}>{t("compare.noDiff")}</div>}
+                {result.files.length === 0 && <div className="empty-state compare-empty">{t("compare.noDiff")}</div>}
               </div>
             )}
           </div>
         </div>
         <div className="settings-footer">
-          <button className="settings-btn secondary" onClick={handleClose}>{t("clone.cancel")}</button>
+          <button type="button" className="settings-btn secondary" onClick={handleClose}>{t("clone.cancel")}</button>
         </div>
       </div>
     </div>

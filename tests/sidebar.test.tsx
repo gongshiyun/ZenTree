@@ -120,6 +120,25 @@ describe("Sidebar", () => {
     await waitFor(() => expect(useRepoStore.getState().loading).toBe(false));
   });
 
+  it("writes branch.* config when the upstream branch name differs from the local one", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("upstream/feature/x");
+    const calls = installApi({ setConfig: () => Promise.resolve({ success: true }) });
+    resetStore({
+      remotes: [{ name: "upstream", url: "https://example.com/r.git" }],
+      remoteBranches: ["remotes/upstream/feature/x"],
+    });
+    const { container } = render(<Sidebar />);
+    fireEvent.contextMenu(branchItem(container, "feature"), { clientX: 10, clientY: 20 });
+    clickMenu(container, "Set upstream");
+    await waitFor(() => expect(useRepoStore.getState().loading).toBe(false));
+
+    const writes = calls.filter(([name]) => name === "setConfig").map(([, args]) => args);
+    expect(writes).toEqual([
+      ["/r", "branch.feature.remote", "upstream"],
+      ["/r", "branch.feature.merge", "refs/heads/feature/x"],
+    ]);
+  });
+
   it("merges a non-current branch after confirmation", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     installApi({ merge: () => Promise.resolve({ success: true }) });

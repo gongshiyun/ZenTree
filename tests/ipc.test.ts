@@ -12,8 +12,9 @@ import * as path from "path";
  * Focus: destructive channels (discard / reset / delete-branch) and the
  * safeHandler success/error envelope contract.
  */
-const { handlers } = vi.hoisted(() => ({
+const { handlers, openedUrls } = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>(),
+  openedUrls: [] as string[],
 }));
 
 vi.mock("electron", () => ({
@@ -23,7 +24,7 @@ vi.mock("electron", () => ({
     },
   },
   dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
-  shell: { openExternal: async () => undefined },
+  shell: { openExternal: async (url: string) => { openedUrls.push(url); } },
   BrowserWindow: class {},
 }));
 
@@ -73,9 +74,14 @@ async function invoke(channel: string, ...args: unknown[]): Promise<any> {
   return handler!({}, ...args);
 }
 
+const settingsStore: Record<string, unknown> = {};
 beforeAll(() => {
   registerIpcHandlers({
-    settings: { load: () => ({}) },
+    settings: {
+      load: () => settingsStore,
+      get: (key: string) => settingsStore[key],
+      set: (key: string, value: unknown) => { settingsStore[key] = value; },
+    },
     git: repo,
     update: {},
     watcher: new RepoWatcher(),
@@ -296,5 +302,56 @@ describe("IPC channel registration", () => {
     for (const channel of expected) {
       expect(handlers.has(channel), `channel "${channel}" should be registered`).toBe(true);
     }
+  });
+});
+
+describe("shell:open-external channel", () => {
+  it("forwards http(s) links to the OS handler", async () => {
+    openedUrls.length = 0;
+    const res = await invoke("shell:open-external", "https://github.com/owner/repo/commit/abc123");
+    expect(res).toEqual({ success: true, data: true });
+    expect(openedUrls).toEqual(["https://github.com/owner/repo/commit/abc123"]);
+  });
+
+  it("rejects non-http(s) protocols with a failure envelope", async () => {
+    openedUrls.length = 0;
+    for (const url of ["file:///C:/Windows/System32/calc.exe", "javascript:alert(1)", "not-a-url"]) {
+      const res = await invoke("shell:open-external", url);
+      expect(res.success, url).toBe(false);
+      expect(typeof res.error, url).toBe("string");
+    }
+    expect(openedUrls).toEqual([]);
+  });
+});
+
+describe("IPC input validation", () => {
+  it("rejects mutating git channels for non-existent or non-repository paths", async () => {
+    const missing = path.join(tempRoot, "does-not-exist");
+    const notARepo = makeRepo("not-a-repo");
+    for (const channel of ["git:discard", "git:reset", "git:delete-branch", "git:write-file"]) {
+      const missingRes = await invoke(channel, missing, ["a.txt"], "main", "a.txt");
+      expect(missingRes.success, `${channel} missing repo`).toBe(false);
+      expect(missingRes.error).toMatch(/Repository path does not exist/);
+      const plainRes = await invoke(channel, notARepo, ["a.txt"], "main", "a.txt");
+      expect(plainRes.success, `${channel} non-repo`).toBe(false);
+      expect(plainRes.error).toMatch(/Not a Git repository/);
+    }
+  });
+
+  it("normalises settings:set values and rejects an invalid key", async () => {
+    const badKey = await invoke("settings:set", "", 1);
+    expect(badKey.success).toBe(false);
+
+    const ok = await invoke("settings:set", "windowWidth", "wide");
+    expect(ok.success).toBe(true);
+    expect(settingsStore.windowWidth).toBeUndefined();
+
+    const good = await invoke("settings:set", "windowWidth", 1500);
+    expect(good.success).toBe(true);
+    expect(settingsStore.windowWidth).toBe(1500);
+
+    const invalidLanguage = await invoke("settings:set", "language", "fr");
+    expect(invalidLanguage.success).toBe(true);
+    expect(settingsStore.language).toBeUndefined();
   });
 });

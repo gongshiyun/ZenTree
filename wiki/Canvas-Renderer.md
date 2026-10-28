@@ -2,124 +2,78 @@
 
 ## Overview
 
-The commit graph is rendered entirely with **HTML5 Canvas 2D** — no SVG, no DOM nodes, no third-party charting libraries. This enables smooth performance with 10,000+ commit nodes through viewport culling and efficient redraws.
+The commit graph is rendered entirely with **HTML5 Canvas 2D** — no SVG, no DOM nodes per commit and
+no charting library. Viewport culling, pagination and render caches keep it smooth with 10,000+
+commits.
 
 **File:** `src/renderer/canvasRenderer.ts`
 
-## Class: `GraphRenderer`
+## Two layers
 
-### Lifecycle
+`GraphRenderer` is constructed with **two stacked canvases**:
 
-```typescript
-const renderer = new GraphRenderer(canvasElement);
-renderer.setTheme("dark" | "light");
-renderer.setData(graphData);
-renderer.setSelected(commitHash);
+| Layer | Content | Redrawn when |
+|---|---|---|
+| base | background, lanes/edges, nodes, commit subject/author/date, branch-ref pills, commit count | data, scroll, zoom, resize, theme/locale change |
+| overlay | hover ring, selection ring, search highlights, row hover bands | interaction state changes only |
+
+All pointer events are attached to the overlay (the base canvas never intercepts input). Both layers
+share the same camera and DPR-aware backing store.
+
+## Lifecycle
+
+```ts
+const renderer = new GraphRenderer(baseCanvas, overlayCanvas);
+renderer.setData(graphData);            // full data set (initial load / page append)
 renderer.setCallbacks({ onHover, onClick, onContextMenu, onNearBottom });
-// ...
-renderer.destroy();  // Removes all event listeners
+renderer.setSelected(commitHash);
+renderer.setHighlights(new Set(hashes));
+renderer.setTheme("dark" | "light");    // repaints both layers
+renderer.setTopInset(px);               // reserve space for banner/search popover chrome
+renderer.resetCamera();                 // new repository: offsetY = 0, scale = 1
+renderer.refresh();                     // repaint after a locale/theme token change
+renderer.destroy();                     // remove every listener
 ```
 
-### Camera System
+## Camera
 
-The renderer uses a 2D camera with pan and zoom:
-
-```typescript
-interface Camera {
-  offsetX: number;  // Pan X (screen pixels)
-  offsetY: number;  // Pan Y (screen pixels)
-  scale: number;    // Zoom level (0.1 – 5.0)
-}
+```ts
+interface Camera { offsetX: number; offsetY: number; scale: number }
 ```
 
-- **Pan:** Click-drag on empty space
-- **Zoom:** Mouse wheel, zooms toward cursor position
-- **DPR-aware:** Canvas backing store scaled by `devicePixelRatio` for crisp rendering on HiDPI displays
+- The graph column is **pinned to the left edge** (`offsetX` fixed); vertical scrolling only.
+- Wheel scrolls vertically; `offsetY` is clamped so a graph shorter than the viewport stays at `0`
+  (short graphs never jump) and tall graphs cannot overscroll past the content.
+- `zoomBy()` zooms around the viewport centre (0.1×–5×); `resetCamera()` restores 1×.
+- Drag-panning is intentionally **not** implemented; the graph is a vertical list.
+- `setData()` resets the camera when the data identity changes to a different repository (first hash
+  changed or the page set shrank), but keeps the scroll offset when a page is appended.
+- `devicePixelRatio` is re-read in `handleResize()`, so moving the window to a monitor with another
+  scale factor (or Electron zoom changes) re-allocates crisp backing stores.
 
-### Coordinate Transform
+## Rendering pipeline
 
-```
-Screen → World:
-  worldX = (screenX - offsetX - PADDING_LEFT) / scale
-  worldY = (screenY - offsetY - PADDING_TOP) / scale
-```
+1. Clear base canvas and fill `--bg-primary`.
+2. Compute the visible row range from `offsetY`/`scale` (culling).
+3. Draw lanes/edges as bezier curves with 1.5 px strokes at ~0.8 alpha.
+4. Draw nodes (radius 6.5, 2 px ring in the background colour) and the commit text columns.
+5. Draw branch-ref pills in a right-hand rail when the viewport is wide enough; pill ink is chosen by
+   WCAG relative luminance of the branch colour.
+6. Draw the commit-count label in the lower-left gutter.
+7. Overlay: clear and draw only the hover/selection/search rings and row bands.
 
-### Rendering Pipeline
+Text metrics are cached (`font\0text → width`), as are formatted dates (`hash → string`); both caches
+are cleared on `setData`. Cull bounds include the configurable top inset.
 
-Each `render()` call:
+## Hooks used by CommitGraph
 
-1. **Clear** — Fill background (theme-aware)
-2. **Transform** — Apply camera translate + scale
-3. **Compute visible range** — Derive `cullTop`/`cullBottom` from camera
-4. **Draw edges** — Bezier curves between parent-child nodes (culled)
-5. **Draw nodes** — Circles + commit subject text + author (culled)
-6. **Draw branch labels** — Colored rounded-rect tags at branch heads
-7. **Restore** — Reset transform
-8. **HUD** — Commit count text (screen-space)
-9. **Infinite scroll** — If viewport near bottom, fire `onNearBottom`
+- `onClick` / `onContextMenu` receive the node plus screen coordinates; right-click (button 2) only
+  opens the context menu — it must not also change the selection.
+- `onHover` drives the floating tooltip (hash/author/date/subject), clamped inside the container.
+- `onNearBottom` triggers pagination when the last page is scrolled into view.
 
-### Viewport Culling
+## Testing
 
-Only nodes/edges within the visible Y range (plus 100px margin) are drawn:
-
-```typescript
-const margin = 100;
-const cullTop = viewTop - margin;
-const cullBottom = viewBottom + margin;
-
-// Skip nodes outside range
-if (node.y + NODE_RADIUS < cullTop || node.y - NODE_RADIUS > cullBottom) continue;
-```
-
-This ensures O(visible) draw calls regardless of total commit count.
-
-### Edge Drawing
-
-- **Same lane:** Straight vertical line
-- **Different lanes:** Vertical segment → cubic bezier curve → vertical segment
-
-```typescript
-// Bezier control points at 30%/70% of vertical distance
-const cornerY1 = fromY + Math.abs(toY - fromY) * 0.3;
-const cornerY2 = toY - Math.abs(toY - fromY) * 0.3;
-ctx.bezierCurveTo(fromX, cornerY1 + ..., toX, cornerY2 - ..., toX, cornerY2);
-```
-
-### Hit Testing
-
-`hitTest(screenX, screenY)` converts to world coordinates and checks:
-1. Circle proximity (radius + 6px tolerance)
-2. Text label bounding box (estimated width via `charCount × fontSize × 0.6`)
-
-Searches nodes in reverse order (topmost first).
-
-### Interaction Events
-
-| Event | Behavior |
-|-------|----------|
-| `wheel` | Zoom toward cursor (factor 0.9/1.1) |
-| `mousedown` | On node: prepare for click; on empty: start pan |
-| `mousemove` | Pan (if dragging) or hover detection |
-| `mouseup` | If minimal movement (<3px): treat as click → `onClick` |
-| `mouseleave` | Clear hover state |
-| `contextmenu` | Hit-test → `onContextMenu(node, clientX, clientY)` |
-
-### Layout Constants
-
-| Constant | Value | Purpose |
-|----------|-------|---------|
-| `NODE_RADIUS` | 7 px | Commit circle radius |
-| `ROW_HEIGHT` | 32 px | Vertical spacing (renderer) |
-| `LANE_WIDTH` | 24 px | Horizontal lane spacing (renderer) |
-| `PADDING_LEFT` | 20 px | Left margin |
-| `PADDING_TOP` | 16 px | Top margin |
-
-> Note: The store's `buildGraphData()` uses slightly different constants (`ROW_HEIGHT=28`, `LANE_WIDTH=22`) for data layout. The renderer's constants control visual rendering.
-
-### Theme Support
-
-The renderer accepts `"dark"` or `"light"` and adjusts:
-- Background fill color
-- Node outline color
-- Text colors (subject, author)
-- Branch label text color
+`tests/canvasRenderer.test.ts` stubs a recording 2D context (`tests/helpers/canvasStub.ts`) and covers
+wheel clamping for short/tall graphs, DPR re-reads, camera reset on repository switch, localized
+commit-count labels, culling, hover/click/context-menu callbacks and the interaction overlay layer.

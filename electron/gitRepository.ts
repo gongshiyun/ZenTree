@@ -22,8 +22,10 @@ export class GitRepository {
 
   validateRepo(repoPath: string): string | null {
     if (!repoPath || !fs.existsSync(repoPath)) return "Path does not exist";
-    const gitDir = path.join(repoPath, ".git");
-    if (!fs.existsSync(gitDir)) return "Not a valid Git repository (no .git directory)";
+    // `.git` is a directory in a normal clone and a file in a linked worktree
+    // (or a submodule); both are valid repositories.
+    const gitPath = path.join(repoPath, ".git");
+    if (!fs.existsSync(gitPath)) return "Not a valid Git repository (no .git directory)";
     return null;
   }
 
@@ -34,7 +36,9 @@ export class GitRepository {
   }
 
   async branches(repoPath: string) {
-    const result = await this.git(repoPath).branch(["-a"]);
+    // --no-abbrev: the parsed `commit` must be a full hash so the renderer can
+    // match it against `log` entries when placing branch labels on the graph.
+    const result = await this.git(repoPath).branch(["-a", "--no-abbrev"]);
     return { all: result.all, current: result.current, branches: result.branches };
   }
 
@@ -168,10 +172,15 @@ export class GitRepository {
   /** Resolve a repository-relative working-tree path and reject escapes via
    * traversal, absolute paths or symlinked parents. */
   private resolveWorkingFilePath(repoPath: string, filePath: string): string {
-    if (!filePath || filePath.includes("\0") || path.isAbsolute(filePath) ||
-        filePath.split(/[\\/]/).includes("..")) {
+    if (!filePath || filePath.includes("\0") || path.isAbsolute(filePath)) {
       throw new Error("Invalid file path");
     }
+    const segments = filePath.split(/[\\/]/);
+    if (segments.includes("..")) throw new Error("Invalid file path");
+    // Working-tree files only: allowing .git through here would let a renderer
+    // bug rewrite config/hooks (code execution on the next git command) or read
+    // credential-bearing remote URLs.
+    if (segments.some((s) => s.toLowerCase() === ".git")) throw new Error("Invalid file path");
     let root: string;
     try {
       root = fs.realpathSync(repoPath);
@@ -277,13 +286,33 @@ export class GitRepository {
     return this.git(repoPath).raw(["add", "-A"]);
   }
 
+  /** True when HEAD resolves (a repository with at least one commit). */
+  private async hasHead(git: SimpleGit): Promise<boolean> {
+    try {
+      await git.raw(["rev-parse", "--verify", "HEAD"]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async unstage(repoPath: string, files: string[]) {
-    return this.git(repoPath).reset(["HEAD", ...files]);
+    const git = this.git(repoPath);
+    if (!(await this.hasHead(git))) {
+      // No commit yet: `reset HEAD` cannot resolve, so drop the entries from
+      // the index instead and leave the files on disk.
+      return git.raw(["rm", "--cached", "-r", "--", ...files]);
+    }
+    return git.reset(["HEAD", ...files]);
   }
 
   /** Unstage everything (mixed reset to HEAD). */
   async unstageAll(repoPath: string) {
-    return this.git(repoPath).raw(["reset"]);
+    const git = this.git(repoPath);
+    if (!(await this.hasHead(git))) {
+      return git.raw(["rm", "--cached", "-r", "--", "."]);
+    }
+    return git.raw(["reset"]);
   }
 
   /** Discard working-tree changes. Untracked files are removed with git clean. */
@@ -291,13 +320,24 @@ export class GitRepository {
     const git = this.git(repoPath);
     const status = await git.status();
     const untracked = new Set(status.not_added);
+    const headExists = await this.hasHead(git);
     const toClean: string[] = [];
     const toRestore: string[] = [];
+    const toUnstageNew: string[] = [];
     for (const f of files) {
       if (untracked.has(f)) toClean.push(f);
+      // Before the first commit every staged path only exists in the index:
+      // `git restore --source=HEAD` cannot resolve it, so drop it by hand.
+      else if (!headExists) toUnstageNew.push(f);
       else toRestore.push(f);
     }
     if (toClean.length > 0) await git.raw(["clean", "-f", "--", ...toClean]);
+    if (toUnstageNew.length > 0) {
+      await git.raw(["rm", "--cached", "-r", "-f", "--", ...toUnstageNew]);
+      for (const f of toUnstageNew) {
+        try { fs.rmSync(path.join(repoPath, f), { force: true }); } catch { /* ignore */ }
+      }
+    }
     if (toRestore.length > 0) {
       // `git checkout -- <path>` restores only the working tree from the index,
       // so staged changes would survive a discard. Restore both sides from HEAD.
@@ -477,7 +517,14 @@ export class GitRepository {
   async stashSave(repoPath: string, message?: string, paths?: string[]) {
     const args = ["stash", "push"];
     if (message) args.push("-m", message);
-    if (paths && paths.length > 0) args.push("--", ...paths);
+    if (paths && paths.length > 0) {
+      // Untracked files must be included explicitly, otherwise the pathspec
+      // matches nothing in the index and git errors out.
+      const status = await this.git(repoPath).status();
+      const untracked = new Set(status.not_added);
+      if (paths.some((p) => untracked.has(p))) args.push("-u");
+      args.push("--", ...paths);
+    }
     return this.git(repoPath).raw(args);
   }
 
@@ -531,6 +578,19 @@ export class GitRepository {
     return null;
   }
 
+  /**
+   * Convert a Windows path into the msys/posix form Git for Windows' shell uses
+   * (C:\Users\x → /c/Users/x). Editors are launched through that shell.
+   */
+  private msysPath(p: string): string {
+    return "/" + p.replace(/^([A-Za-z]):/, (_m, c: string) => c.toLowerCase()).replace(/\\/g, "/");
+  }
+
+  /** Quote a path for the sh command line so spaces/quotes in %TEMP% survive. */
+  private shQuote(p: string): string {
+    return "'" + this.msysPath(p).replace(/'/g, "'\\''") + "'";
+  }
+
   /** Run a git command that may open an editor with a no-op editor installed. */
   private runWithNoopEditor(repoPath: string, args: string[], label: string): Promise<void> {
     const noop = path.join(os.tmpdir(), `zentree-noop-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`);
@@ -539,10 +599,11 @@ export class GitRepository {
     return new Promise<void>((resolve, reject) => {
       childProcess.execFile(gitPath, args, {
         cwd: repoPath,
-        env: { ...process.env, GIT_EDITOR: noop.replace(/\\/g, "/") },
-      }, (err) => {
+        // Quoted: git launches editors through sh and would split a spaced path.
+        env: { ...process.env, GIT_EDITOR: this.shQuote(noop) },
+      }, (err, _stdout, stderr) => {
         try { fs.unlinkSync(noop); } catch { /* ignore */ }
-        if (err) reject(new Error(`${label}: ${err.message}`));
+        if (err) reject(new Error(`${label}: ${String(stderr || "").trim() || err.message}`));
         else resolve();
       });
     });
@@ -601,7 +662,8 @@ export class GitRepository {
         if (e.action === "reword" && e.rewordMessage) {
           const msgFile = path.join(tmpDir, `msg-${e.hash.substring(0, 8)}.txt`);
           fs.writeFileSync(msgFile, e.rewordMessage, "utf8");
-          lines.push(`exec git commit --amend -F "${msgFile.replace(/\\/g, "/")}"`);
+          // Executed by git's shell: quote for spaces and convert the drive path.
+          lines.push(`exec git commit --amend -F ${this.shQuote(msgFile)}`);
         }
       }
       const todoFile = path.join(tmpDir, "git-rebase-todo.txt");
@@ -610,9 +672,8 @@ export class GitRepository {
       // GIT_SEQUENCE_EDITOR overwrites the todo file git prepares with ours.
       // git runs editor commands through the msys/posix shell, so use an sh
       // script (LF endings) with an msys-style path for the todo copy source.
-      const msysPath = (p: string) => `/${p.replace(/^([A-Za-z]):/, (_m, c) => c.toLowerCase()).replace(/\\/g, "/")}`;
       const sequenceEditor = path.join(tmpDir, "sequence-editor.sh");
-      fs.writeFileSync(sequenceEditor, `#!/bin/sh\ncp "${msysPath(todoFile)}" "$1"\n`, "utf8");
+      fs.writeFileSync(sequenceEditor, `#!/bin/sh\ncp ${this.shQuote(todoFile)} "$1"\n`, "utf8");
 
       // squash combines messages and opens an editor; accept the default text.
       const noopEditor = path.join(tmpDir, "noop-editor.sh");
@@ -622,10 +683,14 @@ export class GitRepository {
       await new Promise<void>((resolve, reject) => {
         childProcess.execFile(gitPath, ["rebase", "-i", base], {
           cwd: repoPath,
-          env: { ...process.env, GIT_SEQUENCE_EDITOR: sequenceEditor.replace(/\\/g, "/"), GIT_EDITOR: noopEditor.replace(/\\/g, "/") },
+          env: {
+            ...process.env,
+            GIT_SEQUENCE_EDITOR: this.shQuote(sequenceEditor),
+            GIT_EDITOR: this.shQuote(noopEditor),
+          },
           maxBuffer: 16 * 1024 * 1024,
-        }, (err) => {
-          if (err) reject(new Error(`Rebase failed: ${err.message}`));
+        }, (err, _stdout, stderr) => {
+          if (err) reject(new Error(`Rebase failed: ${String(stderr || "").trim() || err.message}`));
           else resolve();
         });
       });
@@ -636,8 +701,12 @@ export class GitRepository {
 
   async getConfig(repoPath: string) {
     const git = this.git(repoPath);
-    const name = (await git.raw(["config", "user.name"])).trim();
-    const email = (await git.raw(["config", "user.email"])).trim();
+    // `git config <key>` exits non-zero when the key is unset (fresh machine);
+    // that is a normal empty value, not a failure of the whole dialog.
+    const read = async (key: string): Promise<string> => {
+      try { return (await git.raw(["config", key])).trim(); } catch { return ""; }
+    };
+    const [name, email] = await Promise.all([read("user.name"), read("user.email")]);
     return { userName: name, userEmail: email };
   }
 
@@ -650,17 +719,19 @@ export class GitRepository {
   findGitBash(): string | null {
     const settingsGitPath = this.getGitPath();
 
-    // Tier 1: Derive from user-configured git path
+    // Tier 1: Derive from user-configured git path. git.exe normally lives in
+    // <root>/bin or <root>/cmd, with git-bash.exe one level up at <root>.
     if (settingsGitPath && settingsGitPath !== "git") {
       const gitExe = path.resolve(settingsGitPath);
+      const gitDir = path.dirname(gitExe);
       const candidates = [
-        gitExe.replace(/([\\/])bin([\\/])git\.exe$/i, "$1..$2git-bash.exe"),
-        gitExe.replace(/([\\/])cmd([\\/])git\.exe$/i, "$1..$2git-bash.exe"),
-        path.join(path.dirname(gitExe), "..", "git-bash.exe"),
+        path.join(gitDir, "..", "git-bash.exe"),
+        path.join(gitDir, "..", "..", "git-bash.exe"),
+        path.join(gitDir, "git-bash.exe"),
       ];
-      for (const c of candidates) {
-        const candidate = path.normalize(c);
-        if (candidate !== gitExe && fs.existsSync(candidate)) return candidate;
+      for (const candidate of candidates) {
+        const resolved = path.normalize(candidate);
+        if (resolved !== gitExe && fs.existsSync(resolved)) return resolved;
       }
     }
 
@@ -677,7 +748,9 @@ export class GitRepository {
     // Tier 3: git --exec-path (uses configured git binary)
     const gitBin = settingsGitPath && settingsGitPath !== "git" ? settingsGitPath : "git";
     try {
-      const gitDir = childProcess.execSync(`"${gitBin}" --exec-path`, { encoding: "utf8" }).trim();
+      // execFileSync (not execSync): the configured path may contain spaces or
+      // shell metacharacters and must never be interpolated into a shell string.
+      const gitDir = String(childProcess.execFileSync(gitBin, ["--exec-path"], { encoding: "utf8" })).trim();
       for (const rel of ["..\..\..\git-bash.exe", "..\..\git-bash.exe", "..\git-bash.exe"]) {
         const candidate = path.join(gitDir, rel);
         if (fs.existsSync(path.normalize(candidate))) return path.normalize(candidate);
@@ -696,12 +769,26 @@ export class GitRepository {
   }
 
   /** Open Git Bash in the given repository directory. */
-  openGitBash(repoPath: string): string {
+  async openGitBash(repoPath: string): Promise<string> {
     const bashPath = this.findGitBash();
     if (!bashPath) {
       throw new Error("Git Bash not found. Please install Git for Windows, or set Git path in Settings > General.");
     }
-    childProcess.execFile(bashPath, [], { cwd: repoPath });
+    // The terminal is a long-lived child: resolve as soon as it spawned (not
+    // when it exits) and detach it so the IPC call does not hang.
+    await new Promise<void>((resolve, reject) => {
+      const child = childProcess.spawn(bashPath, [], {
+        cwd: repoPath,
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false,
+      });
+      child.once("spawn", () => {
+        child.unref();
+        resolve();
+      });
+      child.once("error", (err) => reject(new Error(`Could not open Git Bash: ${err.message}`)));
+    });
     return "Git Bash opened";
   }
 
@@ -790,13 +877,15 @@ export class GitRepository {
     const ahead = parseInt(counts[0] || "0", 10);
     const behind = parseInt(counts[1] || "0", 10);
 
-    const numstat = await git.raw(["diff", "--numstat", fromRef, toRef]);
-    const nameStatus = await git.raw(["diff", "--name-status", fromRef, toRef]);
+    // --no-renames keeps every reported path concrete: a rename would otherwise
+    // be reported as the pseudo-path "old => new", which cannot be used as a
+    // pathspec when the user opens that file's diff.
+    const numstat = await git.raw(["diff", "--no-renames", "--numstat", fromRef, toRef]);
+    const nameStatus = await git.raw(["diff", "--no-renames", "--name-status", fromRef, toRef]);
     const statusMap = new Map<string, string>();
     for (const line of nameStatus.split("\n").filter(Boolean)) {
       const parts = line.split("\t");
       if (parts.length >= 2) {
-        // Renames/copies report "R100\told\tnew"
         const target = parts[parts.length - 1];
         statusMap.set(target, parts[0].replace(/\d+$/, ""));
       }
@@ -873,15 +962,22 @@ export class GitRepository {
     return this.runGit(repoPath, ["submodule", "update", "--init", "--recursive"]);
   }
 
-  /** Run a git command with file:// protocol allowed (for local-path submodules). */
+  /**
+   * Run a git command that may need extra protocol permissions (submodules).
+   * Local-path submodules need `file`, but remote submodules need http(s)/ssh —
+   * the allow-list must therefore extend git's default set, not replace it.
+   */
   private runGit(repoPath: string, args: string[]): Promise<string> {
     const gitPath = this.getGitPath() || "git";
     return new Promise<string>((resolve, reject) => {
       childProcess.execFile(gitPath, args, {
         cwd: repoPath,
-        env: { ...process.env, GIT_ALLOW_PROTOCOL: "file" },
+        env: {
+          ...process.env,
+          GIT_ALLOW_PROTOCOL: process.env.GIT_ALLOW_PROTOCOL ?? "file:git:http:https:ssh",
+        },
       }, (err, stdout, stderr) => {
-        if (err) reject(new Error(stderr || err.message));
+        if (err) reject(new Error(String(stderr || "").trim() || err.message));
         else resolve(stdout || "ok");
       });
     });
@@ -1006,12 +1102,22 @@ export class GitRepository {
 export function parseHostingUrl(remoteUrl: string, ref?: string): string | null {
   let url = remoteUrl.trim();
   if (!url) return null;
-  // git@github.com:owner/repo.git  ->  https://github.com/owner/repo
-  let m = url.match(/^(?:ssh:\/\/)?git@([^:]+):(.+)$/);
-  if (m) url = `https://${m[1]}/${m[2]}`;
-  // ssh://git@github.com/owner/repo.git
-  m = url.match(/^ssh:\/\/git@([^/]+)\/(.+)$/);
-  if (m) url = `https://${m[1]}/${m[2]}`;
+  if (/^ssh:\/\//i.test(url)) {
+    // ssh://git@host[:port]/owner/repo.git — parse properly so a non-standard
+    // port is not mistaken for the first path segment.
+    try {
+      const parsed = new URL(url);
+      const repoPath = parsed.pathname.replace(/^\/+/, "").replace(/\.git$/i, "").replace(/\/+$/, "");
+      if (!parsed.hostname || !repoPath) return null;
+      url = `https://${parsed.hostname}/${repoPath}`;
+    } catch {
+      return null;
+    }
+  } else {
+    // git@github.com:owner/repo.git  ->  https://github.com/owner/repo
+    const m = url.match(/^git@([^/:]+):(.+)$/);
+    if (m) url = `https://${m[1]}/${m[2]}`;
+  }
   if (!/^https?:\/\//.test(url)) return null;
   url = url.replace(/\.git$/, "").replace(/\/$/, "");
   const hostMatch = url.match(/^https?:\/\/([^/]+)/);

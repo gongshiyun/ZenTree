@@ -92,3 +92,37 @@ describe("RepoWatcher", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+describe("RepoWatcher in linked worktrees", () => {
+  it("watches the resolved git dir and the common refs of a linked worktree", async () => {
+    // Layout mirroring `git worktree add`: the worktree's .git is a file that
+    // points at <main>/.git/worktrees/wt, whose commondir points back at .git.
+    const main = path.join(tempRoot, "wt-main");
+    const mainGit = path.join(main, ".git");
+    fs.mkdirSync(path.join(mainGit, "refs", "heads"), { recursive: true });
+    fs.writeFileSync(path.join(mainGit, "HEAD"), "ref: refs/heads/main\n", "utf8");
+    const wtGit = path.join(mainGit, "worktrees", "wt");
+    fs.mkdirSync(wtGit, { recursive: true });
+    fs.writeFileSync(path.join(wtGit, "HEAD"), "ref: refs/heads/wt\n", "utf8");
+    fs.writeFileSync(path.join(wtGit, "index"), "", "utf8");
+    fs.writeFileSync(path.join(wtGit, "commondir"), "../..\n", "utf8");
+    const worktree = path.join(tempRoot, "wt-linked");
+    fs.mkdirSync(worktree, { recursive: true });
+    fs.writeFileSync(path.join(worktree, ".git"), `gitdir: ${wtGit.replace(/\\/g, "/")}\n`, "utf8");
+
+    const watcher = new RepoWatcher();
+    const onChange = vi.fn();
+    watcher.start(worktree, onChange);
+    // Changing the worktree HEAD must be observed (per-worktree git dir).
+    fs.writeFileSync(path.join(wtGit, "HEAD"), "ref: refs/heads/other\n", "utf8");
+    await new Promise((r) => setTimeout(r, 800));
+    expect(onChange).toHaveBeenCalled();
+    watcher.stop();
+  });
+
+  it("does not throw or hang for a path that is not a repository", () => {
+    const watcher = new RepoWatcher();
+    expect(() => watcher.start(path.join(tempRoot, "not-a-repo"), () => {})).not.toThrow();
+    watcher.stop();
+  });
+});

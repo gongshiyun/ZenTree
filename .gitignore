@@ -11,3 +11,7 @@ Thumbs.db
 
 release2/
 release_old/
+
+# Local QA artifacts (fixtures, profiles, screenshots)
+.qa/
+

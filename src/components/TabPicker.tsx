@@ -76,19 +76,22 @@ export default function TabPicker() {
 
   return (
     <div className="settings-overlay palette-overlay" onClick={() => setShow(false)}>
-      <div className="command-palette tab-picker" onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
+      <div className="command-palette tab-picker" role="dialog" aria-modal="true" aria-label={t("tabs.placeholder")} onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
         <input
           ref={inputRef}
           type="text"
           className="palette-input"
           placeholder={t("tabs.placeholder")}
+          aria-label={t("tabs.placeholder")}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setIndex(0); }}
         />
-        <div className="palette-list" ref={listRef}>
+        <div className="palette-list" role="listbox" aria-label={t("tabs.placeholder")} ref={listRef}>
           {filtered.map((item, i) => (
             <div
               key={item.path}
+              role="option"
+              aria-selected={i === index}
               className={`palette-item picker-item${i === index ? " active" : ""}`}
               onMouseEnter={() => setIndex(i)}
               onClick={() => choose(item)}

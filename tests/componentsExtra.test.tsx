@@ -55,7 +55,7 @@ function resetStore(patch: Record<string, unknown> = {}) {
     showCompare: false,
     showRebase: null,
     showRepoGroups: false,
-    themePreset: "catppuccin-mocha",
+    themePreset: "claude",
     isDark: true,
     language: "en",
     loading: false,
@@ -281,6 +281,72 @@ describe("RebaseDialog", () => {
     fireEvent.change(select, { target: { value: "reword" } });
     expect(container.querySelector(".rebase-reword")).toBeTruthy();
   });
+
+  it("sends the todo oldest-first so a pick-all rebase cannot reorder history (H1)", async () => {
+    const calls = installApi({
+      logRange: () => Promise.resolve({
+        success: true,
+        data: [
+          { hash: "aaa1111", subject: "first" },
+          { hash: "bbb2222", subject: "second" },
+          { hash: "ccc3333", subject: "third" },
+        ],
+      }),
+      rebaseInteractive: () => Promise.resolve({ success: true }),
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    resetStore({ showRebase: "HEAD~3", currentRepo: "/r" });
+    const { container } = render(<RebaseDialog onClose={() => {}} />);
+    await waitFor(() => expect(container.querySelectorAll(".rebase-row").length).toBe(3));
+
+    fireEvent.click([...container.querySelectorAll("button")].find((b) => b.textContent === "Start Rebase")!);
+    await waitFor(() => expect(calls.some(([name]) => name === "rebaseInteractive")).toBe(true));
+
+    const [, args] = calls.find(([name]) => name === "rebaseInteractive")!;
+    const entries = args[2] as { hash: string; action: string }[];
+    // git replays the todo list in order; logRange is oldest-first, so the
+    // submitted order must match exactly (no reversal).
+    expect(entries.map((e) => e.hash)).toEqual(["aaa1111", "bbb2222", "ccc3333"]);
+    expect(entries.map((e) => e.action)).toEqual(["pick", "pick", "pick"]);
+    confirm.mockRestore();
+  });
+
+  it("blocks squash/fixup as the first non-drop action (E3)", async () => {
+    const calls = installApi({
+      logRange: () => Promise.resolve({
+        success: true,
+        data: [
+          { hash: "aaa1111", subject: "first" },
+          { hash: "bbb2222", subject: "second" },
+          { hash: "ccc3333", subject: "third" },
+        ],
+      }),
+      rebaseInteractive: () => Promise.resolve({ success: true }),
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    resetStore({ showRebase: "HEAD~3", currentRepo: "/r" });
+    const { container } = render(<RebaseDialog onClose={() => {}} />);
+    await waitFor(() => expect(container.querySelectorAll(".rebase-action").length).toBe(3));
+
+    const selects = [...container.querySelectorAll<HTMLSelectElement>(".rebase-action")];
+    const option = (select: HTMLSelectElement, value: string) => [...select.options].find((o) => o.value === value)!;
+    // The first row may never squash/fixup; later rows may.
+    expect(option(selects[0], "squash").disabled).toBe(true);
+    expect(option(selects[0], "fixup").disabled).toBe(true);
+    expect(option(selects[1], "squash").disabled).toBe(false);
+
+    // Set a squash first, then drop the commit before it: it becomes first.
+    fireEvent.change(selects[1], { target: { value: "squash" } });
+    fireEvent.change(selects[0], { target: { value: "drop" } });
+    expect(option(selects[1], "squash").disabled).toBe(true);
+
+    fireEvent.click([...container.querySelectorAll("button")].find((b) => b.textContent === "Start Rebase")!);
+    await waitFor(() => expect(container.querySelector(".dialog-error")).toBeTruthy());
+    expect(container.querySelector(".dialog-error")!.textContent).toBe(t("rebase.firstActionInvalid"));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(calls.some(([name]) => name === "rebaseInteractive")).toBe(false);
+    confirm.mockRestore();
+  });
 });
 
 describe("DiffPanel / DiffViewer", () => {
@@ -326,10 +392,10 @@ describe("DiffPanel resize and empty state", () => {
 describe("TopBar", () => {
   it("toggles the theme when the theme button is clicked", () => {
     installApi();
-    resetStore({ currentRepo: null, isDark: true, themePreset: "catppuccin-mocha" });
+    resetStore({ currentRepo: null, isDark: true, themePreset: "claude-dark" });
     render(<TopBar />);
     fireEvent.click(screen.getByTitle(t("topbar.toggleTheme")));
-    expect(useRepoStore.getState().themePreset).toBe("catppuccin-latte");
+    expect(useRepoStore.getState().themePreset).toBe("claude");
   });
 
   it("names the active repository and offers the add menu next to it", () => {
@@ -362,8 +428,8 @@ describe("SettingsDialog", () => {
     const { container } = render(<SettingsDialog />);
 
     fireEvent.click([...container.querySelectorAll(".settings-tab")].find((b) => b.textContent === t("settings.appearance"))!);
-    fireEvent.click([...container.querySelectorAll(".theme-card")].find((el) => el.textContent?.includes("Dracula"))!);
-    expect(useRepoStore.getState().themePreset).toBe("dracula");
+    fireEvent.click([...container.querySelectorAll(".theme-card")].find((el) => el.textContent?.includes("Claude Dark"))!);
+    expect(useRepoStore.getState().themePreset).toBe("claude-dark");
 
     fireEvent.click([...container.querySelectorAll("button")].find((b) => b.textContent === t("settings.save"))!);
     await waitFor(() => expect(useRepoStore.getState().showSettings).toBe(false));
@@ -401,3 +467,4 @@ describe("Sidebar", () => {
     await waitFor(() => expect(useRepoStore.getState().loading).toBe(false));
   });
 });
+

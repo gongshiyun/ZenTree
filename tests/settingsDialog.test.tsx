@@ -50,7 +50,7 @@ function tabButton(container: HTMLElement, text: string): HTMLElement {
 
 beforeEach(() => {
   setGlobalLocale("en");
-  useRepoStore.setState({ showSettings: true, currentRepo: "/r", themePreset: "catppuccin-mocha", isDark: true, language: "en", loading: false, error: null });
+  useRepoStore.setState({ showSettings: true, currentRepo: "/r", themePreset: "claude", isDark: true, language: "en", loading: false, error: null });
 });
 
 afterEach(() => {
@@ -114,4 +114,59 @@ describe("SettingsDialog", () => {
     fireEvent.click(tabButton(container, t("settings.shortcuts")));
     expect(container.querySelector(".shortcut-list")).toBeTruthy();
   });
+
+  it("does not write identity when the Git tab was never edited (M14)", async () => {
+    const calls = installApi(baseOverrides());
+    useRepoStore.setState({ showSettings: true, currentRepo: "/r" });
+    const { container } = render(<SettingsDialog />);
+    await waitFor(() => expect(calls.some(([name]) => name === "getConfig")).toBe(true));
+
+    fireEvent.click([...container.querySelectorAll("button")].find((b) => b.textContent === t("settings.save"))!);
+    await waitFor(() => expect(useRepoStore.getState().showSettings).toBe(false));
+    expect(calls.filter(([name]) => name === "setConfig")).toHaveLength(0);
+  });
+
+  it("persists only edited non-empty identity values (M14)", async () => {
+    const calls = installApi({ ...baseOverrides(), setConfig: () => Promise.resolve({ success: true }) });
+    useRepoStore.setState({ showSettings: true, currentRepo: "/r" });
+    const { container } = render(<SettingsDialog />);
+    await waitFor(() => expect(calls.some(([name]) => name === "getConfig")).toBe(true));
+    fireEvent.click(tabButton(container, t("settings.gitConfig")));
+
+    const nameInput = [...container.querySelectorAll<HTMLInputElement>("input")].find((i) => i.placeholder === "Your name")!;
+    const emailInput = [...container.querySelectorAll<HTMLInputElement>("input")].find((i) => i.placeholder === "your@email.com")!;
+    fireEvent.change(nameInput, { target: { value: "  New User  " } });
+    fireEvent.change(emailInput, { target: { value: "" } });
+
+    fireEvent.click([...container.querySelectorAll("button")].find((b) => b.textContent === t("settings.save"))!);
+    await waitFor(() => expect(useRepoStore.getState().showSettings).toBe(false));
+
+    // Trimmed name persisted; empty email left untouched instead of overriding.
+    expect(calls.filter(([name]) => name === "setConfig")).toEqual([
+      ["setConfig", ["/r", "user.name", "New User"]],
+    ]);
+  });
+
+  it("shows a hint when both identity fields are unset (M14)", async () => {
+    installApi(baseOverrides());
+    useRepoStore.setState({ showSettings: true, currentRepo: "/r" });
+    const { container } = render(<SettingsDialog />);
+    fireEvent.click(tabButton(container, t("settings.gitConfig")));
+    expect(container.textContent).not.toContain(t("settings.identityMissing"));
+    await waitFor(() => expect(container.textContent).toContain(t("settings.identityMissing")));
+  });
+
+  it("hides the identity hint once an identity is configured", async () => {
+    installApi({
+      ...baseOverrides(),
+      getConfig: () => Promise.resolve({ success: true, data: { userName: "Test User", userEmail: "test@example.com" } }),
+    });
+    useRepoStore.setState({ showSettings: true, currentRepo: "/r" });
+    const { container } = render(<SettingsDialog />);
+    fireEvent.click(tabButton(container, t("settings.gitConfig")));
+    const nameInput = [...container.querySelectorAll<HTMLInputElement>("input")].find((i) => i.placeholder === "Your name")!;
+    await waitFor(() => expect(nameInput.value).toBe("Test User"));
+    expect(container.textContent).not.toContain(t("settings.identityMissing"));
+  });
 });
+

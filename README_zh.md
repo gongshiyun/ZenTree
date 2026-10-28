@@ -1,138 +1,164 @@
 # ZenTree
 
-轻量级、现代化的 Git 图形化客户端，基于 Electron + React + TypeScript 构建。对标 SourceTree 的核心交互，但更轻量流畅。
+轻量级、现代化的 Git 图形化客户端，基于 Electron + React + TypeScript 构建。它把 SourceTree 最核心的工作流——提交图谱、暂存、差异查看——装进一个更快、更安静的桌面应用，视觉风格与 Claude 桌面端 / Claude Code 保持一致。
 
-[English](README.md)
+[English](README.md) · [设计规范](docs/design-spec.md) · [验收记录](docs/verification-1.4.0.md) · [更新日志](CHANGELOG.md)
 
-## 功能特性
+## 界面截图
 
-- **提交节点树** — HTML5 Canvas 渲染的 DAG 图谱，平滑贝塞尔曲线连线，支持缩放/拖拽，视口裁剪适配万级提交仓库
-- **分支标签** — 图谱上的彩色分支标签，类似 SourceTree 的视觉效果
-- **文件差异查看器** — 点击文件在右侧面板展示变更内容，支持分块（hunk）级别的暂存/取消暂存/回滚
-- **三栏布局** — 分支侧边栏 | 提交图谱 + 文件列表 | 差异面板
-- **10 套色彩主题** — Catppuccin、Dracula、Nord、One Dark Pro、Tokyo Night、Monokai、GitHub Dark、Solarized 等
-- **国际化** — 完整的中英文双语支持，实时切换
-- **无边框窗口** — 自定义标题栏，窗口控制按钮与应用风格一体化
-- **Amend 提交** — 勾选后自动填入上一次提交信息
-- **Git Bash 启动器** — 一键在当前仓库目录打开 Git Bash
-- **仓库标签页** — 顶栏下方每个仓库一个标签页：点击切换、`×`/中键关闭、拖拽重排，重启后自动恢复标签页
-- **标签页搜索** — `Ctrl+P` 同时搜索已打开标签页与已添加仓库，`Ctrl+Tab` 循环切换
-- **仓库组标签页** — 将整个仓库组的仓库作为标签页展示，随时返回自选标签页
-- **标签页瞬时切换** — 按仓库缓存数据，切换时先画出上次结果，再后台静默刷新
-- **远端分支** — 展示并 checkout 远端分支（自动创建跟踪分支）
-- **懒加载** — 提交日志按 200 条分页，无限滚动加载
-- **键盘快捷键** — `F5` 刷新、`Ctrl+Enter` 提交、`Ctrl+K` 命令面板、`Ctrl+P` 标签页搜索、`Ctrl+Shift+W` 关闭标签页、`Esc` 关闭错误提示
-- **拖拽添加** — 拖拽文件夹到欢迎页即可添加仓库
-- **自动更新** — 在「设置 > 关于」中检查 GitHub Releases 新版本，支持下载并安装更新
-- **克隆仓库** — 通过 URL 克隆远程仓库，可选指定分支
-- **文件历史与追溯** — 单文件提交历史与逐行 blame，点击即可跳转到对应提交
-- **回滚 / 拣选 / 变基** — 安全回滚提交、拣选提交、分支变基（支持中止）
-- **对比** — 对比分支/标签/提交，展示领先落后数量与文件差异
-- **标签与远端** — 在侧边栏管理标签与远端
-- **提交过滤** — 按提交信息、作者、日期过滤图谱
-- **冲突解决** — 冲突文件一键启动合并工具，状态栏显示冲突数
-- **托管平台跳转** — 在 GitHub/GitLab/Bitbucket 打开仓库、分支或提交
-- **自动刷新** — 每 30 秒及窗口聚焦时静默检测外部变更
+| Claude（默认浅色） | Claude Dark |
+|---|---|
+| ![浅色主界面](docs/screenshots/main-light.png) | ![深色主界面](docs/screenshots/main-dark.png) |
+
+| 欢迎页 | 设置 · 主题 |
+|---|---|
+| ![欢迎页](docs/screenshots/welcome.png) | ![外观设置](docs/screenshots/settings-appearance.png) |
+
+## 核心特性
+
+### 视觉设计
+
+- **Claude 风格设计系统** —— 温暖纸感底色、发丝级分隔线、单一陶土强调色、克制的圆角与留白，详见 `docs/design-spec.md`
+- **4 套主题** —— Claude（默认浅色）、Claude Dark、Claude Code（终端深黑）、Claude Sand
+- **内置字体** —— Newsreader（衬线展示）、JetBrains Mono（哈希 / diff / 数字），均为 OFL 授权并随安装包分发，不依赖网络字体
+- **无边框窗口** —— 自定义标题栏、标签条与窗口控制按钮，随主题同步
+
+### Git 工作流
+
+- **提交图谱** —— HTML5 Canvas 渲染 DAG，平滑分支泳道、分支标签胶囊、悬停/选中态、缩放、图谱内搜索、视口裁剪与无限滚动（万级提交）
+- **暂存与差异** —— 已暂存/未暂存/提交文件三视图、文件树或扁平模式、语法高亮 diff、按 hunk 暂存/取消暂存/回滚（新增、删除、重命名文件同样可用）、词级差异标记
+- **提交输入框** —— Claude 风格悬浮 composer，支持草稿保护、Amend、提交模板预填与 `Ctrl+Enter` 提交
+- **三栏布局** —— 侧边栏（分支 / 远端 / 标签 / 暂存）· 提交图谱 + 文件列表 · 差异面板
+- **仓库标签页** —— 每个仓库一个标签页，可拖拽排序、`Ctrl+P` 搜索、`Ctrl+Tab` 循环；仓库组可作为标签集展示；按仓库缓存实现瞬时切换
+- **命令面板（`Ctrl+K`）** —— 搜索仓库、分支或执行命令
+- **历史工具** —— 文件历史（跟踪重命名）、逐行 blame 跳转、任意两个引用的对比（领先/落后统计）、回滚 / 拣选 / 交互式变基、reset（soft/mixed/hard）
+- **冲突处理** —— 内置三方合并面板（取左/取右/两者都留），二进制或超大文件自动回退到外部合并工具
+- **远端操作** —— fetch/pull/push、拉取策略（merge/rebase/ff-only）、上游跟踪与领先落后徽章、远端分支 checkout、清理失效分支、标签与远端管理
+- **更多** —— 克隆、子模块、按仓库提交模板、GPG 签名开关、外部 diff 工具、托管平台跳转（GitHub/GitLab/Bitbucket）、Git Bash 启动器
+- **国际化** —— 完整中英文词典，键位与占位符有自动对账测试
+- **刷新机制** —— `fs.watch` 监听 git 元数据（HEAD / index / refs，含 linked worktree）触发防抖静默刷新；30 秒与窗口聚焦时的轻量指纹轮询兜底，覆盖工作区文件编辑
+- **自动更新** —— 在「设置 → 关于」中检查 GitHub Releases（仅安装版）
+
+### 工程质量
+
+- **IPC 加固** —— 启用 context isolation 与 sandbox、关闭 Node 集成；所有写操作通道校验仓库路径；渲染进程发起的 URL 仅允许 http(s)
+- **路径约束** —— 工作区文件读写拒绝目录穿越、绝对路径、符号链接逃逸与 `.git` 元数据
+- **单实例** —— 二次启动只聚焦已有窗口，避免多个实例争写设置文件
+- **类型契约** —— 主进程 / preload / 渲染进程共享同一份 `GitAPI` 接口；渲染层、主进程与测试代码均纳入 `npm run check` 类型门禁
+- **测试体系** —— 504 个 Vitest 用例，包含真实 git 的隔离临时仓库集成测试，并隔离全局 git 配置（见[测试](#测试)）
+- **视觉验收工具** —— Electron 截图矩阵、演示仓库生成器与 class 覆盖率检查（`npm run qa`）
 
 ## 技术栈
 
 | 层级 | 技术 |
 |---|---|
-| 桌面壳 | Electron 36 |
-| 构建工具 | Vite 6 + TypeScript 5.7 |
-| UI 框架 | React 18 + Zustand 5 |
+| 桌面外壳 | Electron 36 |
+| 构建 | Vite 6 + TypeScript 5.7 |
+| UI | React 18 + Zustand 5 |
+| 样式 | 手写 CSS 设计令牌（`src/theme.css` + `src/styles/*.css`） |
 | Git 后端 | simple-git 3.27 |
-| 图谱渲染 | HTML5 Canvas（无第三方图表库） |
-| 打包 | electron-builder（NSIS 安装程序） |
-
-## 截图
-
-*(即将添加)*
+| 图谱渲染 | HTML5 Canvas（图层 + 交互覆盖层） |
+| 国际化 | 轻量 `t()` 词典 + 中英文对账测试 |
+| 打包 | electron-builder（NSIS 安装包 + 免安装 exe） |
+| 测试 | Vitest 4、Testing Library、Playwright（Electron 截图） |
 
 ## 安装
 
 从 [Releases](../../releases) 下载最新版本：
 
-- **`ZenTree Setup x.x.x.exe`** — NSIS 安装程序（含桌面快捷方式）
-- **`win-unpacked/ZenTree.exe`** — 绿色免安装版
-
-完整发布记录见 [CHANGELOG.md](CHANGELOG.md)。
+- **`ZenTree Setup x.y.z.exe`** —— NSIS 安装包（带桌面快捷方式）
+- **`ZenTree x.y.z.exe`** —— 免安装便携版
 
 ### 系统要求
 
 - Windows 10 及以上
-- 已安装 [Git for Windows](https://git-scm.com/download/win) 并配置在 PATH 中
+- 安装 [Git for Windows](https://git-scm.com/download/win) 并确保 `git` 在 `PATH` 中（或在「设置 → 通用」中指定 git 路径）
 
 ## 开发
 
-### 环境前置
+### 环境要求
 
-- **Node.js** 18+ 与 npm
-- **Git** — 系统 `PATH` 中须存在可用的 `git` 二进制（应用运行与测试套件均依赖）
+- **Node.js 18+** 与 npm
+- **Git** —— 可用的 `git` 命令（应用与集成测试都需要）
 
-```bash
-# 克隆仓库
+```powershell
 git clone https://github.com/your-org/ZenTree.git
 cd ZenTree
 
-# 安装依赖
 npm install
 
-# 启动开发服务器（Vite 热更新 + Electron）
+# 开发模式（Vite HMR + Electron）
 npm run dev
 
-# 运行完整提交前检查（类型检查 + 测试）
+# 提交前完整门禁：渲染层 + 主进程 + 测试类型检查与测试
 npm run check
 
 # 生产构建
 npm run build
 
-# 打包为 Windows 安装程序
+# 打包 Windows 安装包与便携版（输出到 release/）
 npm run pack
 ```
 
+> Windows PowerShell 若禁止运行 `npm.ps1`，请使用 `npm.cmd`。
+
 ### 测试
 
-`npm test` 运行 Vitest 测试套件。其中大部分是**依赖真实 `git` 二进制的集成测试**：每个用例会在系统临时目录下创建相互隔离的一次性仓库（`zentree-test-*` / `zentree-ipc-test-*`），结束后自动清理。运行前请确认 `git --version` 可正常执行——若 `PATH` 中缺少 git，测试将失败。
+`npm test` 运行 Vitest。多数套件会调用真实 `git`：每个用例在系统临时目录创建独立的临时仓库并在结束后清理。测试环境是隔离的：`tests/setup.ts` 把 git 指向临时 `HOME`/`GIT_CONFIG_GLOBAL`，关闭系统配置并设置 `GIT_CONFIG_NOSYSTEM`、`GIT_TERMINAL_PROMPT`，因此开发者本机的全局 git 配置（hooks、签名、身份）不会影响结果。
 
-| 测试文件 | 覆盖范围 | 是否依赖真实 git |
+| 套件 | 范围 | 需要真实 git |
 |---|---|---|
-| `tests/domain.test.ts` | 纯领域逻辑（diff 解析/高亮、文件树、图谱布局） | 否 |
-| `tests/repoStore.test.ts` | 应用层 store 核心状态迁移（IPC 桥已 mock） | 否 |
-| `tests/ipc.test.ts` | IPC 通道，含破坏性操作（discard / reset / 删除分支） | 是——隔离临时仓库 |
-| `tests/gitRepository.test.ts` | `GitRepository` 适配器端到端 | 是——隔离临时仓库 |
+| `tests/domain.test.ts`、`parserEdge`、`highlight`、`graph` | 纯逻辑：diff 解析/高亮/词级差异、hunk 补丁、图谱布局、冲突标记、指纹 | 否 |
+| `tests/repoStore.test.ts` | 应用状态迁移、按仓库缓存、刷新竞态、设置恢复 | 否 |
+| `tests/ipc.test.ts` | IPC 信封契约、破坏性通道、参数校验 | 是——临时仓库 |
+| `tests/gitRepository.test.ts` | `GitRepository` 端到端（checkout、rebase、stash、子模块、对比、worktree 等） | 是——临时仓库 |
+| `tests/*.test.tsx` | jsdom 组件测试（canvas 使用桩） | 否 |
+| `tests/watcher.test.ts`、`windowManager.test.ts`、`updateManager.test.ts` 等 | 基础设施适配器（使用测试替身） | 部分 |
+
+额外门禁：
+
+```powershell
+npm run test:coverage   # v8 覆盖率报告
+npm run qa:css          # TSX 中使用的每个 className 都能在样式中找到规则
+npm run qa:fixture      # 在 .qa/fixtures 生成可复现的演示仓库
+npm run qa:shots        # 启动 Electron 截取 UI 截图矩阵到 .qa/shots
+```
 
 ## 项目结构
 
 ```
 ZenTree/
-├── electron/              # Electron 主进程（基础设施层）
-│   ├── main.ts            # 组合根：装配 settings/git/window/ipc
-│   ├── windowManager.ts   # 窗口生命周期 + 尺寸持久化
-│   ├── settingsRepository.ts  # 设置 JSON 持久化适配器
-│   ├── gitRepository.ts   # simple-git 适配器 + Git Bash 定位
-│   ├── ipc.ts             # IPC 通道注册（校验 + 错误包装）
-│   └── preload.ts         # contextBridge 安全桥（共享 GitAPI 类型）
+├── electron/                  # 主进程（基础设施层）
+│   ├── main.ts                # 组合根：设置/git/窗口/ipc/更新/监视器
+│   ├── windowManager.ts       # 无边框窗口、主题背景、导航防护
+│   ├── settingsRepository.ts  # 带校验的 JSON 设置持久化
+│   ├── gitRepository.ts       # simple-git 适配器 + Git Bash 定位
+│   ├── ipc.ts                 # IPC 通道（参数校验 + 错误信封）
+│   ├── preload.ts             # contextBridge 安全桥（共享 GitAPI 契约）
+│   ├── watcher.ts             # 监听 git 元数据（支持 worktree、防抖）
+│   └── updateManager.ts       # electron-updater 状态机
 ├── src/
-│   ├── domain/            # 领域层（纯逻辑，无 UI/IPC 依赖）
-│   │   ├── graph/         # 提交图谱布局算法、分支配色
-│   │   ├── theme/         # 主题预设与 CSS 变量应用
-│   │   └── diff/          # 差异解析、hunk 补丁、语法高亮
-│   ├── application/       # 应用层：Zustand store（状态 + 用例编排）
-│   ├── infrastructure/    # 渲染侧网关：gitBridge
-│   ├── components/        # 界面层 React 组件
-│   ├── renderer/          # Canvas 图谱渲染器
-│   ├── i18n/              # 中英文语言包
-│   └── types/             # 跨层共享类型契约
-├── CHANGELOG.md
-├── package.json
-├── vite.config.ts
-└── tsconfig.json
+│   ├── domain/                # 纯逻辑：图谱布局/配色、diff 解析/高亮/
+│   │                          # 词级差异/冲突标记、文件树、指纹、标签页、主题预设
+│   ├── application/           # Zustand store（状态 + 用例编排）
+│   ├── infrastructure/        # 渲染侧 git 桥网关
+│   ├── components/            # React 界面组件
+│   ├── renderer/              # 双画布提交图谱引擎
+│   ├── styles/                # shell.css · panels.css · dialogs.css
+│   ├── assets/fonts/          # 内置 OFL 字体（Newsreader、JetBrains Mono）
+│   ├── i18n/                  # 中英文词典
+│   ├── theme.css              # 设计令牌 + 全局基础样式
+│   └── types/                 # 跨层共享类型契约
+├── scripts/                   # QA 工具（演示仓库、截图、CSS 覆盖率）
+├── tests/                     # Vitest 套件（含隔离 git 环境）
+├── docs/                      # 设计规范、评审记录、截图
+└── CHANGELOG.md
 ```
+
 ## 许可证
 
-MIT
+MIT。内置字体使用 SIL Open Font License（见 `src/assets/fonts/LICENSE-*`）。
 
 ---
 
-基于 Electron、React 和 Canvas ❤️ 构建
+用 ❤️ 构建：Electron、React 与 Canvas。

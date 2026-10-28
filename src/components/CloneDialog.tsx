@@ -65,37 +65,37 @@ export default function CloneDialog() {
 
   return (
     <div className="settings-overlay" onClick={() => setShowClone(false)}>
-      <div className="settings-dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="settings-dialog clone-dialog" role="dialog" aria-modal="true" aria-labelledby="clone-title" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
-          <h2>{t("clone.title")}</h2>
-          <button className="settings-close" onClick={() => setShowClone(false)}>
-            <svg width="14" height="14" viewBox="0 0 14 14"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" strokeWidth="1.5"/></svg>
+          <h2 id="clone-title">{t("clone.title")}</h2>
+          <button type="button" className="settings-close" aria-label={t("clone.cancel")} title={t("clone.cancel")} onClick={() => setShowClone(false)}>
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><line x1="1" y1="1" x2="13" y2="13" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="1" x2="1" y2="13" stroke="currentColor" strokeWidth="1.5"/></svg>
           </button>
         </div>
         <div className="settings-body">
-          <div className="settings-section">
+          <div className="settings-section clone-fields">
             <div className="setting-row"><label>{t("clone.url")}</label>
-              <input type="text" value={url} placeholder="https://github.com/user/repo.git" onChange={(e) => handleUrlChange(e.target.value)} />
+              <input className="dialog-input" type="text" value={url} placeholder="https://github.com/user/repo.git" onChange={(e) => handleUrlChange(e.target.value)} />
             </div>
             <div className="setting-row"><label>{t("clone.directory")}</label>
               <div className="clone-dir-row">
-                <input type="text" value={dir} placeholder="C:\\projects" onChange={(e) => setDir(e.target.value)} />
-                <button className="settings-btn secondary" onClick={handleBrowse}>{t("clone.browse")}</button>
+                <input className="dialog-input" type="text" value={dir} placeholder="C:\\projects" onChange={(e) => setDir(e.target.value)} />
+                <button type="button" className="settings-btn secondary" onClick={handleBrowse}>{t("clone.browse")}</button>
               </div>
             </div>
             <div className="setting-row"><label>{t("clone.folder")}</label>
-              <input type="text" value={folder} onChange={(e) => setFolder(e.target.value)} />
+              <input className="dialog-input" type="text" value={folder} onChange={(e) => setFolder(e.target.value)} />
             </div>
             <div className="setting-row"><label>{t("clone.branch")}</label>
-              <input type="text" value={branch} placeholder={t("clone.branchPlaceholder")} onChange={(e) => setBranch(e.target.value)} />
+              <input className="dialog-input" type="text" value={branch} placeholder={t("clone.branchPlaceholder")} onChange={(e) => setBranch(e.target.value)} />
             </div>
-            {formError && <span className="setting-hint update-error">{formError}</span>}
+            {formError && <div className="dialog-error">{formError}</div>}
             <span className="setting-hint">{t("clone.hint")}</span>
           </div>
         </div>
         <div className="settings-footer">
-          <button className="settings-btn secondary" onClick={() => setShowClone(false)}>{t("clone.cancel")}</button>
-          <button className="settings-btn primary" disabled={cloning} onClick={handleClone}>{cloning ? t("clone.cloning") : t("clone.clone")}</button>
+          <button type="button" className="settings-btn secondary" onClick={() => setShowClone(false)}>{t("clone.cancel")}</button>
+          <button type="button" className="settings-btn primary" disabled={cloning} onClick={handleClone}>{cloning ? t("clone.cloning") : t("clone.clone")}</button>
         </div>
       </div>
     </div>

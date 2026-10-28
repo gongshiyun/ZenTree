@@ -51,3 +51,17 @@ describe("locale dictionaries", () => {
     }
   });
 });
+
+describe("t() placeholder substitution", () => {
+  it("replaces every occurrence of a repeated placeholder", () => {
+    // en: "Rebase {1} onto {0}? ... on top of {0}." — {0} appears twice.
+    const out = t("sidebar.confirmRebase", "develop", "main");
+    expect(out).toContain("main onto develop");
+    expect(out).toContain("on top of develop");
+    expect(out).not.toContain("{0}");
+  });
+
+  it("leaves unknown placeholders alone when fewer args are supplied", () => {
+    expect(t("sidebar.confirmRebase", "develop")).toContain("{1}");
+  });
+});

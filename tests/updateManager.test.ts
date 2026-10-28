@@ -192,9 +192,18 @@ describe("download", () => {
 });
 
 describe("install / broadcast", () => {
-  it("install delegates to quitAndInstall with force-runAfter", () => {
+  it("install delegates to quitAndInstall with force-runAfter once a download completed", () => {
+    mocked.autoUpdater.emit("update-downloaded", {});
     manager.install();
     expect(mocked.autoUpdater.quitArgs).toEqual([false, true]);
+  });
+
+  it("refuses to install before an update has been downloaded", () => {
+    const state = manager.getState();
+    expect(state.phase).not.toBe("downloaded");
+    manager.install();
+    expect(mocked.autoUpdater.quitArgs).toEqual([]);
+    expect(manager.getState().phase).toBe("error");
   });
 
   it("broadcasts deep-cloned snapshots so callers cannot mutate internal state", async () => {

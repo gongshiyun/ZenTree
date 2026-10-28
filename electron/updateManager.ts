@@ -98,6 +98,12 @@ export class UpdateManager {
   }
 
   install(): void {
+    // quitAndInstall only makes sense after a download completed; calling it in
+    // any other phase would quit the app without installing anything.
+    if (this.state.phase !== "downloaded") {
+      this.setState({ phase: "error", error: "No downloaded update to install" });
+      return;
+    }
     autoUpdater.quitAndInstall(false, true);
   }
 
