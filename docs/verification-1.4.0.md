@@ -28,6 +28,16 @@ fixes). Everything below was executed on this machine against the delivered buil
 Auto-update metadata (`release/latest.yml`, blockmap) is generated for the GitHub release. The Windows
 artefacts are not code-signed, so SmartScreen may warn on first run.
 
+## Published release
+
+- **Commit:** `0b7850d` — `feat: Claude-style redesign + hardened git/IPC layer (v1.4.0)`
+- **Tag:** `v1.4.0` (annotated, commit `0b7850d`)
+- **Release:** <https://github.com/gongshiyun/ZenTree/releases/tag/v1.4.0>
+- **Assets:** `ZenTree-Setup-1.4.0.exe`, `ZenTree-1.4.0.exe`, `ZenTree-Setup-1.4.0.exe.blockmap`,
+  `latest.yml`
+- **Integrity:** the uploaded `latest.yml` sha512 (`3wfBVyCh…`) matches the local installer bytes and
+  the downloaded metadata file is byte-identical.
+
 ## Review findings closed
 
 The independent audit is in [`docs/review-findings.md`](review-findings.md). All High findings and the

@@ -84,7 +84,7 @@ a visual language inspired by the Claude desktop and Claude Code apps.
 
 ## Installation
 
-Download the latest installer from [Releases](../../releases):
+Download the latest installer from [Releases](https://github.com/gongshiyun/ZenTree/releases):
 
 - **`ZenTree Setup x.y.z.exe`** — NSIS installer with desktop shortcut
 - **`ZenTree x.y.z.exe`** — portable build (no installation)

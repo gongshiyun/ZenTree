@@ -64,7 +64,7 @@
 
 ## 安装
 
-从 [Releases](../../releases) 下载最新版本：
+从 [Releases](https://github.com/gongshiyun/ZenTree/releases) 下载最新版本：
 
 - **`ZenTree Setup x.y.z.exe`** —— NSIS 安装包（带桌面快捷方式）
 - **`ZenTree x.y.z.exe`** —— 免安装便携版
